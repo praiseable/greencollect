@@ -6,6 +6,7 @@ import Users from './pages/admin/Users';
 import Listings from './pages/admin/Listings';
 import CollectionPoints from './pages/admin/CollectionPoints';
 import Analytics from './pages/admin/Analytics';
+import PostListing from './pages/PostListing';
 import RegionalDashboard from './pages/regional/Dashboard';
 import RegionalOrders from './pages/regional/Orders';
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="admin/listings" element={<Listings />} />
         <Route path="admin/collection-points" element={<CollectionPoints />} />
         <Route path="admin/analytics" element={<Analytics />} />
+        <Route path="post-listing" element={<PostListing />} />
         <Route path="regional/dashboard" element={<RegionalDashboard />} />
         <Route path="regional/orders" element={<RegionalOrders />} />
       </Route>

@@ -94,6 +94,16 @@ export function resolveDispute(id, resolution) {
   return api.put(`/admin/disputes/${id}/resolve`, { resolution }).then((r) => r.data);
 }
 
+// Listings — Post from web portal
+export function createListing(formData) {
+  return api.post('/listings', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data);
+}
+export function getGarbageTypesList() {
+  return api.get('/listings/garbage-types').then((r) => r.data);
+}
+
 // Regional
 export function getAvailableInventory(params) {
   return api.get('/regional/inventory', { params }).then((r) => r.data);

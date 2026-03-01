@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
+  { to: '/post-listing', label: 'Post Listing', icon: '📸' },
   { to: '/admin/users', label: 'Users', icon: '👥' },
   { to: '/admin/listings', label: 'Listings', icon: '📦' },
   { to: '/admin/collection-points', label: 'Collection Points', icon: '🏭' },

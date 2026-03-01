@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const path = require('path');
 
 const app = express();
 
@@ -16,10 +17,14 @@ app.use(cors({
 app.use(morgan('dev'));
 app.use(express.json());
 
+// Static file serving for uploaded photos
+app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Routes
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/regional', require('./routes/regional.routes'));
+app.use('/api/listings', require('./routes/listings.routes'));
 
 // Health check
 app.get('/health', (req, res) => {
