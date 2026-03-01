@@ -103,6 +103,20 @@ export function createListing(formData) {
 export function getGarbageTypesList() {
   return api.get('/listings/garbage-types').then((r) => r.data);
 }
+export function getListingDetail(id) {
+  return api.get(`/listings/${id}`).then((r) => r.data);
+}
+
+// Notifications
+export function getNotifications(params) {
+  return api.get('/listings/notifications', { params }).then((r) => r.data);
+}
+export function markNotificationRead(id) {
+  return api.put(`/listings/notifications/${id}/read`).then((r) => r.data);
+}
+export function markAllNotificationsRead() {
+  return api.put('/listings/notifications/read-all').then((r) => r.data);
+}
 
 // Regional
 export function getAvailableInventory(params) {

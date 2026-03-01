@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { getListings } from '../../services/api';
 import DataTable from '../../components/DataTable';
 
@@ -14,6 +15,7 @@ const statusColors = {
 };
 
 export default function Listings() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState('');
   const [garbageType, setGarbageType] = useState('');
   const [page, setPage] = useState(1);
@@ -67,6 +69,18 @@ export default function Listings() {
       key: 'posted_at',
       label: 'Posted',
       render: (val) => val ? new Date(val).toLocaleDateString() : '-',
+    },
+    {
+      key: 'id',
+      label: '',
+      render: (val) => (
+        <button
+          onClick={() => navigate(`/listing/${val}`)}
+          className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+        >
+          View →
+        </button>
+      ),
     },
   ];
 

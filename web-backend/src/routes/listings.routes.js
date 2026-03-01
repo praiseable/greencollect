@@ -4,7 +4,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
-const { createListing, getGarbageTypesForForm } = require('../controllers/listings.controller');
+const {
+  createListing, getGarbageTypesForForm, getListingDetail,
+  getNotifications, markNotificationRead, markAllNotificationsRead,
+} = require('../controllers/listings.controller');
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '../../uploads');
@@ -30,6 +33,10 @@ const upload = multer({
 });
 
 router.get('/garbage-types', authenticate, getGarbageTypesForForm);
+router.get('/notifications', authenticate, getNotifications);
+router.put('/notifications/read-all', authenticate, markAllNotificationsRead);
+router.put('/notifications/:id/read', authenticate, markNotificationRead);
+router.get('/:id', authenticate, getListingDetail);
 router.post('/', authenticate, upload.array('photos', 5), createListing);
 
 module.exports = router;

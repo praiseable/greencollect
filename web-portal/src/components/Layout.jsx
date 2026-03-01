@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import NotificationBell from './NotificationBell';
 
 const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
@@ -81,8 +82,11 @@ export default function Layout() {
           >
             ☰
           </button>
-          <div className="text-sm text-gray-500">
-            Welcome, {user.name || 'User'}
+          <div className="flex items-center gap-4">
+            <NotificationBell />
+            <div className="text-sm text-gray-500">
+              Welcome, {user.name || 'User'}
+            </div>
           </div>
         </header>
 
