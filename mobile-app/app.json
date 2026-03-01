@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "GreenCollect",
+    "slug": "greencollect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#10b981"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.greencollect.app",
+      "config": {
+        "googleMapsApiKey": ""
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to find nearby garbage listings and collectors.",
+        "NSCameraUsageDescription": "We need camera access to take photos of garbage for listings."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#10b981"
+      },
+      "package": "com.greencollect.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": ""
+        }
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      "expo-image-picker",
+      "expo-notifications"
+    ],
+    "scheme": "greencollect"
+  }
+}

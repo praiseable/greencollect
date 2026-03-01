@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    environment:
+      POSTGRES_DB: greencollect
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d greencollect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mobile-backend:
+    build: ./mobile-backend
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://admin:secret@db:5432/greencollect
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      JWT_REFRESH_SECRET: dev-jwt-refresh-secret-change-in-production
+      NODE_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web-backend:
+    build: ./web-backend
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://admin:secret@db:5432/greencollect
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      NODE_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web-portal:
+    build: ./web-portal
+    ports:
+      - "5173:80"
+    depends_on:
+      - web-backend
+
+volumes:
+  pgdata:

@@ -1,0 +1,74 @@
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    restart: always
+    environment:
+      POSTGRES_DB: greencollect
+      POSTGRES_USER: gcadmin
+      POSTGRES_PASSWORD: GC_Str0ng_Passw0rd_2026!
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gcadmin -d greencollect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --requirepass GC_Redis_Pass_2026!
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "GC_Redis_Pass_2026!", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mobile-backend:
+    build: ./mobile-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
+      REDIS_URL: redis://:GC_Redis_Pass_2026!@redis:6379
+      JWT_SECRET: gc_jwt_prod_s3cr3t_k3y_2026_x7m9q
+      JWT_REFRESH_SECRET: gc_jwt_refresh_pr0d_k3y_2026_r4n8p
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 30d
+      DEFAULT_RADIUS_KM: 5
+      RADIUS_EXPAND_MINUTES: 30
+      MAX_RADIUS_KM: 20
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web-backend:
+    build: ./web-backend
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
+      JWT_SECRET: gc_jwt_prod_s3cr3t_k3y_2026_x7m9q
+      JWT_EXPIRES_IN: 8h
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web-portal:
+    build: ./web-portal
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - web-backend
+
+volumes:
+  pgdata:
