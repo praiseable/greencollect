@@ -35,6 +35,26 @@ const migrations = [
     CREATE TYPE notification_type AS ENUM ('new_listing','job_accepted','job_collected','payment_received','bulk_order','system');
   EXCEPTION WHEN duplicate_object THEN null; END $$;`,
 
+  // ─── DROP EXISTING TABLES (fresh schema on each deploy) ──
+  `DO $$ BEGIN
+    DROP TABLE IF EXISTS pricing_rules CASCADE;
+    DROP TABLE IF EXISTS platform_settings CASCADE;
+    DROP TABLE IF EXISTS disputes CASCADE;
+    DROP TABLE IF EXISTS reviews CASCADE;
+    DROP TABLE IF EXISTS notifications CASCADE;
+    DROP TABLE IF EXISTS payments CASCADE;
+    DROP TABLE IF EXISTS bulk_orders CASCADE;
+    DROP TABLE IF EXISTS inventory_logs CASCADE;
+    DROP TABLE IF EXISTS inventory CASCADE;
+    DROP TABLE IF EXISTS listings CASCADE;
+    DROP TABLE IF EXISTS collection_points CASCADE;
+    DROP TABLE IF EXISTS garbage_types CASCADE;
+    DROP TABLE IF EXISTS addresses CASCADE;
+    DROP TABLE IF EXISTS refresh_tokens CASCADE;
+    DROP TABLE IF EXISTS otp_sessions CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
+  END $$;`,
+
   // ─── TABLES ───────────────────────────────────────────
 
   // Users
