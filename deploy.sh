@@ -54,7 +54,7 @@ echo ""
 
 # 4. Stop existing containers if running
 echo "Stopping any existing containers..."
-docker compose -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
+docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 echo ""
 
 # 5. Build and start all services (no-cache for fresh build)

@@ -35,26 +35,6 @@ const migrations = [
     CREATE TYPE notification_type AS ENUM ('new_listing','job_accepted','job_collected','payment_received','bulk_order','system');
   EXCEPTION WHEN duplicate_object THEN null; END $$;`,
 
-  // ─── DROP EXISTING TABLES (fresh schema on each deploy) ──
-  `DO $$ BEGIN
-    DROP TABLE IF EXISTS pricing_rules CASCADE;
-    DROP TABLE IF EXISTS platform_settings CASCADE;
-    DROP TABLE IF EXISTS disputes CASCADE;
-    DROP TABLE IF EXISTS reviews CASCADE;
-    DROP TABLE IF EXISTS notifications CASCADE;
-    DROP TABLE IF EXISTS payments CASCADE;
-    DROP TABLE IF EXISTS bulk_orders CASCADE;
-    DROP TABLE IF EXISTS inventory_logs CASCADE;
-    DROP TABLE IF EXISTS inventory CASCADE;
-    DROP TABLE IF EXISTS listings CASCADE;
-    DROP TABLE IF EXISTS collection_points CASCADE;
-    DROP TABLE IF EXISTS garbage_types CASCADE;
-    DROP TABLE IF EXISTS addresses CASCADE;
-    DROP TABLE IF EXISTS refresh_tokens CASCADE;
-    DROP TABLE IF EXISTS otp_sessions CASCADE;
-    DROP TABLE IF EXISTS users CASCADE;
-  END $$;`,
-
   // ─── TABLES ───────────────────────────────────────────
 
   // Users
@@ -313,6 +293,65 @@ const migrations = [
     updated_by  UUID REFERENCES users(id),
     updated_at  TIMESTAMPTZ DEFAULT NOW()
   );`,
+
+  // ─── ADD MISSING COLUMNS (safe for existing tables) ───
+  // Users
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_photo TEXT;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS id_document_url TEXT;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS avg_rating DECIMAL(3,2) DEFAULT 0;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS total_reviews INTEGER DEFAULT 0;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_balance DECIMAL(10,2) DEFAULT 0;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`,
+  // Garbage Types
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS icon VARCHAR(10) DEFAULT '♻️';`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS image_url TEXT;`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS min_price_per_kg DECIMAL(10,2) DEFAULT 0;`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS max_price_per_kg DECIMAL(10,2) DEFAULT 0;`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#22c55e';`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS is_recyclable BOOLEAN DEFAULT TRUE;`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;`,
+  `ALTER TABLE garbage_types ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`,
+  // Collection Points
+  `ALTER TABLE collection_points ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);`,
+  `ALTER TABLE collection_points ADD COLUMN IF NOT EXISTS photo_url TEXT;`,
+  `ALTER TABLE collection_points ADD COLUMN IF NOT EXISTS capacity_kg DECIMAL(10,2);`,
+  `ALTER TABLE collection_points ADD COLUMN IF NOT EXISTS operating_hours JSONB DEFAULT '{}';`,
+  // Listings
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS address_id UUID;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS full_address TEXT;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS city VARCHAR(100);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS state VARCHAR(100);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS location GEOGRAPHY(POINT, 4326);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS photo_urls TEXT[] DEFAULT '{}';`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS actual_weight DECIMAL(8,2);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS final_price DECIMAL(10,2);`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS description TEXT;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS collection_point_id UUID;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS current_radius_km INTEGER DEFAULT 5;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS notify_count INTEGER DEFAULT 0;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS collected_at TIMESTAMPTZ;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;`,
+  `ALTER TABLE listings ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;`,
+  // Bulk Orders
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS delivered_weight_kg DECIMAL(10,2);`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS agreed_price_per_kg DECIMAL(10,2);`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12,2);`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS notes TEXT;`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS invoice_url TEXT;`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS pickup_scheduled_at TIMESTAMPTZ;`,
+  `ALTER TABLE bulk_orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;`,
+  // Payments
+  `ALTER TABLE payments ADD COLUMN IF NOT EXISTS gateway_order_id VARCHAR(100);`,
+  `ALTER TABLE payments ADD COLUMN IF NOT EXISTS gateway_data JSONB;`,
+  `ALTER TABLE payments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;`,
+  // Notifications
+  `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}';`,
+  `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS image_url TEXT;`,
 
   // ─── INDEXES ──────────────────────────────────────────
   `CREATE INDEX IF NOT EXISTS idx_listings_location ON listings USING GIST(location);`,
