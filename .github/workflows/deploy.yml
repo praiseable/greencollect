@@ -1,0 +1,114 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy GreenCollect
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+
+            echo "========================================="
+            echo " GreenCollect — Auto Deploy"
+            echo " Triggered by: ${{ github.actor }}"
+            echo " Commit: ${{ github.sha }}"
+            echo "========================================="
+
+            APP_DIR=~/gc-app
+
+            # 1. Navigate to project directory (clone if first time)
+            if [ ! -d "$APP_DIR" ]; then
+              echo "First deploy — cloning repo..."
+              git clone git@github.com:praiseable/greencollect.git "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            # 2. Pull latest code
+            echo "Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 3. Stop conflicting host services
+            sudo systemctl stop nginx 2>/dev/null || true
+            sudo systemctl stop apache2 2>/dev/null || true
+            sudo systemctl stop postgresql 2>/dev/null || true
+
+            # 4. Build and deploy with Docker Compose
+            echo "Building and starting containers..."
+            docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker compose -f docker-compose.prod.yml up -d --build
+
+            # 5. Wait for database to be healthy
+            echo "Waiting for database..."
+            RETRIES=40
+            until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U gcadmin -d greencollect 2>/dev/null; do
+              RETRIES=$((RETRIES - 1))
+              if [ $RETRIES -le 0 ]; then
+                echo "ERROR: Database did not become ready"
+                docker compose -f docker-compose.prod.yml logs db
+                exit 1
+              fi
+              echo "  Waiting... ($RETRIES attempts left)"
+              sleep 3
+            done
+            echo "Database is ready!"
+
+            # 6. Wait for backends to stabilize
+            sleep 5
+
+            # 7. Run migrations
+            echo "Running migrations..."
+            docker compose -f docker-compose.prod.yml exec -T mobile-backend node migrations/run.js
+
+            # 8. Seed data (idempotent — safe to re-run)
+            echo "Running seeds..."
+            docker compose -f docker-compose.prod.yml exec -T mobile-backend node seeds/run.js
+
+            # 9. Health checks
+            sleep 3
+            MOBILE_HEALTH=$(curl -sf http://localhost:3000/health 2>/dev/null || echo "FAILED")
+            WEB_HEALTH=$(curl -sf http://localhost:3001/health 2>/dev/null || echo "FAILED")
+            PORTAL_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:80 2>/dev/null || echo "000")
+
+            echo ""
+            echo "========================================="
+            echo " DEPLOYMENT COMPLETE"
+            echo "========================================="
+            echo " Mobile Backend: $MOBILE_HEALTH"
+            echo " Web Backend:    $WEB_HEALTH"
+            echo " Web Portal:     HTTP $PORTAL_STATUS"
+            echo ""
+            docker compose -f docker-compose.prod.yml ps
+
+            # 10. Fail the action if any service is down
+            if echo "$MOBILE_HEALTH" | grep -q "FAILED"; then
+              echo "ERROR: Mobile backend health check failed!"
+              docker compose -f docker-compose.prod.yml logs mobile-backend --tail 30
+              exit 1
+            fi
+            if echo "$WEB_HEALTH" | grep -q "FAILED"; then
+              echo "ERROR: Web backend health check failed!"
+              docker compose -f docker-compose.prod.yml logs web-backend --tail 30
+              exit 1
+            fi
+            if [ "$PORTAL_STATUS" = "000" ]; then
+              echo "ERROR: Web portal is not responding!"
+              docker compose -f docker-compose.prod.yml logs web-portal --tail 30
+              exit 1
+            fi
+
+            echo "All services are healthy!"
