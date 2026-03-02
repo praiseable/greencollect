@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiUpload, FiX } from 'react-icons/fi';
+import { FiUpload, FiX, FiMapPin } from 'react-icons/fi';
 import api from '../services/api';
 
 export default function CreateListing() {
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
+  const [allSubcategories, setAllSubcategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [units, setUnits] = useState([]);
+  const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     title: '',
@@ -18,8 +20,10 @@ export default function CreateListing() {
     unitId: '',
     quantity: '',
     pricePaisa: '',
-    priceNegotiable: false,
-    condition: 'USED',
+    priceNegotiable: true,
+    geoZoneId: '',
+    cityName: '',
+    contactNumber: '',
   });
   const [images, setImages] = useState([]);
   const [imagePreview, setImagePreview] = useState([]);
@@ -28,9 +32,22 @@ export default function CreateListing() {
     Promise.all([
       api.get('/categories').catch(() => ({ data: [] })),
       api.get('/units').catch(() => ({ data: [] })),
-    ]).then(([catRes, unitRes]) => {
-      setCategories(catRes.data?.data || catRes.data || []);
+      api.get('/geo-zones/cities').catch(() => ({ data: [] })),
+    ]).then(([catRes, unitRes, cityRes]) => {
+      const cats = catRes.data?.data || catRes.data || [];
+      setCategories(cats);
+      // Flatten subcategories from category tree
+      const subs = [];
+      cats.forEach((c) => {
+        if (c.children) {
+          c.children.forEach((child) => {
+            subs.push({ ...child, parentName: c.name });
+          });
+        }
+      });
+      setAllSubcategories(subs);
       setUnits(unitRes.data?.data || unitRes.data || []);
+      setCities(cityRes.data?.data || cityRes.data || []);
     });
   }, []);
 
@@ -39,10 +56,21 @@ export default function CreateListing() {
       api.get(`/product-types?categoryId=${form.categoryId}`)
         .then((res) => setProductTypes(res.data?.data || res.data || []))
         .catch(() => setProductTypes([]));
+    } else {
+      setProductTypes([]);
     }
   }, [form.categoryId]);
 
   const update = (key, val) => setForm({ ...form, [key]: val });
+
+  const handleCityChange = (cityId) => {
+    const city = cities.find((c) => c.id === cityId);
+    setForm({
+      ...form,
+      geoZoneId: cityId,
+      cityName: city?.name || '',
+    });
+  };
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
@@ -62,29 +90,77 @@ export default function CreateListing() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title || !form.categoryId || !form.quantity || !form.pricePaisa) {
-      toast.error('Please fill in all required fields');
+    if (!form.title || !form.categoryId || !form.quantity || !form.pricePaisa || !form.unitId) {
+      toast.error('Please fill in all required fields (title, category, quantity, unit, price)');
+      return;
+    }
+    if (!form.geoZoneId) {
+      toast.error('Please select your city');
+      return;
+    }
+    if (!form.description) {
+      toast.error('Please add a description');
       return;
     }
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      Object.entries(form).forEach(([key, val]) => {
-        if (val !== '' && val !== undefined) formData.append(key, val);
-      });
-      images.forEach((img) => formData.append('images', img));
+      // Get city coordinates for lat/lng
+      const selectedCity = cities.find((c) => c.id === form.geoZoneId);
+      const latitude = selectedCity?.latitude || 24.8607; // Default Karachi
+      const longitude = selectedCity?.longitude || 67.0011;
 
-      await api.post('/listings', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // Step 1: Create listing (JSON)
+      const payload = {
+        title: form.title,
+        description: form.description,
+        categoryId: form.categoryId,
+        productTypeId: form.productTypeId || null,
+        unitId: form.unitId,
+        quantity: form.quantity,
+        pricePaisa: form.pricePaisa,
+        priceNegotiable: form.priceNegotiable,
+        geoZoneId: form.geoZoneId,
+        cityName: form.cityName,
+        latitude,
+        longitude,
+        contactNumber: form.contactNumber || null,
+      };
+
+      const res = await api.post('/listings', payload);
+      const listingId = res.data?.id;
+
+      // Step 2: Upload images (if any)
+      if (images.length > 0 && listingId) {
+        const formData = new FormData();
+        images.forEach((img) => formData.append('images', img));
+        await api.post(`/listings/${listingId}/images`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }).catch((err) => {
+          console.error('Image upload failed:', err);
+          toast.warning('Listing created but image upload failed');
+        });
+      }
+
       toast.success('Listing posted successfully!');
       navigate('/dashboard');
     } catch (err) {
+      console.error('Create listing error:', err.response?.data || err);
       toast.error(err.response?.data?.error?.message || 'Failed to create listing');
     }
     setLoading(false);
   };
+
+  // Build category options — top-level + their children
+  const categoryOptions = [];
+  categories.forEach((cat) => {
+    categoryOptions.push({ id: cat.id, name: cat.name, isParent: true });
+    if (cat.children) {
+      cat.children.forEach((child) => {
+        categoryOptions.push({ id: child.id, name: `  └ ${child.name}`, isParent: false });
+      });
+    }
+  });
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -107,16 +183,16 @@ export default function CreateListing() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
             <select required value={form.categoryId} onChange={(e) => update('categoryId', e.target.value)} className="input-field">
               <option value="">Select Category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id} className={c.isParent ? 'font-semibold' : ''}>{c.name}</option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
             <select value={form.productTypeId} onChange={(e) => update('productTypeId', e.target.value)} className="input-field"
-              disabled={!form.categoryId}>
-              <option value="">Select Type</option>
+              disabled={!form.categoryId || productTypes.length === 0}>
+              <option value="">Select Type (optional)</option>
               {productTypes.map((pt) => (
                 <option key={pt.id} value={pt.id}>{pt.name}</option>
               ))}
@@ -128,12 +204,12 @@ export default function CreateListing() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Quantity <span className="text-red-500">*</span></label>
-            <input type="number" step="0.01" required value={form.quantity}
+            <input type="number" step="0.01" min="0.01" required value={form.quantity}
               onChange={(e) => update('quantity', e.target.value)} className="input-field" placeholder="e.g. 500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-            <select value={form.unitId} onChange={(e) => update('unitId', e.target.value)} className="input-field">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unit <span className="text-red-500">*</span></label>
+            <select required value={form.unitId} onChange={(e) => update('unitId', e.target.value)} className="input-field">
               <option value="">Select Unit</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>
@@ -148,7 +224,7 @@ export default function CreateListing() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Price (₨ PKR) <span className="text-red-500">*</span></label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₨</span>
-              <input type="number" required value={form.pricePaisa}
+              <input type="number" min="1" required value={form.pricePaisa}
                 onChange={(e) => update('pricePaisa', e.target.value)}
                 className="input-field !pl-8" placeholder="5000" />
             </div>
@@ -163,26 +239,36 @@ export default function CreateListing() {
           </div>
         </div>
 
-        {/* Condition */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-          <div className="flex gap-3">
-            {['NEW', 'USED', 'REFURBISHED', 'SCRAP'].map((c) => (
-              <label key={c}
-                className={`flex-1 text-center py-2 rounded-lg border cursor-pointer text-sm font-medium transition-colors
-                  ${form.condition === c ? 'bg-primary-50 border-primary-500 text-primary-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                <input type="radio" name="condition" value={c} checked={form.condition === c}
-                  onChange={() => update('condition', c)} className="sr-only" />
-                {c.charAt(0) + c.slice(1).toLowerCase()}
-              </label>
-            ))}
+        {/* City & Contact */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <FiMapPin className="inline mr-1" size={14} />City <span className="text-red-500">*</span>
+            </label>
+            <select required value={form.geoZoneId} onChange={(e) => handleCityChange(e.target.value)} className="input-field">
+              <option value="">Select City</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}{c.parent ? ` (${c.parent.name})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">+92</span>
+              <input type="tel" value={form.contactNumber}
+                onChange={(e) => update('contactNumber', e.target.value)}
+                className="input-field !pl-12" placeholder="3XX-XXXXXXX" />
+            </div>
           </div>
         </div>
 
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <textarea rows={4} value={form.description} onChange={(e) => update('description', e.target.value)}
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Description <span className="text-red-500">*</span>
+          </label>
+          <textarea rows={4} required value={form.description} onChange={(e) => update('description', e.target.value)}
             className="input-field resize-none" placeholder="Describe the material quality, source, pickup location details, etc." />
         </div>
 

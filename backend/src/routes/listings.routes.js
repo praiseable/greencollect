@@ -128,10 +128,58 @@ router.post('/', authenticate, async (req, res) => {
       address, cityName, contactNumber, attributeValues,
     } = req.body;
 
+    // Validate required fields
+    if (!title || !categoryId || !pricePaisa || !quantity || !unitId) {
+      return res.status(400).json({
+        error: { message: 'Missing required fields: title, categoryId, pricePaisa, quantity, unitId', code: 'VALIDATION_ERROR' },
+      });
+    }
+
+    // If no geoZoneId, try user's geoZone or find a default city
+    let resolvedGeoZoneId = geoZoneId;
+    let resolvedLat = latitude ? parseFloat(latitude) : null;
+    let resolvedLng = longitude ? parseFloat(longitude) : null;
+    let resolvedCity = cityName || null;
+
+    if (!resolvedGeoZoneId) {
+      // Use the user's zone or fall back to first available city
+      if (req.user.geoZoneId) {
+        resolvedGeoZoneId = req.user.geoZoneId;
+      } else {
+        const defaultCity = await prisma.geoZone.findFirst({ where: { type: 'CITY', countryId: 'PK', isActive: true } });
+        if (defaultCity) {
+          resolvedGeoZoneId = defaultCity.id;
+          resolvedCity = resolvedCity || defaultCity.name;
+          resolvedLat = resolvedLat || defaultCity.latitude;
+          resolvedLng = resolvedLng || defaultCity.longitude;
+        }
+      }
+    }
+
+    // If still no coordinates, look up from the zone
+    if ((!resolvedLat || !resolvedLng) && resolvedGeoZoneId) {
+      const zone = await prisma.geoZone.findUnique({ where: { id: resolvedGeoZoneId } });
+      if (zone) {
+        resolvedLat = resolvedLat || zone.latitude || 24.8607;
+        resolvedLng = resolvedLng || zone.longitude || 67.0011;
+        resolvedCity = resolvedCity || zone.name;
+      }
+    }
+
+    // Final fallback coordinates (Karachi)
+    resolvedLat = resolvedLat || 24.8607;
+    resolvedLng = resolvedLng || 67.0011;
+
+    if (!resolvedGeoZoneId) {
+      return res.status(400).json({
+        error: { message: 'No city/zone provided and no default found. Please select a city.', code: 'VALIDATION_ERROR' },
+      });
+    }
+
     const listing = await prisma.listing.create({
       data: {
         title,
-        description,
+        description: description || title,
         categoryId,
         productTypeId: productTypeId || null,
         pricePaisa: BigInt(pricePaisa),
@@ -141,11 +189,11 @@ router.post('/', authenticate, async (req, res) => {
         unitId,
         minOrderQuantity: minOrderQuantity ? parseFloat(minOrderQuantity) : null,
         sellerId: req.user.id,
-        geoZoneId,
-        latitude: parseFloat(latitude),
-        longitude: parseFloat(longitude),
-        address,
-        cityName,
+        geoZoneId: resolvedGeoZoneId,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
+        address: address || null,
+        cityName: resolvedCity,
         countryId: 'PK',
         contactNumber: contactNumber || null,
         attributeValues: attributeValues ? {
@@ -181,12 +229,25 @@ router.post('/', authenticate, async (req, res) => {
           data: { listingId: listing.id },
         })),
       });
+
+      // Emit real-time notification via Socket.io
+      const io = req.app.get('io');
+      if (io) {
+        admins.forEach(a => {
+          io.to(`user-${a.id}`).emit('notification', {
+            type: 'NEW_LISTING',
+            title: 'New Listing Posted',
+            body: `${req.user.firstName} posted: ${title}`,
+            data: { listingId: listing.id },
+          });
+        });
+      }
     }
 
     res.status(201).json({ ...listing, pricePaisa: listing.pricePaisa.toString() });
   } catch (err) {
     console.error('Create listing error:', err);
-    res.status(500).json({ error: { message: 'Failed to create listing' } });
+    res.status(500).json({ error: { message: 'Failed to create listing', details: err.message } });
   }
 });
 
