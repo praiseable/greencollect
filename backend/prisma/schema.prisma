@@ -1,0 +1,792 @@
+// Geo-Franchise Marketplace — Complete Prisma Schema
+// Primary Market: Pakistan (PKR, Urdu+English, +92)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE A — COUNTRY & REGION
+// ═══════════════════════════════════════════════════════════
+
+model Country {
+  id                String      @id           // ISO 3166-1 alpha-2: "PK"
+  name              String
+  nativeName        String
+  phoneCode         String                    // "+92"
+  phoneFormat       String                    // "3XX-XXXXXXX"
+  defaultCurrencyId String
+  defaultCurrency   Currency    @relation("CountryDefaultCurrency", fields: [defaultCurrencyId], references: [id])
+  defaultLanguageId String
+  defaultLanguage   Language    @relation("CountryDefaultLanguage", fields: [defaultLanguageId], references: [id])
+  timezone          String                    // "Asia/Karachi"
+  isActive          Boolean     @default(true)
+  isDefault         Boolean     @default(false)
+  geoZones          GeoZone[]
+  supportedCurrencies CountryCurrency[]
+  supportedLanguages  CountryLanguage[]
+  paymentGateways   CountryPaymentGateway[]
+  subscriptionPlans SubscriptionPlan[]
+  users             User[]      @relation("UserCountry")
+  listings          Listing[]   @relation("ListingCountry")
+  createdAt         DateTime    @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE B — CURRENCY
+// ═══════════════════════════════════════════════════════════
+
+model Currency {
+  id              String    @id           // ISO 4217: "PKR"
+  name            String
+  nativeName      String
+  symbol          String                  // "₨"
+  symbolNative    String
+  symbolPosition  SymbolPosition @default(PREFIX)
+  decimalDigits   Int       @default(2)
+  rounding        Float     @default(0)
+  isActive        Boolean   @default(true)
+  isDefault       Boolean   @default(false)
+  exchangeRatesBase   ExchangeRate[] @relation("BaseCurrency")
+  exchangeRatesTarget ExchangeRate[] @relation("TargetCurrency")
+  countriesDefault Country[]  @relation("CountryDefaultCurrency")
+  countryLinks    CountryCurrency[]
+  listings        Listing[]  @relation("ListingCurrency")
+  transactions    Transaction[]
+  wallets         Wallet[]
+  subscriptionPrices SubscriptionPrice[]
+  priceHistory    PriceHistory[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ExchangeRate {
+  id               String    @id @default(uuid())
+  baseCurrencyId   String
+  baseCurrency     Currency  @relation("BaseCurrency", fields: [baseCurrencyId], references: [id])
+  targetCurrencyId String
+  targetCurrency   Currency  @relation("TargetCurrency", fields: [targetCurrencyId], references: [id])
+  rate             Decimal   @db.Decimal(18, 8)
+  source           String    @default("MANUAL")
+  effectiveAt      DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+
+  @@unique([baseCurrencyId, targetCurrencyId])
+}
+
+model CountryCurrency {
+  countryId  String
+  country    Country  @relation(fields: [countryId], references: [id])
+  currencyId String
+  currency   Currency @relation(fields: [currencyId], references: [id])
+  isPrimary  Boolean  @default(false)
+
+  @@id([countryId, currencyId])
+}
+
+enum SymbolPosition {
+  PREFIX
+  SUFFIX
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE C — LANGUAGE & LOCALIZATION
+// ═══════════════════════════════════════════════════════════
+
+model Language {
+  id            String    @id           // BCP 47: "ur", "en"
+  name          String
+  nativeName    String
+  direction     TextDirection @default(LTR)
+  isActive      Boolean   @default(true)
+  isDefault     Boolean   @default(false)
+  flagEmoji     String?
+  countriesDefault Country[] @relation("CountryDefaultLanguage")
+  countryLinks  CountryLanguage[]
+  translations  Translation[]
+  users         User[]    @relation("UserLanguage")
+  categoryTranslations    CategoryTranslation[]
+  productTypeTranslations ProductTypeTranslation[]
+  attributeTranslations   AttributeTranslation[]
+  optionTranslations      OptionTranslation[]
+  unitTranslations        UnitTranslation[]
+  createdAt     DateTime  @default(now())
+}
+
+model CountryLanguage {
+  countryId  String
+  country    Country  @relation(fields: [countryId], references: [id])
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id])
+  isPrimary  Boolean  @default(false)
+
+  @@id([countryId, languageId])
+}
+
+model Translation {
+  id         String   @id @default(uuid())
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id])
+  namespace  String                    // "common" | "auth" | "listings"
+  key        String
+  value      String
+  isRTL      Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([languageId, namespace, key])
+}
+
+enum TextDirection {
+  LTR
+  RTL
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE D — DYNAMIC PRODUCT CATALOG
+// ═══════════════════════════════════════════════════════════
+
+model Category {
+  id           String        @id @default(uuid())
+  slug         String        @unique
+  icon         String?
+  colorHex     String?
+  sortOrder    Int           @default(0)
+  isActive     Boolean       @default(true)
+  parentId     String?
+  parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryTree")
+  productTypes ProductType[]
+  listings     Listing[]
+  translations CategoryTranslation[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model CategoryTranslation {
+  id          String   @id @default(uuid())
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  languageId  String
+  language    Language @relation(fields: [languageId], references: [id])
+  name        String
+  description String?
+
+  @@unique([categoryId, languageId])
+}
+
+model ProductType {
+  id           String                @id @default(uuid())
+  slug         String                @unique
+  categoryId   String
+  category     Category              @relation(fields: [categoryId], references: [id])
+  icon         String?
+  isActive     Boolean               @default(true)
+  sortOrder    Int                   @default(0)
+  attributes   ProductAttribute[]
+  listings     Listing[]
+  translations ProductTypeTranslation[]
+  priceHistory PriceHistory[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+}
+
+model ProductTypeTranslation {
+  id            String      @id @default(uuid())
+  productTypeId String
+  productType   ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+  languageId    String
+  language      Language    @relation(fields: [languageId], references: [id])
+  name          String
+  description   String?
+  unitLabel     String?
+
+  @@unique([productTypeId, languageId])
+}
+
+model ProductAttribute {
+  id            String                  @id @default(uuid())
+  productTypeId String
+  productType   ProductType             @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+  slug          String
+  inputType     AttributeInputType      @default(SELECT)
+  isRequired    Boolean                 @default(false)
+  isFilterable  Boolean                 @default(true)
+  sortOrder     Int                     @default(0)
+  isActive      Boolean                 @default(true)
+  options       AttributeOption[]
+  listingValues ListingAttributeValue[]
+  translations  AttributeTranslation[]
+  createdAt     DateTime                @default(now())
+}
+
+model AttributeOption {
+  id          String              @id @default(uuid())
+  attributeId String
+  attribute   ProductAttribute    @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  slug        String
+  sortOrder   Int                 @default(0)
+  isActive    Boolean             @default(true)
+  translations OptionTranslation[]
+  listingValues ListingAttributeValue[]
+}
+
+model AttributeTranslation {
+  id          String           @id @default(uuid())
+  attributeId String
+  attribute   ProductAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  languageId  String
+  language    Language         @relation(fields: [languageId], references: [id])
+  label       String
+
+  @@unique([attributeId, languageId])
+}
+
+model OptionTranslation {
+  id         String          @id @default(uuid())
+  optionId   String
+  option     AttributeOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  languageId String
+  language   Language        @relation(fields: [languageId], references: [id])
+  label      String
+
+  @@unique([optionId, languageId])
+}
+
+model ListingAttributeValue {
+  id          String           @id @default(uuid())
+  listingId   String
+  listing     Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  attributeId String
+  attribute   ProductAttribute @relation(fields: [attributeId], references: [id])
+  optionId    String?
+  option      AttributeOption? @relation(fields: [optionId], references: [id])
+  textValue   String?
+  numberValue Decimal?
+
+  @@unique([listingId, attributeId])
+}
+
+enum AttributeInputType {
+  TEXT
+  NUMBER
+  SELECT
+  MULTI_SELECT
+  BOOLEAN
+  DATE
+}
+
+// ═══════════════════════════════════════════════════════════
+// UNITS OF MEASUREMENT
+// ═══════════════════════════════════════════════════════════
+
+model Unit {
+  id               String            @id @default(uuid())
+  slug             String            @unique
+  type             UnitType
+  isBaseUnit       Boolean           @default(false)
+  conversionFactor Decimal           @db.Decimal(18, 8) @default(1)
+  isActive         Boolean           @default(true)
+  sortOrder        Int               @default(0)
+  translations     UnitTranslation[]
+  listings         Listing[]
+  createdAt        DateTime          @default(now())
+}
+
+model UnitTranslation {
+  id           String @id @default(uuid())
+  unitId       String
+  unit         Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  languageId   String
+  language     Language @relation(fields: [languageId], references: [id])
+  name         String
+  abbreviation String
+
+  @@unique([unitId, languageId])
+}
+
+enum UnitType {
+  WEIGHT
+  VOLUME
+  COUNT
+  LENGTH
+  AREA
+  OTHER
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRICE HISTORY
+// ═══════════════════════════════════════════════════════════
+
+model PriceHistory {
+  id            String      @id @default(uuid())
+  productTypeId String
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
+  currencyId    String
+  currency      Currency    @relation(fields: [currencyId], references: [id])
+  minPricePaisa BigInt
+  maxPricePaisa BigInt
+  avgPricePaisa BigInt
+  sampleCount   Int
+  recordedAt    DateTime    @default(now())
+
+  @@index([productTypeId, currencyId, recordedAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE 1 — AUTHENTICATION & USERS
+// ═══════════════════════════════════════════════════════════
+
+model User {
+  id            String    @id @default(uuid())
+  email         String?   @unique
+  phone         String?   @unique
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  displayName   String?
+  avatar        String?
+  role          UserRole  @default(CUSTOMER)
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  languageId    String    @default("en")
+  language      Language  @relation("UserLanguage", fields: [languageId], references: [id])
+  currencyId    String    @default("PKR")
+  countryId     String    @default("PK")
+  country       Country   @relation("UserCountry", fields: [countryId], references: [id])
+  cnicNumber    String?
+  city          String?
+  geoZoneId     String?
+  geoZone       GeoZone?  @relation(fields: [geoZoneId], references: [id])
+  latitude      Float?
+  longitude     Float?
+  fcmToken      String?
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  lastLoginAt   DateTime?
+  listings      Listing[]  @relation("SellerListings")
+  transactions  Transaction[] @relation("BuyerTransactions")
+  sellerTransactions Transaction[] @relation("SellerTransactions")
+  notifications Notification[]
+  wallet        Wallet?
+  subscription  UserSubscription?
+  refreshTokens RefreshToken[]
+  otps          OTP[]
+  chatMessagesFrom ChatMessage[] @relation("MessageFrom")
+  chatMessagesTo   ChatMessage[] @relation("MessageTo")
+  auditLogs     AuditLog[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model OTP {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone     String?
+  email     String?
+  code      String
+  purpose   OTPPurpose @default(LOGIN)
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  COLLECTION_MANAGER
+  REGIONAL_MANAGER
+  FRANCHISE_OWNER
+  DEALER
+  WHOLESALE_BUYER
+  CUSTOMER
+}
+
+enum OTPPurpose {
+  LOGIN
+  REGISTER
+  RESET_PASSWORD
+  TWO_FACTOR
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE 3 — GEO-ZONES
+// ═══════════════════════════════════════════════════════════
+
+model GeoZone {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  type        GeoZoneType
+  parentId    String?
+  parent      GeoZone?  @relation("ZoneTree", fields: [parentId], references: [id])
+  children    GeoZone[] @relation("ZoneTree")
+  countryId   String
+  country     Country   @relation(fields: [countryId], references: [id])
+  latitude    Float?
+  longitude   Float?
+  radiusKm    Float?
+  isActive    Boolean   @default(true)
+  users       User[]
+  listings    Listing[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum GeoZoneType {
+  COUNTRY
+  PROVINCE
+  CITY
+  LOCAL_AREA
+}
+
+// ═══════════════════════════════════════════════════════════
+// LISTINGS
+// ═══════════════════════════════════════════════════════════
+
+model Listing {
+  id              String                  @id @default(uuid())
+  title           String
+  description     String
+  categoryId      String
+  category        Category                @relation(fields: [categoryId], references: [id])
+  productTypeId   String?
+  productType     ProductType?            @relation(fields: [productTypeId], references: [id])
+  attributeValues ListingAttributeValue[]
+  pricePaisa      BigInt
+  currencyId      String                  @default("PKR")
+  currency        Currency                @relation("ListingCurrency", fields: [currencyId], references: [id])
+  priceNegotiable Boolean                 @default(true)
+  quantity        Decimal                 @db.Decimal(12, 3)
+  unitId          String
+  unit            Unit                    @relation(fields: [unitId], references: [id])
+  minOrderQuantity Decimal?               @db.Decimal(12, 3)
+  sellerId        String
+  seller          User                    @relation("SellerListings", fields: [sellerId], references: [id])
+  geoZoneId       String
+  geoZone         GeoZone                 @relation(fields: [geoZoneId], references: [id])
+  latitude        Float
+  longitude       Float
+  address         String?
+  cityName        String?
+  countryId       String                  @default("PK")
+  country         Country                 @relation("ListingCountry", fields: [countryId], references: [id])
+  contactNumber   String?
+  status          ListingStatus           @default(ACTIVE)
+  visibilityLevel VisibilityLevel         @default(LOCAL)
+  images          ListingImage[]
+  viewCount       Int                     @default(0)
+  interestedCount Int                     @default(0)
+  escalationHistory EscalationLog[]
+  transactions    Transaction[]
+  expiresAt       DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+}
+
+model ListingImage {
+  id        String  @id @default(uuid())
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  PENDING_REVIEW
+  SOLD
+  EXPIRED
+  CLOSED
+  REJECTED
+}
+
+enum VisibilityLevel {
+  LOCAL
+  NEIGHBOR
+  CITY
+  PROVINCE
+  NATIONAL
+  PUBLIC
+}
+
+// ═══════════════════════════════════════════════════════════
+// ESCALATION ENGINE
+// ═══════════════════════════════════════════════════════════
+
+model EscalationLog {
+  id           String          @id @default(uuid())
+  listingId    String
+  listing      Listing         @relation(fields: [listingId], references: [id])
+  fromLevel    VisibilityLevel
+  toLevel      VisibilityLevel
+  reason       String?
+  escalatedAt  DateTime        @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════
+// TRANSACTIONS & BONDS
+// ═══════════════════════════════════════════════════════════
+
+model Transaction {
+  id            String            @id @default(uuid())
+  listingId     String
+  listing       Listing           @relation(fields: [listingId], references: [id])
+  buyerId       String
+  buyer         User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId      String
+  seller        User              @relation("SellerTransactions", fields: [sellerId], references: [id])
+  amountPaisa   BigInt
+  currencyId    String
+  currency      Currency          @relation(fields: [currencyId], references: [id])
+  quantity      Decimal           @db.Decimal(12, 3)
+  status        TransactionStatus @default(OFFER_MADE)
+  bond          Bond?
+  paymentId     String?
+  payment       Payment?          @relation(fields: [paymentId], references: [id])
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+model Bond {
+  id            String   @id @default(uuid())
+  transactionId String   @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  pdfUrl        String?
+  signedBySeller Boolean @default(false)
+  signedByBuyer  Boolean @default(false)
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+}
+
+enum TransactionStatus {
+  OFFER_MADE
+  OFFER_ACCEPTED
+  OFFER_REJECTED
+  BOND_CREATED
+  PAYMENT_PENDING
+  PAYMENT_COMPLETED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+// ═══════════════════════════════════════════════════════════
+// PAYMENTS
+// ═══════════════════════════════════════════════════════════
+
+model Payment {
+  id           String         @id @default(uuid())
+  userId       String
+  gateway      PaymentGateway
+  gatewayRef   String?
+  amountPaisa  BigInt
+  currencyId   String
+  status       PaymentStatus  @default(PENDING)
+  purpose      PaymentPurpose
+  metadata     Json?
+  transactions Transaction[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model Wallet {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  balancePaisa BigInt  @default(0)
+  currencyId  String
+  currency    Currency @relation(fields: [currencyId], references: [id])
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model CountryPaymentGateway {
+  id          String         @id @default(uuid())
+  countryId   String
+  country     Country        @relation(fields: [countryId], references: [id])
+  gateway     PaymentGateway
+  isActive    Boolean        @default(true)
+  config      Json?
+  displayName String
+  logoUrl     String?
+  sortOrder   Int            @default(0)
+}
+
+enum PaymentGateway {
+  JAZZCASH
+  EASYPAISA
+  STRIPE
+  RAZORPAY
+  BANK_TRANSFER
+  WALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentPurpose {
+  SUBSCRIPTION
+  TRANSACTION
+  WALLET_TOPUP
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBSCRIPTIONS
+// ═══════════════════════════════════════════════════════════
+
+model SubscriptionPlan {
+  id          String             @id @default(uuid())
+  name        String
+  slug        String             @unique
+  description String?
+  features    Json?
+  maxListings Int                @default(10)
+  maxZones    Int                @default(1)
+  isActive    Boolean            @default(true)
+  countryId   String
+  country     Country            @relation(fields: [countryId], references: [id])
+  prices      SubscriptionPrice[]
+  userSubs    UserSubscription[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model SubscriptionPrice {
+  id        String           @id @default(uuid())
+  planId    String
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  currencyId String
+  currency  Currency         @relation(fields: [currencyId], references: [id])
+  pricePaisa BigInt
+  interval  BillingInterval  @default(MONTHLY)
+
+  @@unique([planId, currencyId, interval])
+}
+
+model UserSubscription {
+  id        String           @id @default(uuid())
+  userId    String           @unique
+  user      User             @relation(fields: [userId], references: [id])
+  planId    String
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id])
+  status    SubscriptionStatus @default(ACTIVE)
+  startedAt DateTime         @default(now())
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  GRACE_PERIOD
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+enum NotificationType {
+  NEW_LISTING
+  OFFER_RECEIVED
+  OFFER_ACCEPTED
+  OFFER_REJECTED
+  PAYMENT_RECEIVED
+  PAYMENT_SENT
+  ESCALATION
+  SUBSCRIPTION_EXPIRING
+  SUBSCRIPTION_EXPIRED
+  SYSTEM
+  CHAT_MESSAGE
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHAT
+// ═══════════════════════════════════════════════════════════
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  fromUserId String
+  fromUser   User     @relation("MessageFrom", fields: [fromUserId], references: [id])
+  toUserId   String
+  toUser     User     @relation("MessageTo", fields: [toUserId], references: [id])
+  message    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([fromUserId, toUserId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// PLATFORM CONFIG
+// ═══════════════════════════════════════════════════════════
+
+model PlatformConfig {
+  id    String @id
+  key   String @unique
+  value String
+  label String?
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUDIT LOGS
+// ═══════════════════════════════════════════════════════════
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
