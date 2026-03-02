@@ -2,6 +2,7 @@ const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const { addFormattedPrice } = require('../services/currency.service');
+const { buildGeoFenceWhere, canUserViewListing } = require('../services/geoFencing.service');
 const multer = require('multer');
 const path = require('path');
 
@@ -15,7 +16,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
   else cb(new Error('Only images allowed'), false);
 }});
 
-// GET /listings — Browse listings (public)
+// GET /listings — Browse listings (with geo-fencing)
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const {
@@ -25,18 +26,47 @@ router.get('/', optionalAuth, async (req, res) => {
     } = req.query;
 
     const lang = req.lang || 'en';
-    const where = { status, countryId };
+    
+    // Admins can bypass geo-fencing
+    const isAdmin = req.user && ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(req.user.role);
+    
+    // Build where clause
+    const where = {
+      status,
+      countryId,
+    };
+    
+    // Apply geo-fencing only for non-admins
+    if (!isAdmin) {
+      const geoFenceWhere = await buildGeoFenceWhere(req.user, { countryId });
+      // Merge geo-fence OR conditions with other filters using AND
+      if (geoFenceWhere.OR) {
+        where.AND = [{ OR: geoFenceWhere.OR }];
+      }
+    }
+    
+    // Add other filters
     if (categoryId) where.categoryId = categoryId;
     if (productTypeId) where.productTypeId = productTypeId;
-    if (geoZoneId) where.geoZoneId = geoZoneId;
+    if (geoZoneId) where.geoZoneId = geoZoneId; // Admins can filter by any zone
     if (cityName) where.cityName = { contains: cityName, mode: 'insensitive' };
     if (minPrice) where.pricePaisa = { ...where.pricePaisa, gte: BigInt(minPrice) };
     if (maxPrice) where.pricePaisa = { ...where.pricePaisa, lte: BigInt(maxPrice) };
+    
+    // Search: merge with existing AND conditions
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
+      const searchOr = {
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ],
+      };
+      
+      if (where.AND) {
+        where.AND.push(searchOr);
+      } else {
+        where.AND = [searchOr];
+      }
     }
 
     const [listings, total] = await Promise.all([
@@ -101,6 +131,20 @@ router.get('/:id', optionalAuth, async (req, res) => {
     });
 
     if (!listing) return res.status(404).json({ error: { message: 'Listing not found' } });
+
+    // Check geo-fencing (admins can view any listing)
+    const isAdmin = req.user && ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(req.user.role);
+    if (!isAdmin) {
+      const canView = await canUserViewListing(req.user, listing);
+      if (!canView) {
+        return res.status(403).json({
+          error: {
+            message: 'This listing is not available in your area',
+            code: 'GEO_FENCE_RESTRICTED',
+          },
+        });
+      }
+    }
 
     // Increment view count
     await prisma.listing.update({ where: { id: req.params.id }, data: { viewCount: { increment: 1 } } });
