@@ -64,13 +64,16 @@ jobs:
             # 5. Build and deploy
             echo "Building and starting containers..."
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-            docker compose -f docker-compose.prod.yml up -d --build
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 
             # 6. SSL Certificate handling
             if [ "$CERTS_EXIST" = false ]; then
               echo "No SSL certificate. Obtaining from Let's Encrypt..."
               sleep 5
-              docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot certonly \
+              docker run --rm \
+                -v gc-app_certbot-webroot:/var/www/certbot \
+                -v gc-app_certbot-certs:/etc/letsencrypt \
+                certbot/certbot certonly \
                 --webroot \
                 --webroot-path=/var/www/certbot \
                 --email ${EMAIL} \
@@ -86,14 +89,20 @@ jobs:
             else
               echo "Checking if SSL certificate needs renewal..."
               NEEDS_RENEW=false
-              docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot renew \
+              docker run --rm \
+                -v gc-app_certbot-webroot:/var/www/certbot \
+                -v gc-app_certbot-certs:/etc/letsencrypt \
+                certbot/certbot renew \
                 --webroot \
                 --webroot-path=/var/www/certbot \
                 --dry-run 2>&1 | grep -q "would be renewed" && NEEDS_RENEW=true || true
 
               if [ "$NEEDS_RENEW" = true ]; then
                 echo "Certificate expiring soon. Renewing..."
-                docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot renew \
+                docker run --rm \
+                  -v gc-app_certbot-webroot:/var/www/certbot \
+                  -v gc-app_certbot-certs:/etc/letsencrypt \
+                  certbot/certbot renew \
                   --webroot \
                   --webroot-path=/var/www/certbot
                 docker compose -f docker-compose.prod.yml restart web-portal

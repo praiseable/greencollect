@@ -76,14 +76,6 @@ services:
     depends_on:
       - web-backend
 
-  certbot:
-    image: certbot/certbot
-    profiles:
-      - certbot
-    volumes:
-      - certbot-webroot:/var/www/certbot
-      - certbot-certs:/etc/letsencrypt
-
 volumes:
   pgdata:
   uploads:
