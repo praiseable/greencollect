@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiArrowRight, FiTrendingUp, FiShield, FiMapPin } from 'react-icons/fi';
+import { FiArrowRight, FiTrendingUp, FiShield, FiMapPin, FiMap } from 'react-icons/fi';
 import api from '../services/api';
 import ListingCard from '../components/ListingCard';
+import { ListingsMapView } from '../components/MapView';
 
 export default function Home() {
   const [listings, setListings] = useState([]);
@@ -125,6 +126,22 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      {/* Listings Map */}
+      {listings.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <FiMap className="text-primary-600" /> Listings on Map
+            </h2>
+            <Link to="/listings" className="text-primary-600 text-sm hover:underline flex items-center gap-1">
+              Explore All <FiArrowRight size={14} />
+            </Link>
+          </div>
+          <p className="text-gray-500 text-sm mb-4">Browse recyclable materials near you across Pakistan</p>
+          <ListingsMapView listings={listings} height="400px" />
+        </section>
+      )}
 
       {/* Features */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">

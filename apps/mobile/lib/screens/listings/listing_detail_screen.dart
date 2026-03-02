@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/listing.dart';
@@ -16,6 +17,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   Listing? _listing;
   bool _loading = true;
   int _selectedImage = 0;
+  GoogleMapController? _mapController;
 
   @override
   void initState() {
@@ -26,6 +28,20 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   Future<void> _loadListing() async {
     final listing = await context.read<ListingProvider>().fetchListingById(widget.id);
     if (mounted) setState(() { _listing = listing; _loading = false; });
+  }
+
+  void _openDirections() {
+    if (_listing?.hasLocation ?? false) {
+      final url = 'https://www.google.com/maps/dir/?api=1&destination=${_listing!.latitude},${_listing!.longitude}';
+      launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _openInMaps() {
+    if (_listing?.hasLocation ?? false) {
+      final url = 'https://www.google.com/maps/search/?api=1&query=${_listing!.latitude},${_listing!.longitude}';
+      launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
@@ -181,6 +197,92 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                     )),
                   ],
 
+                  // ═══════════════════════════════════════════
+                  // GOOGLE MAPS — Pickup Location
+                  // ═══════════════════════════════════════════
+                  if (listing.hasLocation) ...[
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('📍 Pickup Location',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        TextButton.icon(
+                          onPressed: _openDirections,
+                          icon: const Icon(Icons.directions, size: 18),
+                          label: const Text('Directions'),
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                        ),
+                      ],
+                    ),
+                    if (listing.address != null) ...[
+                      const SizedBox(height: 4),
+                      Text(listing.address!,
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                    ],
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        height: 200,
+                        child: GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(listing.latitude!, listing.longitude!),
+                            zoom: 14,
+                          ),
+                          markers: {
+                            Marker(
+                              markerId: MarkerId(listing.id),
+                              position: LatLng(listing.latitude!, listing.longitude!),
+                              infoWindow: InfoWindow(
+                                title: listing.title,
+                                snippet: listing.location,
+                              ),
+                            ),
+                          },
+                          onMapCreated: (controller) {
+                            _mapController = controller;
+                          },
+                          zoomControlsEnabled: false,
+                          mapToolbarEnabled: false,
+                          myLocationButtonEnabled: false,
+                          liteModeEnabled: true, // Static-like map for performance
+                          onTap: (_) => _openInMaps(),
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '${listing.latitude!.toStringAsFixed(4)}°N, ${listing.longitude!.toStringAsFixed(4)}°E',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Quick action buttons for location
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _openDirections,
+                            icon: const Icon(Icons.directions, size: 16),
+                            label: const Text('Get Directions', style: TextStyle(fontSize: 13)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _openInMaps,
+                            icon: const Icon(Icons.map, size: 16),
+                            label: const Text('Open in Maps', style: TextStyle(fontSize: 13)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
                   // Seller info
                   if (listing.sellerName != null) ...[
                     const SizedBox(height: 20),
@@ -261,5 +363,11 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
   }
 }

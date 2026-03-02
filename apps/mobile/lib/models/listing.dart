@@ -11,6 +11,9 @@ class Listing {
   final String? condition;
   final String? cityName;
   final String? geoZoneName;
+  final double? latitude;
+  final double? longitude;
+  final String? address;
   final List<ListingImage> images;
   final String? sellerName;
   final String? sellerPhone;
@@ -32,6 +35,9 @@ class Listing {
     this.condition,
     this.cityName,
     this.geoZoneName,
+    this.latitude,
+    this.longitude,
+    this.address,
     this.images = const [],
     this.sellerName,
     this.sellerPhone,
@@ -43,6 +49,7 @@ class Listing {
 
   String get priceFormatted => '₨ ${pricePaisa.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
   String get location => geoZoneName ?? cityName ?? 'Pakistan';
+  bool get hasLocation => latitude != null && longitude != null;
 
   factory Listing.fromJson(Map<String, dynamic> json) {
     return Listing(
@@ -58,6 +65,9 @@ class Listing {
       condition: json['condition'],
       cityName: json['city']?['name'] ?? json['cityName'],
       geoZoneName: json['geoZone']?['name'] ?? json['geoZoneName'],
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      address: json['address'],
       images: (json['images'] as List<dynamic>?)
               ?.map((i) => ListingImage.fromJson(i))
               .toList() ??

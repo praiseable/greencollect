@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { FiMapPin, FiClock, FiPhone, FiMail, FiArrowLeft, FiHeart, FiShare2, FiMessageCircle } from 'react-icons/fi';
+import { FiMapPin, FiClock, FiPhone, FiMail, FiArrowLeft, FiHeart, FiShare2, FiMessageCircle, FiNavigation } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
+import { SingleLocationMap } from '../components/MapView';
 
 export default function ListingDetail() {
   const { id } = useParams();
@@ -34,6 +35,15 @@ export default function ListingDetail() {
     toast.success('Contact request sent! The seller will be notified.');
   };
 
+  const openDirections = () => {
+    if (listing?.latitude && listing?.longitude) {
+      window.open(
+        `https://www.google.com/maps/dir/?api=1&destination=${listing.latitude},${listing.longitude}`,
+        '_blank'
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
@@ -53,6 +63,7 @@ export default function ListingDetail() {
   if (!listing) return null;
 
   const images = listing.images?.length > 0 ? listing.images : [{ url: null }];
+  const hasLocation = listing.latitude && listing.longitude;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -125,7 +136,7 @@ export default function ListingDetail() {
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="p-3 bg-gray-50 rounded-lg">
               <div className="text-xs text-gray-500">Quantity</div>
-              <div className="font-semibold">{listing.quantity} {listing.unitName || 'units'}</div>
+              <div className="font-semibold">{listing.quantity} {listing.unitName || listing.unit?.name || 'units'}</div>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <div className="text-xs text-gray-500">Condition</div>
@@ -199,6 +210,44 @@ export default function ListingDetail() {
           </div>
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════
+          LOCATION MAP SECTION
+          ═══════════════════════════════════════════════════════════ */}
+      {hasLocation && (
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <FiMapPin size={18} className="text-primary-600" /> Pickup Location
+            </h3>
+            <button
+              onClick={openDirections}
+              className="btn-secondary text-sm flex items-center gap-1"
+            >
+              <FiNavigation size={14} /> Get Directions
+            </button>
+          </div>
+
+          {listing.address && (
+            <p className="text-sm text-gray-600 mb-3">
+              📍 {listing.address}
+            </p>
+          )}
+
+          <SingleLocationMap
+            latitude={parseFloat(listing.latitude)}
+            longitude={parseFloat(listing.longitude)}
+            title={listing.title}
+            height="300px"
+          />
+
+          <div className="mt-2 text-xs text-gray-400 text-center">
+            {parseFloat(listing.latitude).toFixed(4)}°N, {parseFloat(listing.longitude).toFixed(4)}°E
+            {' · '}
+            {listing.geoZone?.name || listing.cityName || 'Pakistan'}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

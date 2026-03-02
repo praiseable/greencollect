@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiUpload, FiX, FiMapPin } from 'react-icons/fi';
 import api from '../services/api';
+import MapPicker from '../components/MapPicker';
 
 export default function CreateListing() {
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
-  const [allSubcategories, setAllSubcategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [units, setUnits] = useState([]);
   const [cities, setCities] = useState([]);
@@ -24,6 +24,9 @@ export default function CreateListing() {
     geoZoneId: '',
     cityName: '',
     contactNumber: '',
+    latitude: null,
+    longitude: null,
+    address: '',
   });
   const [images, setImages] = useState([]);
   const [imagePreview, setImagePreview] = useState([]);
@@ -36,16 +39,6 @@ export default function CreateListing() {
     ]).then(([catRes, unitRes, cityRes]) => {
       const cats = catRes.data?.data || catRes.data || [];
       setCategories(cats);
-      // Flatten subcategories from category tree
-      const subs = [];
-      cats.forEach((c) => {
-        if (c.children) {
-          c.children.forEach((child) => {
-            subs.push({ ...child, parentName: c.name });
-          });
-        }
-      });
-      setAllSubcategories(subs);
       setUnits(unitRes.data?.data || unitRes.data || []);
       setCities(cityRes.data?.data || cityRes.data || []);
     });
@@ -69,7 +62,21 @@ export default function CreateListing() {
       ...form,
       geoZoneId: cityId,
       cityName: city?.name || '',
+      // Set map to city coordinates
+      latitude: city?.latitude || form.latitude,
+      longitude: city?.longitude || form.longitude,
     });
+  };
+
+  const handleLocationSelect = (lat, lng, displayAddress, addressParts) => {
+    setForm((prev) => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      address: displayAddress || prev.address,
+      // Auto-detect city from geocoding if available
+      cityName: addressParts?.city || addressParts?.town || addressParts?.state_district || prev.cityName,
+    }));
   };
 
   const handleImageChange = (e) => {
@@ -102,14 +109,13 @@ export default function CreateListing() {
       toast.error('Please add a description');
       return;
     }
+    if (!form.latitude || !form.longitude) {
+      toast.error('Please select a pickup location on the map');
+      return;
+    }
 
     setLoading(true);
     try {
-      // Get city coordinates for lat/lng
-      const selectedCity = cities.find((c) => c.id === form.geoZoneId);
-      const latitude = selectedCity?.latitude || 24.8607; // Default Karachi
-      const longitude = selectedCity?.longitude || 67.0011;
-
       // Step 1: Create listing (JSON)
       const payload = {
         title: form.title,
@@ -122,8 +128,9 @@ export default function CreateListing() {
         priceNegotiable: form.priceNegotiable,
         geoZoneId: form.geoZoneId,
         cityName: form.cityName,
-        latitude,
-        longitude,
+        latitude: form.latitude,
+        longitude: form.longitude,
+        address: form.address || null,
         contactNumber: form.contactNumber || null,
       };
 
@@ -262,6 +269,34 @@ export default function CreateListing() {
             </div>
           </div>
         </div>
+
+        {/* ═══ MAP PICKER — Pickup Location ═══ */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            📍 Pickup / Material Location <span className="text-red-500">*</span>
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Search for an address, click on the map, or use your current location to set the exact pickup point.
+          </p>
+          <MapPicker
+            latitude={form.latitude}
+            longitude={form.longitude}
+            onLocationSelect={handleLocationSelect}
+            height="350px"
+            label="Click on the map to mark the material pickup location"
+          />
+        </div>
+
+        {/* Address (auto-filled from map, editable) */}
+        {form.address && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Address <span className="text-xs text-gray-400 ml-1">(auto-detected from map)</span>
+            </label>
+            <input type="text" value={form.address} onChange={(e) => update('address', e.target.value)}
+              className="input-field text-sm" />
+          </div>
+        )}
 
         {/* Description */}
         <div>
