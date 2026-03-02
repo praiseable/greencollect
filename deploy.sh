@@ -73,7 +73,20 @@ echo ""
 
 # 6. Build and start all services
 echo "Building and starting all services..."
-docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+docker compose -f docker-compose.prod.yml up -d --build 2>&1 || {
+  echo -e "${YELLOW}docker compose exited with non-zero code. Verifying containers...${NC}"
+}
+
+# Verify containers are actually running
+sleep 5
+RUNNING=$(docker compose -f docker-compose.prod.yml ps --status running -q 2>/dev/null | wc -l)
+if [ "$RUNNING" -lt 4 ]; then
+  echo -e "${RED}ERROR: Only $RUNNING containers running (expected 5). Deployment failed.${NC}"
+  docker compose -f docker-compose.prod.yml ps
+  docker compose -f docker-compose.prod.yml logs --tail 30
+  exit 1
+fi
+echo -e "${GREEN}All $RUNNING containers are running.${NC}"
 echo ""
 
 # 7. SSL Certificate handling
