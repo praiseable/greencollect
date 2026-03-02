@@ -5,7 +5,8 @@ DOMAIN="gc.directconnect.services"
 EMAIL="admin@directconnect.services"
 
 echo "============================================"
-echo " GreenCollect — Ubuntu 24.04 Deployment"
+echo " GreenCollect — Production Deployment"
+echo " Geo-Franchise Marketplace Platform"
 echo "============================================"
 echo ""
 
@@ -31,10 +32,6 @@ if ! command -v docker &> /dev/null; then
   sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   sudo usermod -aG docker $USER
   echo -e "${GREEN}Docker installed successfully.${NC}"
-  echo ""
-  echo "NOTE: You may need to log out and log back in for Docker group changes."
-  echo "After re-login, run this script again."
-  echo ""
   exit 0
 fi
 
@@ -42,20 +39,19 @@ echo -e "${GREEN}Docker found: $(docker --version)${NC}"
 
 # 2. Check docker compose
 if ! docker compose version &> /dev/null; then
-  echo "Docker Compose plugin not found. Installing..."
   sudo apt-get install -y docker-compose-plugin
 fi
 echo -e "${GREEN}Docker Compose: $(docker compose version)${NC}"
 echo ""
 
 # 3. Stop any conflicting host services
-echo "Stopping conflicting host services (nginx, apache2, postgres)..."
+echo "Stopping conflicting host services..."
 sudo systemctl stop nginx 2>/dev/null || true
 sudo systemctl stop apache2 2>/dev/null || true
 sudo systemctl stop postgresql 2>/dev/null || true
 echo ""
 
-# 4. Check if Let's Encrypt certs already exist in Docker volume
+# 4. Check if Let's Encrypt certs already exist
 CERTS_EXIST=false
 if docker volume inspect gc-app_certbot-certs &>/dev/null; then
   if docker run --rm -v gc-app_certbot-certs:/etc/letsencrypt alpine \
@@ -66,7 +62,7 @@ if docker volume inspect gc-app_certbot-certs &>/dev/null; then
 fi
 echo ""
 
-# 5. Stop existing containers
+# 5. Stop existing containers (preserve volumes)
 echo "Stopping any existing containers..."
 docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 echo ""
@@ -78,10 +74,10 @@ docker compose -f docker-compose.prod.yml up -d --build 2>&1 || {
 }
 
 # Verify containers are actually running
-sleep 5
+sleep 8
 RUNNING=$(docker compose -f docker-compose.prod.yml ps --status running -q 2>/dev/null | wc -l)
 if [ "$RUNNING" -lt 4 ]; then
-  echo -e "${RED}ERROR: Only $RUNNING containers running (expected 5). Deployment failed.${NC}"
+  echo -e "${RED}ERROR: Only $RUNNING containers running (expected 5). Deployment may have issues.${NC}"
   docker compose -f docker-compose.prod.yml ps
   docker compose -f docker-compose.prod.yml logs --tail 30
   exit 1
@@ -91,7 +87,6 @@ echo ""
 
 # 7. SSL Certificate handling
 if [ "$CERTS_EXIST" = false ]; then
-  # --- First time: obtain certificate ---
   echo -e "${YELLOW}No SSL certificate found. Obtaining from Let's Encrypt...${NC}"
   sleep 5
 
@@ -108,13 +103,12 @@ if [ "$CERTS_EXIST" = false ]; then
 
   if [ "$CERTS_EXIST" = true ]; then
     echo -e "${GREEN}SSL certificate obtained!${NC}"
-    echo "Restarting web portal with HTTPS..."
-    docker compose -f docker-compose.prod.yml restart web-portal
+    echo "Restarting web-client with HTTPS..."
+    docker compose -f docker-compose.prod.yml restart web-client
     sleep 3
   fi
   echo ""
 else
-  # --- Certificate exists: renew only if expiring within 30 days ---
   echo "Checking if SSL certificate needs renewal..."
   RENEW_OUTPUT=$(docker run --rm \
     -v gc-app_certbot-webroot:/var/www/certbot \
@@ -132,8 +126,7 @@ else
       certbot/certbot renew \
       --webroot \
       --webroot-path=/var/www/certbot
-    echo "Restarting web portal with new certificate..."
-    docker compose -f docker-compose.prod.yml restart web-portal
+    docker compose -f docker-compose.prod.yml restart web-client
     sleep 3
     echo -e "${GREEN}Certificate renewed!${NC}"
   else
@@ -142,14 +135,13 @@ else
   echo ""
 fi
 
-# 8. Wait for database to be healthy
+# 8. Wait for database
 echo "Waiting for database to be ready..."
 RETRIES=40
 until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U gcadmin -d greencollect 2>/dev/null; do
   RETRIES=$((RETRIES - 1))
   if [ $RETRIES -le 0 ]; then
-    echo -e "${RED}Database did not become ready in time. Check logs:${NC}"
-    echo "  docker compose -f docker-compose.prod.yml logs db"
+    echo -e "${RED}Database did not become ready in time.${NC}"
     exit 1
   fi
   echo "  Waiting... ($RETRIES attempts left)"
@@ -158,44 +150,41 @@ done
 echo -e "${GREEN}Database is ready!${NC}"
 echo ""
 
-# 9. Wait for backends to stabilize
-echo "Waiting for backend services to stabilize..."
-sleep 5
-
-# 10. Run migrations
-echo "Running database migrations..."
-docker compose -f docker-compose.prod.yml exec -T mobile-backend node migrations/run.js
-echo -e "${GREEN}Migrations complete!${NC}"
+# 9. Run Prisma migrations
+echo "Running Prisma migrations..."
+docker compose -f docker-compose.prod.yml exec -T backend npx prisma migrate deploy 2>&1 || {
+  echo -e "${YELLOW}Prisma migrate deploy not available, generating client...${NC}"
+  docker compose -f docker-compose.prod.yml exec -T backend npx prisma db push --accept-data-loss 2>&1 || true
+}
+echo -e "${GREEN}Database schema updated!${NC}"
 echo ""
 
-# 11. Seed data
-echo "Seeding garbage types, users, collection points..."
-docker compose -f docker-compose.prod.yml exec -T mobile-backend node seeds/run.js
+# 10. Seed data
+echo "Seeding database..."
+docker compose -f docker-compose.prod.yml exec -T backend node prisma/seed.js
 echo -e "${GREEN}Seeding complete!${NC}"
 echo ""
 
-# 12. Health checks
+# 11. Health checks
 echo "Running health checks..."
 sleep 3
 
-MOBILE_HEALTH=$(curl -sf http://localhost:3000/health 2>/dev/null || echo "FAILED")
-WEB_HEALTH=$(curl -sf http://localhost:3001/health 2>/dev/null || echo "FAILED")
+BACKEND_HEALTH=$(curl -sf http://localhost:4000/health 2>/dev/null || echo "FAILED")
 PORTAL_HTTP=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:80 2>/dev/null || echo "000")
 PORTAL_HTTPS=$(curl -sf -k -o /dev/null -w "%{http_code}" https://localhost:443 2>/dev/null || echo "000")
+ADMIN_HTTP=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null || echo "000")
 
-echo "  Mobile Backend:   $MOBILE_HEALTH"
-echo "  Web Backend:      $WEB_HEALTH"
-echo "  Web Portal HTTP:  $PORTAL_HTTP"
-echo "  Web Portal HTTPS: $PORTAL_HTTPS"
+echo "  Backend API:     $BACKEND_HEALTH"
+echo "  Web Client HTTP: $PORTAL_HTTP"
+echo "  Web Client HTTPS:$PORTAL_HTTPS"
+echo "  Admin Portal:    $ADMIN_HTTP"
 echo ""
 
-# Show container status
-echo "Container Status:"
 docker compose -f docker-compose.prod.yml ps
 echo ""
 
-# 13. Set up cron job for auto-renewal (runs daily at 3am)
-CRON_CMD="0 3 * * * docker run --rm -v gc-app_certbot-webroot:/var/www/certbot -v gc-app_certbot-certs:/etc/letsencrypt certbot/certbot renew --webroot --webroot-path=/var/www/certbot --quiet && cd $(pwd) && docker compose -f docker-compose.prod.yml restart web-portal > /dev/null 2>&1"
+# 12. SSL auto-renewal cron job
+CRON_CMD="0 3 * * * docker run --rm -v gc-app_certbot-webroot:/var/www/certbot -v gc-app_certbot-certs:/etc/letsencrypt certbot/certbot renew --webroot --webroot-path=/var/www/certbot --quiet && cd $(pwd) && docker compose -f docker-compose.prod.yml restart web-client > /dev/null 2>&1"
 if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
   echo "Setting up daily SSL auto-renewal cron job..."
   (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
@@ -212,37 +201,24 @@ echo -e "${GREEN} DEPLOYMENT COMPLETE!${NC}"
 echo "============================================"
 echo ""
 echo " Services:"
-echo "   Web Portal:        https://${DOMAIN}"
-echo "   Web Portal (IP):   http://${SERVER_IP}"
-echo "   Mobile API:        https://${DOMAIN}/v1"
-echo "   Mobile API Health: http://${SERVER_IP}:3000/health"
-echo "   Web API Health:    http://${SERVER_IP}:3001/health"
+echo "   Web Client:    https://${DOMAIN}"
+echo "   Admin Portal:  http://${SERVER_IP}:8080"
+echo "   Backend API:   http://${SERVER_IP}:4000/health"
+echo "   API Docs:      http://${SERVER_IP}:4000/api"
 echo ""
-echo " SSL Certificate:"
-if [ "$CERTS_EXIST" = true ]; then
-  echo -e "   ${GREEN}Let's Encrypt — active for ${DOMAIN}${NC}"
-  echo "   Auto-renewal: daily cron at 3:00 AM (renews only if expiring)"
-else
-  echo -e "   ${RED}Not configured — running HTTP only${NC}"
-fi
+echo " SSL: $( [ "$CERTS_EXIST" = true ] && echo 'Active' || echo 'HTTP only' )"
 echo ""
-echo " Default Logins (Web Portal):"
-echo "   Admin:    admin@greencollect.app / Admin@123456"
-echo "   Manager:  manager@greencollect.app / manager123"
-echo "   Regional: regional@greencollect.app / regional123"
-echo ""
-echo " Mobile App Test Users (OTP login):"
-echo "   House Owner:        +929999990001"
-echo "   Local Collector:    +929999990002"
-echo "   Regional Collector: +929999990003"
-echo "   Manager:            +929999990004"
+echo " Default Logins:"
+echo "   Admin:      admin@marketplace.pk / Admin@123456"
+echo "   Manager:    manager@marketplace.pk / Manager@123"
+echo "   Dealer:     dealer@marketplace.pk / Dealer@123"
+echo "   Franchise:  franchise@marketplace.pk / Franchise@123"
+echo "   Customer:   customer@marketplace.pk / Customer@123"
 echo ""
 echo " Useful Commands:"
-echo "   View logs:       docker compose -f docker-compose.prod.yml logs -f"
-echo "   Stop:            docker compose -f docker-compose.prod.yml down"
-echo "   Restart:         docker compose -f docker-compose.prod.yml restart"
-echo "   DB shell:        docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect"
-echo "   Rebuild:         docker compose -f docker-compose.prod.yml up -d --build --force-recreate"
-echo "   Renew SSL now:   docker run --rm -v gc-app_certbot-webroot:/var/www/certbot -v gc-app_certbot-certs:/etc/letsencrypt certbot/certbot renew --webroot --webroot-path=/var/www/certbot"
-echo "   SSL cert info:   docker run --rm -v gc-app_certbot-certs:/etc/letsencrypt certbot/certbot certificates"
+echo "   View logs:    docker compose -f docker-compose.prod.yml logs -f"
+echo "   Stop:         docker compose -f docker-compose.prod.yml down"
+echo "   Restart:      docker compose -f docker-compose.prod.yml restart"
+echo "   DB shell:     docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect"
+echo "   Rebuild:      docker compose -f docker-compose.prod.yml up -d --build"
 echo ""

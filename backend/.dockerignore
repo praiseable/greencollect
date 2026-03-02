@@ -1,6 +1,9 @@
 node_modules
 npm-debug.log
 .env
-.env.*
-prisma/migrations
+.env.local
+.env.production
+uploads/
+.git
+.gitignore
 *.md

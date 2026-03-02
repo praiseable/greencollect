@@ -16,6 +16,6 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p /app/uploads
 
-EXPOSE 3000
+EXPOSE 4000
 
 CMD ["node", "src/index.js"]

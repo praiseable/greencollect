@@ -111,7 +111,7 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found', code: 'NOT_FOUND' } });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`🚀 Geo-Franchise Marketplace API running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);

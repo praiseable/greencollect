@@ -24,48 +24,35 @@ services:
       timeout: 5s
       retries: 5
 
-  mobile-backend:
-    build: ./mobile-backend
+  backend:
+    build: ./backend
     restart: always
     ports:
-      - "3000:3000"
+      - "4000:4000"
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: 4000
       DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
       REDIS_URL: redis://:GC_Redis_Pass_2026!@redis:6379
       JWT_SECRET: gc_jwt_prod_s3cr3t_k3y_2026_x7m9q
       JWT_REFRESH_SECRET: gc_jwt_refresh_pr0d_k3y_2026_r4n8p
       JWT_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 30d
-      DEFAULT_RADIUS_KM: 5
-      RADIUS_EXPAND_MINUTES: 30
-      MAX_RADIUS_KM: 20
+      DEFAULT_COUNTRY: PK
+      DEFAULT_CURRENCY: PKR
+      DEFAULT_LANGUAGE: ur
+      DEFAULT_TIMEZONE: Asia/Karachi
+      DEFAULT_PHONE_CODE: "+92"
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
 
-  web-backend:
-    build: ./web-backend
-    restart: always
-    ports:
-      - "3001:3001"
-    environment:
-      NODE_ENV: production
-      PORT: 3001
-      DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
-      JWT_SECRET: gc_jwt_prod_s3cr3t_k3y_2026_x7m9q
-      JWT_EXPIRES_IN: 8h
-    volumes:
-      - uploads:/app/uploads
-    depends_on:
-      db:
-        condition: service_healthy
-
-  web-portal:
-    build: ./web-portal
+  web-client:
+    build: ./apps/web-client
     restart: always
     ports:
       - "80:80"
@@ -74,7 +61,15 @@ services:
       - certbot-webroot:/var/www/certbot:ro
       - certbot-certs:/etc/letsencrypt:ro
     depends_on:
-      - web-backend
+      - backend
+
+  web-admin:
+    build: ./apps/web-admin
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
