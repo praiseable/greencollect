@@ -18,10 +18,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           command_timeout: 15m
-          script_stop: true
           script: |
-            set -e
-
             DOMAIN="gc.directconnect.services"
             EMAIL="admin@directconnect.services"
 
@@ -64,12 +61,10 @@ jobs:
             # 5. Build and deploy
             echo "Building and starting containers..."
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-            docker compose -f docker-compose.prod.yml up -d --build 2>&1 || {
-              echo "docker compose exited with non-zero code. Verifying containers..."
-            }
+            docker compose -f docker-compose.prod.yml up -d --build || true
 
             # Verify containers are actually running
-            sleep 5
+            sleep 8
             RUNNING=$(docker compose -f docker-compose.prod.yml ps --status running -q 2>/dev/null | wc -l)
             if [ "$RUNNING" -lt 4 ]; then
               echo "ERROR: Only $RUNNING containers running (expected 5). Deployment failed."
@@ -101,16 +96,15 @@ jobs:
               fi
             else
               echo "Checking if SSL certificate needs renewal..."
-              NEEDS_RENEW=false
-              docker run --rm \
+              RENEW_OUTPUT=$(docker run --rm \
                 -v gc-app_certbot-webroot:/var/www/certbot \
                 -v gc-app_certbot-certs:/etc/letsencrypt \
                 certbot/certbot renew \
                 --webroot \
                 --webroot-path=/var/www/certbot \
-                --dry-run 2>&1 | grep -q "would be renewed" && NEEDS_RENEW=true || true
+                --dry-run 2>&1) || true
 
-              if [ "$NEEDS_RENEW" = true ]; then
+              if echo "$RENEW_OUTPUT" | grep -q "would be renewed"; then
                 echo "Certificate expiring soon. Renewing..."
                 docker run --rm \
                   -v gc-app_certbot-webroot:/var/www/certbot \
@@ -145,11 +139,19 @@ jobs:
 
             # 8. Run migrations
             echo "Running migrations..."
-            docker compose -f docker-compose.prod.yml exec -T mobile-backend node migrations/run.js
+            docker compose -f docker-compose.prod.yml exec -T mobile-backend node migrations/run.js || {
+              echo "ERROR: Migrations failed!"
+              exit 1
+            }
+            echo "Migrations complete."
 
             # 9. Seed data
             echo "Running seeds..."
-            docker compose -f docker-compose.prod.yml exec -T mobile-backend node seeds/run.js
+            docker compose -f docker-compose.prod.yml exec -T mobile-backend node seeds/run.js || {
+              echo "ERROR: Seeding failed!"
+              exit 1
+            }
+            echo "Seeding complete."
 
             # 10. Health checks
             sleep 3
