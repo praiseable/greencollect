@@ -52,12 +52,31 @@ sudo systemctl stop apache2 2>/dev/null || true
 sudo systemctl stop postgresql 2>/dev/null || true
 echo ""
 
-# 4. Stop existing containers if running
+# 4. Create SSL directory if it doesn't exist
+if [ ! -d "./ssl" ]; then
+  echo -e "${YELLOW}Creating ssl/ directory. Place your certificates there:${NC}"
+  echo "   ssl/fullchain.pem   (certificate + chain)"
+  echo "   ssl/privkey.pem     (private key)"
+  mkdir -p ./ssl
+fi
+
+# Check if SSL certificates exist
+if [ -f "./ssl/fullchain.pem" ] && [ -f "./ssl/privkey.pem" ]; then
+  echo -e "${GREEN}SSL certificates found!${NC}"
+else
+  echo -e "${YELLOW}WARNING: SSL certificates not found in ./ssl/ directory.${NC}"
+  echo "  The site will start but HTTPS will not work until you add:"
+  echo "    ssl/fullchain.pem"
+  echo "    ssl/privkey.pem"
+fi
+echo ""
+
+# 5. Stop existing containers if running
 echo "Stopping any existing containers..."
 docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 echo ""
 
-# 5. Build and start all services (no-cache for fresh build)
+# 6. Build and start all services (no-cache for fresh build)
 echo "Building and starting all services..."
 docker compose -f docker-compose.prod.yml up -d --build
 echo ""
@@ -100,11 +119,13 @@ sleep 3
 
 MOBILE_HEALTH=$(curl -sf http://localhost:3000/health 2>/dev/null || echo "FAILED")
 WEB_HEALTH=$(curl -sf http://localhost:3001/health 2>/dev/null || echo "FAILED")
-PORTAL_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:80 2>/dev/null || echo "000")
+PORTAL_HTTP=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:80 2>/dev/null || echo "000")
+PORTAL_HTTPS=$(curl -sf -k -o /dev/null -w "%{http_code}" https://localhost:443 2>/dev/null || echo "000")
 
 echo "  Mobile Backend:  $MOBILE_HEALTH"
 echo "  Web Backend:     $WEB_HEALTH"
-echo "  Web Portal:      HTTP $PORTAL_STATUS"
+echo "  Web Portal HTTP: $PORTAL_HTTP"
+echo "  Web Portal HTTPS: $PORTAL_HTTPS"
 echo ""
 
 # Show container status
@@ -120,8 +141,9 @@ echo -e "${GREEN} DEPLOYMENT COMPLETE!${NC}"
 echo "============================================"
 echo ""
 echo " Services:"
-echo "   Web Portal:        http://${SERVER_IP}"
-echo "   Mobile API:        http://${SERVER_IP}:3000/v1"
+echo "   Web Portal:        https://gc.directconnect.services"
+echo "   Web Portal (IP):   http://${SERVER_IP}"
+echo "   Mobile API:        https://gc.directconnect.services/v1"
 echo "   Mobile API Health: http://${SERVER_IP}:3000/health"
 echo "   Web API Health:    http://${SERVER_IP}:3001/health"
 echo ""
