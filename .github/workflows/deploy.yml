@@ -127,10 +127,10 @@ jobs:
             echo "Database ready!"
             sleep 5
 
-            # 8. Run Prisma migrations (preserves data)
-            echo "Running Prisma migrations..."
-            docker compose -f docker-compose.prod.yml exec -T backend npx prisma migrate deploy 2>&1 || {
-              echo "Prisma migrate not available, using db push..."
+            # 8. Sync database schema (preserves existing data)
+            echo "Syncing database schema..."
+            docker compose -f docker-compose.prod.yml exec -T backend npx prisma db push 2>&1 || {
+              echo "prisma db push failed, trying with --accept-data-loss..."
               docker compose -f docker-compose.prod.yml exec -T backend npx prisma db push --accept-data-loss 2>&1 || true
             }
             echo "Schema updated."

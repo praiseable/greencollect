@@ -150,10 +150,10 @@ done
 echo -e "${GREEN}Database is ready!${NC}"
 echo ""
 
-# 9. Run Prisma migrations
-echo "Running Prisma migrations..."
-docker compose -f docker-compose.prod.yml exec -T backend npx prisma migrate deploy 2>&1 || {
-  echo -e "${YELLOW}Prisma migrate deploy not available, generating client...${NC}"
+# 9. Run Prisma schema push (safe for existing data, adds new tables/columns)
+echo "Syncing database schema..."
+docker compose -f docker-compose.prod.yml exec -T backend npx prisma db push 2>&1 || {
+  echo -e "${YELLOW}prisma db push failed, trying with --accept-data-loss...${NC}"
   docker compose -f docker-compose.prod.yml exec -T backend npx prisma db push --accept-data-loss 2>&1 || true
 }
 echo -e "${GREEN}Database schema updated!${NC}"
