@@ -58,6 +58,8 @@ services:
       DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
       JWT_SECRET: gc_jwt_prod_s3cr3t_k3y_2026_x7m9q
       JWT_EXPIRES_IN: 8h
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -67,8 +69,12 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - web-backend
 
 volumes:
   pgdata:
+  uploads:
