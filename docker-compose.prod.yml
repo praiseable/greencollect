@@ -78,11 +78,11 @@ services:
 
   certbot:
     image: certbot/certbot
-    restart: "no"
+    profiles:
+      - certbot
     volumes:
       - certbot-webroot:/var/www/certbot
       - certbot-certs:/etc/letsencrypt
-    command: version
 
 volumes:
   pgdata:

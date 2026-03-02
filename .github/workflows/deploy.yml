@@ -70,7 +70,7 @@ jobs:
             if [ "$CERTS_EXIST" = false ]; then
               echo "No SSL certificate. Obtaining from Let's Encrypt..."
               sleep 5
-              docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot certonly \
+              docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot certonly \
                 --webroot \
                 --webroot-path=/var/www/certbot \
                 --email ${EMAIL} \
@@ -86,14 +86,14 @@ jobs:
             else
               echo "Checking if SSL certificate needs renewal..."
               NEEDS_RENEW=false
-              docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot renew \
+              docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot renew \
                 --webroot \
                 --webroot-path=/var/www/certbot \
                 --dry-run 2>&1 | grep -q "would be renewed" && NEEDS_RENEW=true || true
 
               if [ "$NEEDS_RENEW" = true ]; then
                 echo "Certificate expiring soon. Renewing..."
-                docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot renew \
+                docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot renew \
                   --webroot \
                   --webroot-path=/var/www/certbot
                 docker compose -f docker-compose.prod.yml restart web-portal

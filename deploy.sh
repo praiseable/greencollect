@@ -82,7 +82,7 @@ if [ "$CERTS_EXIST" = false ]; then
   echo -e "${YELLOW}No SSL certificate found. Obtaining from Let's Encrypt...${NC}"
   sleep 5
 
-  docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot certonly \
+  docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email ${EMAIL} \
@@ -100,14 +100,14 @@ if [ "$CERTS_EXIST" = false ]; then
 else
   # --- Certificate exists: renew only if expiring within 30 days ---
   echo "Checking if SSL certificate needs renewal..."
-  RENEW_OUTPUT=$(docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot renew \
+  RENEW_OUTPUT=$(docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot renew \
     --webroot \
     --webroot-path=/var/www/certbot \
     --dry-run 2>&1) || true
 
   if echo "$RENEW_OUTPUT" | grep -q "would be renewed"; then
     echo -e "${YELLOW}Certificate is expiring soon. Renewing...${NC}"
-    docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot renew \
+    docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint "certbot" certbot renew \
       --webroot \
       --webroot-path=/var/www/certbot
     echo "Restarting web portal with new certificate..."
@@ -173,7 +173,7 @@ docker compose -f docker-compose.prod.yml ps
 echo ""
 
 # 13. Set up cron job for auto-renewal (runs daily at 3am)
-CRON_CMD="0 3 * * * cd $(pwd) && docker compose -f docker-compose.prod.yml run --rm --entrypoint 'certbot' certbot renew --webroot --webroot-path=/var/www/certbot --quiet && docker compose -f docker-compose.prod.yml restart web-portal > /dev/null 2>&1"
+CRON_CMD="0 3 * * * cd $(pwd) && docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint 'certbot' certbot renew --webroot --webroot-path=/var/www/certbot --quiet && docker compose -f docker-compose.prod.yml restart web-portal > /dev/null 2>&1"
 if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
   echo "Setting up daily SSL auto-renewal cron job..."
   (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
@@ -221,6 +221,6 @@ echo "   Stop:            docker compose -f docker-compose.prod.yml down"
 echo "   Restart:         docker compose -f docker-compose.prod.yml restart"
 echo "   DB shell:        docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect"
 echo "   Rebuild:         docker compose -f docker-compose.prod.yml up -d --build --force-recreate"
-echo "   Renew SSL now:   docker compose -f docker-compose.prod.yml run --rm --entrypoint 'certbot' certbot renew --webroot --webroot-path=/var/www/certbot"
-echo "   SSL cert info:   docker compose -f docker-compose.prod.yml run --rm --entrypoint 'certbot' certbot certificates"
+echo "   Renew SSL now:   docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint 'certbot' certbot renew --webroot --webroot-path=/var/www/certbot"
+echo "   SSL cert info:   docker compose -f docker-compose.prod.yml --profile certbot run --rm --entrypoint 'certbot' certbot certificates"
 echo ""
