@@ -76,31 +76,46 @@ echo "Building and starting all services..."
 docker compose -f docker-compose.prod.yml up -d --build
 echo ""
 
-# 7. If no certs exist, obtain them via Let's Encrypt
+# 7. SSL Certificate handling
 if [ "$CERTS_EXIST" = false ]; then
-  echo -e "${YELLOW}Obtaining SSL certificate from Let's Encrypt...${NC}"
-  echo "  (nginx is running in HTTP-only mode for the ACME challenge)"
+  # --- First time: obtain certificate ---
+  echo -e "${YELLOW}No SSL certificate found. Obtaining from Let's Encrypt...${NC}"
   sleep 5
 
-  docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+  docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email ${EMAIL} \
     --agree-tos \
     --no-eff-email \
-    -d ${DOMAIN}
+    -d ${DOMAIN} && CERTS_EXIST=true || echo -e "${RED}Failed to obtain SSL certificate.${NC}"
 
-  if [ $? -eq 0 ]; then
-    echo -e "${GREEN}SSL certificate obtained successfully!${NC}"
-    CERTS_EXIST=true
-    # Restart web-portal so it detects the new certs and switches to HTTPS
+  if [ "$CERTS_EXIST" = true ]; then
+    echo -e "${GREEN}SSL certificate obtained!${NC}"
     echo "Restarting web portal with HTTPS..."
     docker compose -f docker-compose.prod.yml restart web-portal
     sleep 3
+  fi
+  echo ""
+else
+  # --- Certificate exists: renew only if expiring within 30 days ---
+  echo "Checking if SSL certificate needs renewal..."
+  RENEW_OUTPUT=$(docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot renew \
+    --webroot \
+    --webroot-path=/var/www/certbot \
+    --dry-run 2>&1) || true
+
+  if echo "$RENEW_OUTPUT" | grep -q "would be renewed"; then
+    echo -e "${YELLOW}Certificate is expiring soon. Renewing...${NC}"
+    docker compose -f docker-compose.prod.yml run --rm --entrypoint "certbot" certbot renew \
+      --webroot \
+      --webroot-path=/var/www/certbot
+    echo "Restarting web portal with new certificate..."
+    docker compose -f docker-compose.prod.yml restart web-portal
+    sleep 3
+    echo -e "${GREEN}Certificate renewed!${NC}"
   else
-    echo -e "${RED}Failed to obtain SSL certificate.${NC}"
-    echo "  Make sure ${DOMAIN} DNS points to this server."
-    echo "  Site will run on HTTP only for now."
+    echo -e "${GREEN}Certificate is still valid. No renewal needed.${NC}"
   fi
   echo ""
 fi
@@ -157,6 +172,17 @@ echo "Container Status:"
 docker compose -f docker-compose.prod.yml ps
 echo ""
 
+# 13. Set up cron job for auto-renewal (runs daily at 3am)
+CRON_CMD="0 3 * * * cd $(pwd) && docker compose -f docker-compose.prod.yml run --rm --entrypoint 'certbot' certbot renew --webroot --webroot-path=/var/www/certbot --quiet && docker compose -f docker-compose.prod.yml restart web-portal > /dev/null 2>&1"
+if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
+  echo "Setting up daily SSL auto-renewal cron job..."
+  (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
+  echo -e "${GREEN}Auto-renewal cron job installed (daily at 3:00 AM)${NC}"
+else
+  echo -e "${GREEN}Auto-renewal cron job already exists${NC}"
+fi
+echo ""
+
 SERVER_IP=$(hostname -I | awk '{print $1}')
 
 echo "============================================"
@@ -173,7 +199,7 @@ echo ""
 echo " SSL Certificate:"
 if [ "$CERTS_EXIST" = true ]; then
   echo -e "   ${GREEN}Let's Encrypt — active for ${DOMAIN}${NC}"
-  echo "   Auto-renewal: certbot container checks every 12 hours"
+  echo "   Auto-renewal: daily cron at 3:00 AM (renews only if expiring)"
 else
   echo -e "   ${RED}Not configured — running HTTP only${NC}"
 fi
@@ -195,6 +221,6 @@ echo "   Stop:            docker compose -f docker-compose.prod.yml down"
 echo "   Restart:         docker compose -f docker-compose.prod.yml restart"
 echo "   DB shell:        docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect"
 echo "   Rebuild:         docker compose -f docker-compose.prod.yml up -d --build --force-recreate"
-echo "   Renew SSL now:   docker compose -f docker-compose.prod.yml run --rm certbot renew"
-echo "   SSL cert info:   docker compose -f docker-compose.prod.yml run --rm certbot certificates"
+echo "   Renew SSL now:   docker compose -f docker-compose.prod.yml run --rm --entrypoint 'certbot' certbot renew --webroot --webroot-path=/var/www/certbot"
+echo "   SSL cert info:   docker compose -f docker-compose.prod.yml run --rm --entrypoint 'certbot' certbot certificates"
 echo ""
