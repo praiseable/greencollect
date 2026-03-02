@@ -9,10 +9,16 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/ssl.conf.template
-COPY nginx-initial.conf /etc/nginx/conf.d/initial.conf
-RUN mkdir -p /var/www/certbot
+
+# Store both configs in /etc/nginx/templates (NOT in conf.d to avoid double-loading)
+RUN mkdir -p /etc/nginx/templates /var/www/certbot
+COPY nginx.conf /etc/nginx/templates/ssl.conf
+COPY nginx-initial.conf /etc/nginx/templates/http-only.conf
+
+# Remove default nginx config
+RUN rm -f /etc/nginx/conf.d/default.conf
+
 EXPOSE 80 443
 
-# Start with HTTP-only config; if SSL certs exist, use full SSL config
-CMD ["/bin/sh", "-c", "if [ -f /etc/letsencrypt/live/gc.directconnect.services/fullchain.pem ]; then cp /etc/nginx/conf.d/ssl.conf.template /etc/nginx/conf.d/default.conf; else cp /etc/nginx/conf.d/initial.conf /etc/nginx/conf.d/default.conf; fi && nginx -g 'daemon off;'"]
+# On start: pick SSL config if certs exist, otherwise HTTP-only
+CMD ["/bin/sh", "-c", "if [ -f /etc/letsencrypt/live/gc.directconnect.services/fullchain.pem ]; then cp /etc/nginx/templates/ssl.conf /etc/nginx/conf.d/default.conf; echo 'Starting with HTTPS'; else cp /etc/nginx/templates/http-only.conf /etc/nginx/conf.d/default.conf; echo 'Starting with HTTP-only (no certs yet)'; fi && nginx -g 'daemon off;'"]
