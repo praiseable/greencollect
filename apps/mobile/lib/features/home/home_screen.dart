@@ -14,7 +14,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider);
     final categories = MockData.categories;
-    final listings = [...MockData.listings, ...MockData.islamabadListings];
+    // Geo-fenced: show only listings the logged-in user is allowed to see
+    final listings = MockData.listingsForUser(user?.id);
 
     return Scaffold(
       appBar: AppBar(

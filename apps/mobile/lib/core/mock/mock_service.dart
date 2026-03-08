@@ -11,8 +11,9 @@ class MockService {
     return data;
   }
 
-  Future<List<ListingModel>> getListings({String? categoryId, String? role}) {
-    final allListings = [...MockData.listings, ...MockData.islamabadListings];
+  Future<List<ListingModel>> getListings({String? categoryId, String? role, String? userId}) {
+    // Geo-fenced: only return listings the user is allowed to see
+    final allListings = MockData.listingsForUser(userId);
     return simulate(allListings
         .where((l) => categoryId == null || l.categoryId == categoryId)
         .toList());

@@ -190,6 +190,47 @@ class MockData {
     '+923001110004': '880004',
   };
 
+  // ── GEO-FENCE: user → allowed areas ─────────────────────
+  // Each user can ONLY see listings whose `area` or `city` is in their allowed set.
+  // Customers/Wholesale see everything; dealers see only their zone; franchise sees city.
+  static List<String> allowedAreasForUser(String? userId) {
+    switch (userId) {
+      // ── Islamabad area dealers (exclusive) ──
+      case 'u5': return ['Bara Kahu'];                      // Usman — Bara Kahu only
+      case 'u6': return ['G-6'];                             // Tariq  — G-6 only
+      case 'u7': return ['G-8'];                             // Kashif — G-8 only
+      // ── Islamabad city franchise (all ISB areas) ──
+      case 'u8': return [
+        'Bara Kahu', 'G-6', 'G-8', 'F-6', 'F-7', 'F-8',
+        'G-9', 'G-10', 'G-11', 'I-8', 'I-9', 'I-10', 'Blue Area',
+        'Islamabad',
+      ];
+      // ── Karachi dealer ──
+      case 'u2': return ['Korangi', 'Korangi Industrial Area', 'SITE', 'SITE Industrial Area', 'Lyari'];
+      // ── Karachi franchise ──
+      case 'u3': return [
+        'Korangi', 'Korangi Industrial Area', 'SITE', 'SITE Industrial Area',
+        'Lyari', 'Saddar', 'Orangi Town', 'Landhi', 'North Karachi',
+        'Gulshan-e-Iqbal', 'Malir', 'Baldia Town', 'Clifton', 'DHA Karachi',
+        'Karachi',
+      ];
+      // ── Customer / Wholesale / unknown → see everything ──
+      default: return [];  // empty = no restriction
+    }
+  }
+
+  /// Returns the listings the given user is allowed to see.
+  /// If [userId] is null or the user has no area restriction, returns all.
+  static List<ListingModel> listingsForUser(String? userId) {
+    final all = [...listings, ...islamabadListings];
+    final allowed = allowedAreasForUser(userId);
+    if (allowed.isEmpty) return all; // no restriction
+    return all.where((l) {
+      // Match on area or city
+      return allowed.contains(l.area) || allowed.contains(l.city);
+    }).toList();
+  }
+
   // ── ISLAMABAD AREA LISTINGS ─────────────────────────────
   // These listings are geo-fenced to specific Islamabad areas
   // to test area-bounded dealer visibility
@@ -644,6 +685,155 @@ class MockData {
       data: {},
     ),
   ];
+
+  // ── ISLAMABAD AREA NOTIFICATIONS ────────────────────────
+  // These are delivered only to the respective Islamabad area dealers
+  static final islamabadNotifications = {
+    // Usman — Bara Kahu dealer
+    'u5': [
+      NotificationModel(
+        id: 'n-isb-1',
+        title: 'New listing in Bara Kahu',
+        titleUr: 'بارہ کہو میں نئی فہرست',
+        body: 'Copper Cable Waste - 120kg posted in your area (Bara Kahu)',
+        bodyUr: 'بارہ کہو میں تانبے کی کیبل کا فضلہ شامل ہوا',
+        type: NotificationType.newListing,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        data: {'listingId': 'l-isb-1'},
+      ),
+      NotificationModel(
+        id: 'n-isb-2',
+        title: 'Territory Assigned',
+        titleUr: 'علاقہ تفویض',
+        body: 'You are now the exclusive dealer for Bara Kahu, Islamabad.',
+        bodyUr: 'آپ بارہ کہو اسلام آباد کے خصوصی ڈیلر ہیں',
+        type: NotificationType.system,
+        isRead: true,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        data: {},
+      ),
+      NotificationModel(
+        id: 'n-isb-3',
+        title: 'Iron Gate Scrap posted',
+        titleUr: 'لوہے کے گیٹ کا کباڑ',
+        body: 'Iron Gate Scrap - 300kg in Bara Kahu. Check now!',
+        bodyUr: 'بارہ کہو میں لوہے کے گیٹ کا کباڑ۔ ابھی دیکھیں',
+        type: NotificationType.newListing,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
+        data: {'listingId': 'l-isb-1'},
+      ),
+    ],
+    // Tariq — G-6 dealer
+    'u6': [
+      NotificationModel(
+        id: 'n-isb-4',
+        title: 'New listing in G-6',
+        titleUr: 'جی-6 میں نئی فہرست',
+        body: 'Office Furniture Scrap - 50 pcs posted in G-6',
+        bodyUr: 'جی-6 میں دفتری فرنیچر کا کباڑ شامل ہوا',
+        type: NotificationType.newListing,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        data: {'listingId': 'l-isb-2'},
+      ),
+      NotificationModel(
+        id: 'n-isb-5',
+        title: 'Territory Assigned',
+        titleUr: 'علاقہ تفویض',
+        body: 'You are now the exclusive dealer for G-6, Islamabad.',
+        bodyUr: 'آپ جی-6 اسلام آباد کے خصوصی ڈیلر ہیں',
+        type: NotificationType.system,
+        isRead: true,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        data: {},
+      ),
+      NotificationModel(
+        id: 'n-isb-6',
+        title: 'Plastic Crates posted in G-6',
+        titleUr: 'جی-6 میں پلاسٹک کریٹس',
+        body: 'Plastic Crates - 100 pcs in G-6 Market. Check now!',
+        bodyUr: 'جی-6 مارکیٹ میں پلاسٹک کریٹس۔ ابھی دیکھیں',
+        type: NotificationType.newListing,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+        data: {'listingId': 'l-isb-2'},
+      ),
+    ],
+    // Kashif — G-8 dealer
+    'u7': [
+      NotificationModel(
+        id: 'n-isb-7',
+        title: 'New listing in G-8',
+        titleUr: 'جی-8 میں نئی فہرست',
+        body: 'Electronic Waste PCBs - 80kg posted in G-8',
+        bodyUr: 'جی-8 میں الیکٹرانک کباڑ شامل ہوا',
+        type: NotificationType.newListing,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        data: {'listingId': 'l-isb-3'},
+      ),
+      NotificationModel(
+        id: 'n-isb-8',
+        title: 'Territory Assigned',
+        titleUr: 'علاقہ تفویض',
+        body: 'You are now the exclusive dealer for G-8, Islamabad.',
+        bodyUr: 'آپ جی-8 اسلام آباد کے خصوصی ڈیلر ہیں',
+        type: NotificationType.system,
+        isRead: true,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        data: {},
+      ),
+    ],
+    // Zubair — ISB franchise
+    'u8': [
+      NotificationModel(
+        id: 'n-isb-9',
+        title: 'New listing in Islamabad',
+        titleUr: 'اسلام آباد میں نئی فہرست',
+        body: '4 new listings posted across Islamabad areas today',
+        bodyUr: 'آج اسلام آباد کے مختلف علاقوں میں 4 نئی فہرستیں',
+        type: NotificationType.newListing,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        data: {'listingId': 'l-isb-1'},
+      ),
+      NotificationModel(
+        id: 'n-isb-10',
+        title: 'Territory Assigned',
+        titleUr: 'علاقہ تفویض',
+        body: 'You are the Islamabad city franchise. All areas: Bara Kahu, G-6, G-8, F-6, etc.',
+        bodyUr: 'آپ اسلام آباد سٹی فرنچائز ہیں۔ تمام علاقے',
+        type: NotificationType.system,
+        isRead: true,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        data: {},
+      ),
+      NotificationModel(
+        id: 'n-isb-11',
+        title: 'Escalation: Listing moved to CITY',
+        titleUr: 'ترقی: فہرست شہر لیول پر',
+        body: 'Electronic Waste PCBs (G-8) had no interest for 48h — now visible city-wide.',
+        bodyUr: 'جی-8 کے الیکٹرانک کباڑ پر 48 گھنٹے میں کوئی دلچسپی نہیں — اب شہر بھر میں',
+        type: NotificationType.escalation,
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 6)),
+        data: {'listingId': 'l-isb-3'},
+      ),
+    ],
+  };
+
+  /// Returns notifications specific to the logged-in user.
+  /// Islamabad dealers get area-specific notifications;
+  /// Others get the default Karachi-based notifications.
+  static List<NotificationModel> notificationsForUser(String? userId) {
+    if (userId != null && islamabadNotifications.containsKey(userId)) {
+      return islamabadNotifications[userId]!;
+    }
+    // Default (Karachi users, customers, wholesale)
+    return notifications;
+  }
 
   // ── SUBSCRIPTION PLANS ────────────────────────────────────
   static final subscriptionPlans = [

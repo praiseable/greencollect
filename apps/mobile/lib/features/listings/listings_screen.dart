@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 import '../../core/models/category.model.dart';
+import '../../core/providers/auth.provider.dart';
 
 class ListingsScreen extends ConsumerStatefulWidget {
   const ListingsScreen({super.key});
@@ -19,9 +20,9 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   String _visibilityFilter = 'all'; // all, local, neighbor, city, wholesale
   final _searchController = TextEditingController();
 
-  List<ListingModel> get _filteredListings {
-    // Combine all listings (original + Islamabad area-specific)
-    final allListings = [...MockData.listings, ...MockData.islamabadListings];
+  List<ListingModel> _getFilteredListings(String? userId) {
+    // Geo-fenced: only show listings the user is allowed to see
+    final allListings = MockData.listingsForUser(userId);
     var listings = allListings.where((l) {
       final matchesCategory = _selectedCategory == null || l.categoryId == _selectedCategory;
       final matchesSearch = _searchQuery.isEmpty ||
@@ -53,7 +54,8 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final listings = _filteredListings;
+    final user = ref.watch(authProvider);
+    final listings = _getFilteredListings(user?.id);
     final categories = MockData.categories;
 
     return Scaffold(
