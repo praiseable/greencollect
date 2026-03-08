@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/models/user.model.dart';
 
 class TerritoryScreen extends ConsumerWidget {
   const TerritoryScreen({super.key});
@@ -150,12 +151,12 @@ class TerritoryScreen extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: color.shade700,
+                color: color,
               ),
             ),
             Text(
               label,
-              style: TextStyle(fontSize: 11, color: color.shade700),
+              style: TextStyle(fontSize: 11, color: color),
             ),
           ],
         ),
