@@ -8,9 +8,9 @@ export default function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold">G</span>
-              </div>
-              <span className="text-lg font-bold text-white">GreenCollect</span>
+              <span className="text-white font-bold">K</span>
+            </div>
+              <span className="text-lg font-bold text-white">Kabariya</span>
             </div>
             <p className="text-sm text-gray-400">Pakistan's leading marketplace for recyclable and reusable goods. Trade scrap metals, plastics, electronics and more.</p>
             <p className="text-sm text-gray-500 mt-2">🇵🇰 Made in Pakistan</p>
@@ -42,7 +42,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-gray-800 mt-8 pt-6 text-sm text-center text-gray-500">
-          © {new Date().getFullYear()} GreenCollect Marketplace. All rights reserved. | Currency: ₨ PKR
+          © {new Date().getFullYear()} Kabariya Marketplace. All rights reserved. | Currency: ₨ PKR
         </div>
       </div>
     </footer>

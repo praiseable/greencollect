@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/config/app_variant.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -20,15 +21,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscureConfirm = true;
   bool _agreeTerms = false;
   bool _isLoading = false;
-  String _selectedRole = 'customer';
+  String _selectedRole = AppVariant.isPro ? 'dealer' : 'customer';
   String _selectedCity = 'Karachi';
 
-  final _roles = [
-    {'key': 'customer', 'label': '👤 Customer', 'desc': 'Buy & sell scrap (free)', 'color': Colors.grey},
-    {'key': 'dealer', 'label': '🏪 Local Dealer', 'desc': 'Zone-based trading (paid)', 'color': Colors.blue},
-    {'key': 'franchise', 'label': '🏢 City Franchise', 'desc': 'Multi-zone access (paid)', 'color': Colors.purple},
-    {'key': 'wholesale', 'label': '🏭 Wholesale', 'desc': 'Bulk buying nationwide (paid)', 'color': Colors.red},
-  ];
+  List<Map<String, dynamic>> get _roles => AppVariant.isPro
+      ? [
+          {'key': 'dealer', 'label': '🏪 Local Dealer', 'desc': 'Zone-based trading (paid)', 'color': Colors.blue},
+          {'key': 'franchise', 'label': '🏢 City Franchise', 'desc': 'Multi-zone access (paid)', 'color': Colors.purple},
+          {'key': 'wholesale', 'label': '🏭 Wholesale', 'desc': 'Bulk buying nationwide (paid)', 'color': Colors.red},
+        ]
+      : [
+          {'key': 'customer', 'label': '👤 Customer', 'desc': 'Buy & sell scrap (free)', 'color': Colors.grey},
+        ];
 
   final _cities = [
     'Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad',
@@ -88,7 +92,59 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 textDirection: TextDirection.rtl,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+
+              // Customer vs Dealer info
+              if (AppVariant.isPro)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber[200]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.info_outline, color: Colors.amber[800], size: 18),
+                        const SizedBox(width: 8),
+                        Text('Dealer / Franchise Registration',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber[900], fontSize: 13)),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text(
+                        '• Original CNIC front & back photos required\n'
+                        '• SIM must be registered in your own name\n'
+                        '• Warehouse address + 3 photos required\n'
+                        '• Your photo must match CNIC photo\n'
+                        '• Criminal activity = ID blocked\n'
+                        '• Deposit required after approval',
+                        style: TextStyle(fontSize: 11, color: Colors.amber[800], height: 1.5),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green[200]!),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Customer registration is FREE — no documents needed!',
+                        style: TextStyle(fontSize: 12, color: Colors.green[800]),
+                      ),
+                    ),
+                  ]),
+                ),
+              const SizedBox(height: 16),
 
               // Full Name
               TextFormField(

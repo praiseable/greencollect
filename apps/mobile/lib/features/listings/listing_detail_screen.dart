@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 
@@ -17,10 +18,27 @@ class ListingDetailScreen extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // Image header
+          // Image header with explicit back button
           SliverAppBar(
             expandedHeight: 280,
             pinned: true,
+            leading: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.35),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+              ),
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                } else {
+                  context.go('/home');
+                }
+              },
+            ),
             flexibleSpace: FlexibleSpaceBar(
               background: listing.images.isNotEmpty
                   ? Image.network(
@@ -38,18 +56,32 @@ class ListingDetailScreen extends ConsumerWidget {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.favorite_border),
+                icon: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.35),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.favorite_border, color: Colors.white, size: 20),
+                ),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Added to favorites ❤️')),
+                    const SnackBar(content: Text('Added to favorites')),
                   );
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.share),
+                icon: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.35),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.share, color: Colors.white, size: 20),
+                ),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Share link copied! 📋')),
+                    const SnackBar(content: Text('Share link copied!')),
                   );
                 },
               ),
@@ -92,7 +124,7 @@ class ListingDetailScreen extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        Text('₨ ${listing.pricePkr}',
+                        Text('Rs. ${listing.pricePkr}',
                             style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,
@@ -155,7 +187,7 @@ class ListingDetailScreen extends ConsumerWidget {
 
                   // Location placeholder
                   const SizedBox(height: 24),
-                  const Text('📍 Pickup Location',
+                  const Text('Pickup Location',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   Container(
@@ -177,7 +209,7 @@ class ListingDetailScreen extends ConsumerWidget {
                                   style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey[700])),
                               const SizedBox(height: 4),
                               Text(
-                                '${listing.latitude.toStringAsFixed(4)}°N, ${listing.longitude.toStringAsFixed(4)}°E',
+                                '${listing.latitude.toStringAsFixed(4)}N, ${listing.longitude.toStringAsFixed(4)}E',
                                 style: TextStyle(fontSize: 11, color: Colors.grey[400]),
                               ),
                             ],
@@ -289,13 +321,13 @@ class ListingDetailScreen extends ConsumerWidget {
                       content: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('Current price: ₨ ${listing.pricePkr}/${listing.unit}'),
+                          Text('Current price: Rs. ${listing.pricePkr}/${listing.unit}'),
                           const SizedBox(height: 16),
                           TextField(
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                              labelText: 'Your offer (₨ per unit)',
-                              prefixText: '₨ ',
+                              labelText: 'Your offer (Rs. per unit)',
+                              prefixText: 'Rs. ',
                             ),
                           ),
                         ],
@@ -310,7 +342,7 @@ class ListingDetailScreen extends ConsumerWidget {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Offer sent to seller! 🤝'),
+                                content: Text('Offer sent to seller!'),
                                 backgroundColor: Colors.green,
                               ),
                             );

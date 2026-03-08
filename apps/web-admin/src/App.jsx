@@ -17,6 +17,11 @@ import Subscriptions from './pages/Subscriptions';
 import Analytics from './pages/Analytics';
 import Notifications from './pages/Notifications';
 import Territories from './pages/Territories';
+import DealerOnboarding from './pages/DealerOnboarding';
+import BalanceManagement from './pages/BalanceManagement';
+import CollectionsAdmin from './pages/Collections';
+import CarbonAnalytics from './pages/CarbonAnalytics';
+import KycReview from './pages/KycReview';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('admin_token');
@@ -38,12 +43,17 @@ export default function App() {
         <Route path="listings" element={<Listings />} />
         <Route path="geo-zones" element={<GeoZones />} />
         <Route path="territories" element={<Territories />} />
+        <Route path="dealer-onboarding" element={<DealerOnboarding />} />
+        <Route path="kyc-review" element={<KycReview />} />
+        <Route path="balance-management" element={<BalanceManagement />} />
         <Route path="languages" element={<Languages />} />
         <Route path="translations" element={<Translations />} />
         <Route path="currencies" element={<Currencies />} />
         <Route path="countries" element={<Countries />} />
         <Route path="payments" element={<Payments />} />
         <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="collections" element={<CollectionsAdmin />} />
+        <Route path="carbon-analytics" element={<CarbonAnalytics />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>

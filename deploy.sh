@@ -5,7 +5,7 @@ DOMAIN="gc.directconnect.services"
 EMAIL="admin@directconnect.services"
 
 echo "============================================"
-echo " GreenCollect — Production Deployment"
+echo " Kabariya — Production Deployment"
 echo " Geo-Franchise Marketplace Platform"
 echo "============================================"
 echo ""

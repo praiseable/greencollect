@@ -47,9 +47,9 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-white font-bold text-3xl">G</span>
+            <span className="text-white font-bold text-3xl">K</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">GreenCollect</h1>
+          <h1 className="text-3xl font-bold text-white">Kabariya</h1>
           <p className="text-primary-200 mt-1">Admin Portal — Pakistan</p>
         </div>
 
@@ -66,7 +66,7 @@ export default function Login() {
                 <input
                   type="email"
                   className="input pl-10"
-                  placeholder="admin@greencollect.app"
+                  placeholder="admin@kabariya.pk"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   autoComplete="email"
@@ -112,13 +112,13 @@ export default function Login() {
 
           <div className="mt-6 p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500 text-center">
-              <strong>Default:</strong> superadmin@greencollect.app / Admin@123456
+              <strong>Default:</strong> superadmin@kabariya.pk / Admin@123456
             </p>
           </div>
         </div>
 
         <p className="text-center text-primary-200 text-xs mt-6">
-          © {new Date().getFullYear()} GreenCollect — Geo-Fenced Franchise Marketplace
+          © {new Date().getFullYear()} Kabariya — Geo-Fenced Franchise Marketplace
         </p>
       </div>
     </div>

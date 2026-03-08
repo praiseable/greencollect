@@ -2,11 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.model.dart';
 import '../models/user.model.dart';
 import '../mock/mock_data.dart';
+import '../config/app_variant.dart';
 import 'auth.provider.dart';
 
 /// Global notification state — shell badge reads [unreadCount],
 /// NotificationsScreen reads the full list and can mark items read.
-/// Notifications are geo-fenced: each user sees only their area's notifications.
+/// Pro: geo-fenced notifications. Customer: all notifications.
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, List<NotificationModel>>(
   (ref) {
@@ -23,7 +24,11 @@ final unreadNotificationCountProvider = Provider<int>((ref) {
 
 class NotificationsNotifier extends StateNotifier<List<NotificationModel>> {
   NotificationsNotifier(UserModel? user)
-      : super(List.from(MockData.notificationsForUser(user?.id)));
+      : super(List.from(
+          AppVariant.enforceGeoFencing
+              ? MockData.notificationsForUser(user?.id)
+              : MockData.notifications, // Customer sees all
+        ));
 
   void markAsRead(String id) {
     state = [

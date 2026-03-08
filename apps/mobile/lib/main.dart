@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/config/app_variant.dart';
+import 'core/providers/chat.provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,14 +24,31 @@ void main() async {
   );
 }
 
-class MarketplaceApp extends ConsumerWidget {
+class MarketplaceApp extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MarketplaceApp> createState() => _MarketplaceAppState();
+}
+
+class _MarketplaceAppState extends ConsumerState<MarketplaceApp> {
+  bool _syncStarted = false;
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     final locale = context.locale;
-    
+
+    // Start background chat sync service (only once)
+    if (!_syncStarted) {
+      _syncStarted = true;
+      try {
+        ref.read(chatSyncServiceProvider).startListening();
+      } catch (e) {
+        debugPrint('[App] Failed to start chat sync service: $e');
+      }
+    }
+
     return MaterialApp.router(
-      title: 'مارکیٹ پلیس',
+      title: AppVariant.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       locale: locale,

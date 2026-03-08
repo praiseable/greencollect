@@ -370,6 +370,47 @@ model User {
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?
   lastLoginAt   DateTime?
+
+  // ── Dealer / Pro Verification Fields ──
+  accountStatus      AccountStatus @default(ACTIVE)
+  businessName       String?
+  businessAddress    String?
+  cnicFrontImage     String?    // URL to uploaded CNIC front image (original)
+  cnicBackImage      String?    // URL to uploaded CNIC back image (original)
+  policeVerificationCert String? // URL to police verification certificate
+  characterCertificate   String? // URL to character certificate
+  dealerPhoto        String?    // URL to dealer's own photo (must match CNIC photo)
+  shopPhoto          String?    // URL to shop/office photo (legacy — kept for backward compat)
+  ntnNumber          String?    // Tax number
+  bankName           String?
+  bankAccountTitle   String?
+  bankAccountNumber  String?
+  kycSubmittedAt     DateTime?
+  kycApprovedAt      DateTime?
+  kycRejectionReason String?
+  kycStep            Int        @default(0) // Current step in KYC wizard (0 = not started)
+
+  // ── Warehouse Verification (required for dealers/franchises) ──
+  warehouseAddress       String?    // Full address of existing warehouse
+  warehouseInsidePhoto   String?    // URL to photo of warehouse interior
+  warehouseStreetPhoto   String?    // URL to photo of street outside warehouse
+  warehouseFrontDoorPhoto String?   // URL to photo of warehouse front door/entrance
+
+  // ── SIM Ownership Verification ──
+  simOwnerName           String?    // Name registered on SIM (must match CNIC)
+  simVerified            Boolean    @default(false) // OTP verified on registered SIM
+
+  // ── Criminal Record Check ──
+  criminalCheckStatus    CriminalCheckStatus @default(NOT_CHECKED)
+  criminalCheckNotes     String?    // Admin notes on criminal background
+  criminalFlagged        Boolean    @default(false) // True = criminal activity detected, ID blocked
+
+  // ── Deposit / Activation ──
+  requiredDeposit        Int        @default(0)   // Amount in PKR required to activate
+  depositPaid            Boolean    @default(false) // Whether initial deposit has been paid
+  depositPaidAt          DateTime?  // When the deposit was paid
+  depositAmount          Int        @default(0)   // Actual amount deposited
+
   listings      Listing[]  @relation("SellerListings")
   transactions  Transaction[] @relation("BuyerTransactions")
   sellerTransactions Transaction[] @relation("SellerTransactions")
@@ -384,6 +425,22 @@ model User {
   auditLogs     AuditLog[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  DOCUMENTS_SUBMITTED
+  UNDER_REVIEW
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum CriminalCheckStatus {
+  NOT_CHECKED       // Background check not yet performed
+  PENDING           // Check submitted, awaiting result
+  CLEARED           // No criminal record found
+  FLAGGED           // Criminal activity found — account blocked
 }
 
 model RefreshToken {
@@ -497,6 +554,7 @@ model Listing {
   interestedCount Int                     @default(0)
   escalationHistory EscalationLog[]
   transactions    Transaction[]
+  collections     Collection[]
   expiresAt       DateTime?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
@@ -515,6 +573,10 @@ enum ListingStatus {
   DRAFT
   ACTIVE
   PENDING_REVIEW
+  ASSIGNED_TO_DEALER    // Dealer accepted, collection in progress
+  COLLECTION_IN_PROGRESS
+  COLLECTED             // Material picked up
+  DELIVERED             // Delivered to recycling center
   SOLD
   EXPIRED
   CLOSED
@@ -787,16 +849,29 @@ enum NotificationType {
 // ═══════════════════════════════════════════════════════════
 
 model ChatMessage {
-  id         String   @id @default(uuid())
-  fromUserId String
-  fromUser   User     @relation("MessageFrom", fields: [fromUserId], references: [id])
-  toUserId   String
-  toUser     User     @relation("MessageTo", fields: [toUserId], references: [id])
-  message    String
-  isRead     Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id          String        @id @default(uuid())
+  fromUserId  String
+  fromUser    User          @relation("MessageFrom", fields: [fromUserId], references: [id])
+  toUserId    String
+  toUser      User          @relation("MessageTo", fields: [toUserId], references: [id])
+  message     String
+  isRead      Boolean       @default(false)
+  status      MessageStatus @default(SENT)
+  clientMsgId String?       // Client-side UUID for deduplication
+  createdAt   DateTime      @default(now())
+  deliveredAt DateTime?
+  readAt      DateTime?
 
+  @@unique([clientMsgId])
   @@index([fromUserId, toUserId, createdAt])
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -828,4 +903,221 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([userId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// COLLECTION TRACKING — Core Revenue & Carbon Credit Engine
+// ═══════════════════════════════════════════════════════════
+//
+// FLOW:
+// 1. Customer posts listing (scrap with location)
+// 2. Dealer sees it, taps "Accept & Collect" → Collection record created
+// 3. Dealer travels to location
+// 4. Dealer arrives → GPS verified (within 200m of listing location)
+// 5. Dealer collects → takes photos, confirms weight
+// 6. Dealer marks "COLLECTED" → GPS verified again
+// 7. Dealer marks "DELIVERED_TO_CENTER" → final status
+//
+// If dealer does NOT update status within deadline:
+//   → Rating drops
+//   → Listing escalates to adjacent dealer
+//   → Current dealer gets penalty
+//
+// All data feeds into carbon credit analytics:
+//   → Weight by category × area × time → volume prediction
+//   → Collection points mapped → efficiency metrics
+//   → Carbon offset calculation per KG per material type
+
+model Collection {
+  id                String            @id @default(uuid())
+
+  // ── Linked entities ──
+  listingId         String
+  listing           Listing           @relation(fields: [listingId], references: [id])
+  transactionId     String?
+  dealerId          String            // The dealer/franchise who accepted collection
+  customerId        String            // The customer who posted the listing
+
+  // ── Status tracking ──
+  status            CollectionStatus  @default(ASSIGNED)
+  assignedAt        DateTime          @default(now())
+  acceptedAt        DateTime?         // Dealer tapped "Accept"
+  enRouteAt         DateTime?         // Dealer started traveling
+  arrivedAt         DateTime?         // GPS confirmed: dealer at location
+  collectedAt       DateTime?         // Material picked up, photos taken
+  deliveredAt       DateTime?         // Delivered to recycling center
+  cancelledAt       DateTime?
+  cancelReason      String?
+
+  // ── GPS Verification ──
+  listingLat        Float             // Expected pickup latitude
+  listingLng        Float             // Expected pickup longitude
+  dealerAcceptLat   Float?            // GPS when dealer accepted
+  dealerAcceptLng   Float?
+  dealerArriveLat   Float?            // GPS when dealer arrived at location
+  dealerArriveLng   Float?
+  dealerCollectLat  Float?            // GPS when marking "collected"
+  dealerCollectLng  Float?
+  dealerDeliverLat  Float?            // GPS at recycling center
+  dealerDeliverLng  Float?
+  gpsVerified       Boolean           @default(false) // True if arrival GPS < 200m from listing
+
+  // ── Material verification ──
+  confirmedWeightKg Decimal?          @db.Decimal(12, 3) // Actual weight at collection
+  categoryId        String            // Material category
+  photoUrls         Json?             // Array of photo URLs taken at collection
+  qualityRating     Int?              // 1-5 material quality rated by dealer
+  notes             String?
+
+  // ── Time tracking (for ratings) ──
+  deadlineAt        DateTime          // Must update status by this time or escalate
+  responseTimeMin   Int?              // Minutes from assignment to acceptance
+  collectionTimeMin Int?              // Minutes from acceptance to collection
+  totalTimeMin      Int?              // Total minutes from assignment to delivery
+
+  // ── Carbon credit data ──
+  carbonOffsetKg    Decimal?          @db.Decimal(12, 4) // Calculated CO2 offset
+  geoZoneId         String?           // Area where collected
+  cityName          String?
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([dealerId, status])
+  @@index([listingId])
+  @@index([categoryId, geoZoneId])
+  @@index([status, deadlineAt])
+  @@index([collectedAt])
+}
+
+enum CollectionStatus {
+  ASSIGNED            // Admin/system assigned to dealer
+  ACCEPTED            // Dealer tapped "Accept"
+  EN_ROUTE            // Dealer is traveling to location
+  ARRIVED             // GPS confirmed dealer at location
+  COLLECTED           // Material picked up, photos taken
+  DELIVERED_TO_CENTER // Delivered to recycling/processing center
+  CANCELLED           // Dealer cancelled or reassigned
+  ESCALATED           // Deadline passed, moved to next dealer
+  EXPIRED             // No dealer accepted in time
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEALER RATINGS — Calculated from collection performance
+// ═══════════════════════════════════════════════════════════
+//
+// Rating is calculated based on:
+//   1. Response Time (how fast dealer accepts) — 30% weight
+//   2. Collection Time (how fast dealer collects) — 30% weight
+//   3. Status Update Compliance (did they update on time) — 25% weight
+//   4. Customer Feedback — 15% weight
+//
+// Ratings affect:
+//   - Priority for new listing assignments
+//   - Visibility in search results
+//   - Eligibility for premium territories
+//   - Escalation priority (low-rated dealers get listings last)
+
+model DealerRating {
+  id              String   @id @default(uuid())
+  dealerId        String
+  collectionId    String?  // Linked to specific collection event
+  customerId      String?  // Customer who gave feedback
+
+  // ── Score breakdown (1-5 scale) ──
+  responseScore   Decimal  @db.Decimal(3, 2) // Based on response time
+  collectionScore Decimal  @db.Decimal(3, 2) // Based on collection speed
+  complianceScore Decimal  @db.Decimal(3, 2) // Based on status update timeliness
+  customerScore   Decimal? @db.Decimal(3, 2) // Customer rating (optional)
+  overallScore    Decimal  @db.Decimal(3, 2) // Weighted average
+
+  // ── Raw data ──
+  responseTimeMin   Int?
+  collectionTimeMin Int?
+  statusUpdatedOnTime Boolean @default(true)
+  customerFeedback  String?
+  period            String   // "2026-03" → monthly aggregation key
+
+  createdAt DateTime @default(now())
+
+  @@index([dealerId, period])
+  @@index([dealerId, overallScore])
+}
+
+// ═══════════════════════════════════════════════════════════
+// CARBON CREDIT ANALYTICS
+// ═══════════════════════════════════════════════════════════
+//
+// Aggregated data per category × area × period for:
+//   - Volume prediction (trending analysis)
+//   - Carbon credit calculation
+//   - Funding proposals (how much CO2 offset)
+//   - Collection point density mapping
+//
+// Carbon offset factors (kg CO2 saved per kg material):
+//   Metals     → 4.0 kg CO2/kg
+//   Plastics   → 1.5 kg CO2/kg
+//   Paper      → 1.1 kg CO2/kg
+//   Electronics → 2.5 kg CO2/kg
+//   Glass      → 0.3 kg CO2/kg
+//   Organic    → 0.5 kg CO2/kg
+
+model CarbonCreditRecord {
+  id              String   @id @default(uuid())
+
+  // ── Dimensions ──
+  categoryId      String               // Material category
+  geoZoneId       String               // Area
+  cityName        String
+  period          String               // "2026-03" or "2026-W10"
+
+  // ── Volume data ──
+  totalListings   Int      @default(0) // Number of listings posted
+  totalCollected  Int      @default(0) // Number successfully collected
+  totalWeightKg   Decimal  @default(0) @db.Decimal(14, 3) // Total weight collected
+  avgWeightKg     Decimal  @default(0) @db.Decimal(12, 3)
+  avgPricePkrKg   Decimal  @default(0) @db.Decimal(10, 2) // Average price per kg
+
+  // ── Carbon credit ──
+  carbonOffsetKg  Decimal  @default(0) @db.Decimal(14, 4) // Total CO2 offset
+  carbonCreditValue Decimal @default(0) @db.Decimal(12, 2) // Estimated value in PKR
+
+  // ── Collection efficiency ──
+  avgResponseTimeMin   Int?
+  avgCollectionTimeMin Int?
+  onTimeCollectionRate Decimal? @db.Decimal(5, 2) // % collected before deadline
+  escalationRate       Decimal? @db.Decimal(5, 2) // % that escalated
+
+  // ── Collection points (for mapping) ──
+  collectionPoints Json?   // Array of {lat, lng, weight, date}
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, geoZoneId, period])
+  @@index([period])
+  @@index([geoZoneId, period])
+  @@index([categoryId, period])
+}
+
+// ═══════════════════════════════════════════════════════════
+// COLLECTION POINT REGISTRY
+// ═══════════════════════════════════════════════════════════
+// Physical locations where dealers deliver collected materials
+// Used for route optimization and carbon credit verification
+
+model CollectionCenter {
+  id          String   @id @default(uuid())
+  name        String
+  address     String
+  cityName    String
+  geoZoneId   String?
+  latitude    Float
+  longitude   Float
+  operatorId  String?  // User who manages this center
+  capacity    String?  // e.g. "500 kg/day"
+  materials   Json?    // Accepted material categories
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

@@ -102,3 +102,25 @@ export const updateTerritory = (id, data) => api.put(`/territories/${id}`, data)
 export const removeTerritory = (id) => api.delete(`/territories/${id}`);
 export const getEscalationRules = () => api.get('/territories/escalation-rules');
 export const updateEscalationRule = (id, data) => api.put(`/territories/escalation-rules/${id}`, data);
+
+// Collections
+export const getCollections = (params) => api.get('/collections', { params });
+export const getCollection = (id) => api.get(`/collections/${id}`);
+export const updateCollectionStatus = (id, data) => api.patch(`/collections/${id}/status`, data);
+export const getDealerRating = (dealerId) => api.get(`/collections/dealer/${dealerId}/rating`);
+
+// Carbon Analytics
+export const getCarbonAnalytics = (params) => api.get('/collections/analytics/carbon', { params });
+
+// Dealer Wallets (Balance Management)
+export const getDealerWallets = (params) => api.get('/admin/dealers/wallets', { params });
+export const addDealerBalance = (data) => api.post(`/admin/dealers/${data.userId}/balance/add`, data);
+export const deductDealerBalance = (data) => api.post(`/admin/dealers/${data.userId}/balance/deduct`, data);
+
+// KYC Management
+export const getKycApplications = (params) => api.get('/kyc/admin/pending', { params });
+export const getKycDetail = (userId) => api.get(`/kyc/admin/${userId}`);
+export const approveKyc = (userId, data) => api.post(`/kyc/admin/${userId}/approve`, data);
+export const rejectKyc = (userId, data) => api.post(`/kyc/admin/${userId}/reject`, data);
+export const updateCriminalCheck = (userId, data) => api.post(`/kyc/admin/${userId}/criminal-check`, data);
+export const recordDeposit = (userId, data) => api.post(`/kyc/admin/${userId}/deposit`, data);

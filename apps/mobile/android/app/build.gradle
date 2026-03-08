@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.greencollect.app"
     compileSdk = 35
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "25.1.8937393"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -26,6 +26,20 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled true
+    }
+
+    flavorDimensions "variant"
+    productFlavors {
+        customer {
+            dimension "variant"
+            applicationIdSuffix ""
+            resValue "string", "app_name", "Kabariya"
+        }
+        pro {
+            dimension "variant"
+            applicationIdSuffix ".pro"
+            resValue "string", "app_name", "Kabariya Pro"
+        }
     }
 
     buildTypes {

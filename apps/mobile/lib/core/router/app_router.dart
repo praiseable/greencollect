@@ -23,8 +23,14 @@ import '../../features/chat/chat_screen.dart';
 import '../../features/analytics/analytics_screen.dart';
 import '../../features/wallet/wallet_screen.dart';
 import '../../features/territory/territory_screen.dart';
+import '../../features/collections/collections_screen.dart';
+import '../../features/collections/collection_detail_screen.dart';
+import '../../features/collections/dealer_rating_screen.dart';
 import '../../features/shell/shell_screen.dart';
+import '../../features/paywall/balance_gate_screen.dart';
 import '../providers/auth.provider.dart';
+import '../config/app_variant.dart';
+import '../models/user.model.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -41,10 +47,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
       final isSplash = state.matchedLocation == '/splash';
       final isOnboarding = state.matchedLocation == '/onboarding';
+      final isBalanceGate = state.matchedLocation == '/balance-gate';
 
       if (isSplash || isOnboarding) return null;
       if (!isLoggedIn && !isAuthRoute) return '/auth/login';
       if (isLoggedIn && isAuthRoute) return '/home';
+
+      // ── PRO APP: Balance-gate enforcement ──
+      // If user is logged in, this is the Pro app, and user has no balance
+      // or account is not active → redirect to balance-gate.
+      // Exception: allow /profile, /settings, /edit-profile, /balance-gate itself
+      if (isLoggedIn && AppVariant.isPro && !isBalanceGate) {
+        final user = auth!;
+        final isProUser = user.role != UserRole.customer;
+        final allowedPaths = [
+          '/profile', '/settings', '/edit-profile', '/balance-gate',
+          '/auth/login', '/auth/otp', '/auth/kyc',
+        ];
+        final isAllowedPath = allowedPaths.any(
+            (p) => state.matchedLocation.startsWith(p));
+
+        if (isProUser && !user.canAccessProFeatures && !isAllowedPath) {
+          return '/balance-gate';
+        }
+      }
+
       return null;
     },
     routes: [
@@ -75,6 +102,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth/kyc',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const KycScreen(),
+      ),
+      // Balance-gate for Pro users with no balance
+      GoRoute(
+        path: '/balance-gate',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BalanceGateScreen(),
       ),
       // Shell route with bottom navigation
       ShellRoute(
@@ -185,6 +218,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/territory',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const TerritoryScreen(),
+      ),
+      GoRoute(
+        path: '/collections',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CollectionsScreen(),
+      ),
+      GoRoute(
+        path: '/collections/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return CollectionDetailScreen(collectionId: id);
+        },
+      ),
+      GoRoute(
+        path: '/my-rating',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const DealerRatingScreen(),
       ),
     ],
   );

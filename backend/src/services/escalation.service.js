@@ -389,8 +389,201 @@ async function notifyZoneDealersOnNewListing(listing, seller, io) {
   }
 }
 
+/**
+ * Collection Escalation — Forced status update & reassignment.
+ * 
+ * When a collection's deadline passes without the dealer completing it:
+ *   1. Collection status → ESCALATED
+ *   2. Dealer rating takes a penalty
+ *   3. Find next available dealer (adjacent zone / city franchise)
+ *   4. Create a new collection assignment for the next dealer
+ *   5. Notify the old dealer (penalty) and new dealer (new assignment)
+ *   6. If no dealer available, escalate listing visibility level
+ * 
+ * @param {Object} io - Socket.io server instance
+ */
+async function runCollectionEscalation(io) {
+  console.log('[CollectionEscalation] Running collection deadline check...');
+
+  try {
+    // Find all overdue collections (past deadline, not completed/cancelled/escalated)
+    const overdueCollections = await prisma.collection.findMany({
+      where: {
+        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSIGNED'] },
+        // Collections where deadline has passed
+        // We use collectionDate as deadline proxy in existing schema
+        collectionDate: { lt: new Date() },
+        verifiedByAdmin: false,
+      },
+      include: {
+        listing: {
+          include: {
+            geoZone: {
+              include: { parent: true },
+            },
+          },
+        },
+        collector: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+    });
+
+    console.log(`[CollectionEscalation] Found ${overdueCollections.length} overdue collections.`);
+    let escalatedCount = 0;
+
+    for (const collection of overdueCollections) {
+      const listing = collection.listing;
+      if (!listing) continue;
+
+      // 1. Mark collection as CANCELLED (overdue)
+      await prisma.collection.update({
+        where: { id: collection.id },
+        data: {
+          status: 'CANCELLED',
+          adminNotes: (collection.adminNotes || '') + '\n[SYSTEM] Deadline passed — escalated to next dealer.',
+        },
+      });
+
+      // 2. Create a DealerRating penalty entry
+      await prisma.dealerRating.create({
+        data: {
+          dealerId: collection.collectorId,
+          raterId: collection.collectorId, // System-generated
+          listingId: listing.id,
+          collectionId: collection.id,
+          rating: 1, // Penalty: lowest rating
+          comment: '[SYSTEM] Collection deadline exceeded. Auto-escalated.',
+        },
+      });
+
+      // 3. Find the next available dealer
+      //    Strategy: find sibling zones → city franchise → province
+      const geoZone = listing.geoZone;
+      let nextDealerIds = [];
+
+      if (geoZone?.parentId) {
+        // Find dealers in sibling zones (adjacent areas)
+        const siblingZones = await prisma.geoZone.findMany({
+          where: {
+            parentId: geoZone.parentId,
+            id: { not: geoZone.id },
+            isActive: true,
+          },
+          select: { id: true },
+        });
+
+        if (siblingZones.length > 0) {
+          const dealers = await prisma.dealerTerritory.findMany({
+            where: {
+              geoZoneId: { in: siblingZones.map(z => z.id) },
+              isActive: true,
+              userId: { not: collection.collectorId }, // Exclude the failed dealer
+            },
+            select: { userId: true },
+          });
+          nextDealerIds = dealers.map(d => d.userId);
+        }
+
+        // If no sibling dealers, try city-level franchise
+        if (nextDealerIds.length === 0 && geoZone.parent) {
+          const cityDealers = await prisma.dealerTerritory.findMany({
+            where: {
+              geoZoneId: geoZone.parentId,
+              isActive: true,
+              userId: { not: collection.collectorId },
+            },
+            select: { userId: true },
+          });
+          nextDealerIds = cityDealers.map(d => d.userId);
+        }
+      }
+
+      // 4. Assign to next dealer or escalate listing visibility
+      if (nextDealerIds.length > 0) {
+        // Pick the first available dealer (in production, pick by rating/distance)
+        const nextDealerId = nextDealerIds[0];
+
+        // Create new collection assignment with extended deadline
+        const newDeadline = new Date();
+        newDeadline.setHours(newDeadline.getHours() + 6); // 6-hour deadline for escalated
+
+        await prisma.collection.create({
+          data: {
+            listingId: listing.id,
+            collectorId: nextDealerId,
+            collectionDate: newDeadline,
+            status: 'PENDING',
+            collectedQuantity: collection.collectedQuantity,
+          },
+        });
+
+        // Notify the new dealer
+        await prisma.notification.create({
+          data: {
+            userId: nextDealerId,
+            type: 'COLLECTION_ESCALATED',
+            title: 'Escalated Collection Available',
+            body: `"${listing.title}" collection was escalated from another dealer. Deadline: 6 hours.`,
+            data: { listingId: listing.id, collectionId: collection.id },
+          },
+        });
+
+        if (io) {
+          io.to(`user-${nextDealerId}`).emit('notification', {
+            type: 'COLLECTION_ESCALATED',
+            title: 'Escalated Collection Available',
+            body: `"${listing.title}" collection was escalated. 6h deadline.`,
+            data: { listingId: listing.id },
+          });
+        }
+
+        console.log(`[CollectionEscalation] Reassigned "${listing.title}" from ${collection.collectorId} → ${nextDealerId}`);
+      } else {
+        // No dealers available — escalate listing visibility level
+        const currentLevelIndex = VISIBILITY_ORDER.indexOf(listing.visibilityLevel);
+        if (currentLevelIndex < VISIBILITY_ORDER.length - 1) {
+          const nextLevel = VISIBILITY_ORDER[currentLevelIndex + 1];
+          await prisma.listing.update({
+            where: { id: listing.id },
+            data: { visibilityLevel: nextLevel },
+          });
+          console.log(`[CollectionEscalation] No dealers available. Escalated listing visibility: ${listing.visibilityLevel} → ${nextLevel}`);
+        }
+      }
+
+      // 5. Notify the failed dealer about penalty
+      await prisma.notification.create({
+        data: {
+          userId: collection.collectorId,
+          type: 'COLLECTION_PENALTY',
+          title: 'Collection Deadline Missed',
+          body: `You missed the deadline for "${listing.title}". Your rating has been affected. The collection has been reassigned.`,
+          data: { listingId: listing.id, collectionId: collection.id },
+        },
+      });
+
+      if (io) {
+        io.to(`user-${collection.collectorId}`).emit('notification', {
+          type: 'COLLECTION_PENALTY',
+          title: 'Collection Deadline Missed',
+          body: `You missed the deadline for "${listing.title}". Rating penalty applied.`,
+          data: { listingId: listing.id },
+        });
+      }
+
+      escalatedCount++;
+    }
+
+    console.log(`[CollectionEscalation] Done. ${escalatedCount} collection(s) escalated.`);
+  } catch (err) {
+    console.error('[CollectionEscalation] Error:', err);
+  }
+}
+
 module.exports = {
   runEscalation,
+  runCollectionEscalation,
   findDealersForLevel,
   notifyZoneDealersOnNewListing,
   VISIBILITY_ORDER,

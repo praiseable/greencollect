@@ -1,8 +1,8 @@
-# GreenCollect Mobile App - Setup and Build Script
+# Kabariya Mobile App - Setup and Build Script
 # This script checks Flutter installation, device connectivity, and builds/installs the app
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  GreenCollect - Android App Builder" -ForegroundColor Cyan
+Write-Host "  Kabariya - Android App Builder" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

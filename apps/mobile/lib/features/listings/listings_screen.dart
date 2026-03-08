@@ -5,6 +5,7 @@ import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 import '../../core/models/category.model.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/config/app_variant.dart';
 
 class ListingsScreen extends ConsumerStatefulWidget {
   const ListingsScreen({super.key});
@@ -21,8 +22,10 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   final _searchController = TextEditingController();
 
   List<ListingModel> _getFilteredListings(String? userId) {
-    // Geo-fenced: only show listings the user is allowed to see
-    final allListings = MockData.listingsForUser(userId);
+    // Pro: geo-fenced. Customer: see all listings.
+    final allListings = AppVariant.enforceGeoFencing
+        ? MockData.listingsForUser(userId)
+        : [...MockData.listings, ...MockData.islamabadListings];
     var listings = allListings.where((l) {
       final matchesCategory = _selectedCategory == null || l.categoryId == _selectedCategory;
       final matchesSearch = _searchQuery.isEmpty ||
@@ -227,7 +230,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                     itemCount: listings.length,
                     itemBuilder: (_, i) => _BrowseListingCard(
                       listing: listings[i],
-                      onTap: () => context.go('/listing/${listings[i].id}'),
+                      onTap: () => context.push('/listing/${listings[i].id}'),
                     ),
                   ),
           ),

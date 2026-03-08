@@ -4,20 +4,25 @@ import '../models/category.model.dart';
 import '../models/transaction.model.dart';
 import '../models/notification.model.dart';
 import '../models/subscription.model.dart';
+import '../models/collection.model.dart';
 
 class MockData {
   // ── AUTH ──────────────────────────────────────────────────
-  // 8 test accounts — 4 original + 4 Islamabad area-based
+  // 12 test accounts — 4 original + 4 Islamabad + 4 KYC scenarios
   //
-  //  #  Phone          Role              OTP     Area
-  //  1  03001234567    Customer          111111  Karachi
-  //  2  03219876543    Local Dealer      222222  Korangi, Karachi
-  //  3  03335551234    City Franchise    333333  Karachi
-  //  4  03451112233    Wholesale         444444  Lahore
-  //  5  03001110001    Local Dealer      550001  Bara Kahu, Islamabad
-  //  6  03001110002    Local Dealer      660002  G-6, Islamabad
-  //  7  03001110003    Local Dealer      770003  G-8, Islamabad
-  //  8  03001110004    City Franchise    880004  Islamabad (City-level)
+  //  #   Phone          Role              OTP     Area                  KYC Status
+  //  1   03001234567    Customer          111111  Karachi               APPROVED (free)
+  //  2   03219876543    Local Dealer      222222  Korangi, Karachi      APPROVED + deposited
+  //  3   03335551234    City Franchise    333333  Karachi               APPROVED + deposited
+  //  4   03451112233    Wholesale         444444  Lahore                APPROVED + deposited
+  //  5   03001110001    Local Dealer      550001  Bara Kahu, ISB        APPROVED + deposited
+  //  6   03001110002    Local Dealer      660002  G-6, ISB              APPROVED + deposited
+  //  7   03001110003    Local Dealer      770003  G-8, ISB              APPROVED + zero balance
+  //  8   03001110004    City Franchise    880004  ISB (City-level)      APPROVED + deposited
+  //  9   03002220001    Local Dealer      990001  Rawalpindi            PENDING (no docs)
+  //  10  03002220002    Local Dealer      990002  I-8, ISB              SUBMITTED (under review)
+  //  11  03002220003    Local Dealer      990003  Model Town, Lahore    REJECTED (criminal)
+  //  12  03002220004    Local Dealer      990004  F-10, ISB             APPROVED (no deposit)
   //
   static final users = {
     'customer': UserModel(
@@ -45,6 +50,39 @@ class MockData {
       zone: 'Korangi Industrial Area',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 18,
+      accountStatus: AccountStatus.active,
+      balancePkr: 12500,
+      verification: DealerVerification(
+        cnicNumber: '42101-XXXXXXX-X',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-front/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-back/400/250',
+        businessName: 'Bilal Traders & Recycling',
+        businessAddress: 'Shop #24, Korangi Industrial Area, Karachi',
+        area: 'Korangi Industrial Area',
+        city: 'Karachi',
+        policeVerificationCert: 'https://picsum.photos/seed/police-cert/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-cert/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-photo/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-photo/400/300',
+        bankAccountTitle: 'Bilal Ahmed',
+        bankAccountNumber: 'PK00XXXX0000XXXX',
+        bankName: 'HBL',
+        submittedAt: DateTime.now().subtract(const Duration(days: 60)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 55)),
+        // ── New KYC fields ──
+        warehouseAddress: 'Godown #12, Street 5, Korangi Industrial Area, Karachi',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-inside-bilal/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-street-bilal/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-door-bilal/400/300',
+        simOwnerName: 'Bilal Ahmed',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 5000,
+        depositPaid: true,
+        depositAmount: 5000,
+        kycStep: 6, // completed all steps
+      ),
     ),
     'franchise': UserModel(
       id: 'u3',
@@ -58,6 +96,39 @@ class MockData {
       languageCode: 'ur',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 25,
+      accountStatus: AccountStatus.active,
+      balancePkr: 45000,
+      verification: DealerVerification(
+        cnicNumber: '42201-XXXXXXX-X',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f2/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b2/400/250',
+        businessName: 'Karachi Green Franchise',
+        businessAddress: 'Office #8, Saddar, Karachi',
+        area: 'Karachi (City-wide)',
+        city: 'Karachi',
+        policeVerificationCert: 'https://picsum.photos/seed/police2/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char2/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/franchise-photo/300/300',
+        shopPhoto: 'https://picsum.photos/seed/office-photo/400/300',
+        bankAccountTitle: 'Karachi Green Franchise',
+        bankAccountNumber: 'PK00XXXX0000YYYY',
+        bankName: 'MCB',
+        submittedAt: DateTime.now().subtract(const Duration(days: 90)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 80)),
+        // ── New KYC fields ──
+        warehouseAddress: 'Warehouse #3, Lee Market, Saddar, Karachi',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-inside-khi/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-street-khi/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-door-khi/400/300',
+        simOwnerName: 'Ahmed Khan',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 15000,
+        depositPaid: true,
+        depositAmount: 15000,
+        kycStep: 6,
+      ),
     ),
     'wholesale': UserModel(
       id: 'u4',
@@ -72,6 +143,40 @@ class MockData {
       zone: 'All Zones',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 30,
+      accountStatus: AccountStatus.active,
+      balancePkr: 150000,
+      verification: DealerVerification(
+        cnicNumber: '35201-XXXXXXX-X',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f3/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b3/400/250',
+        businessName: 'National Recyclers Pvt Ltd',
+        businessAddress: 'Plot #47, Industrial Estate, Lahore',
+        area: 'All Zones (National)',
+        city: 'Lahore',
+        policeVerificationCert: 'https://picsum.photos/seed/police3/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char3/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/wholesale-photo/300/300',
+        shopPhoto: 'https://picsum.photos/seed/warehouse/400/300',
+        ntnNumber: 'NTN-XXXXXXX',
+        bankAccountTitle: 'National Recyclers Pvt Ltd',
+        bankAccountNumber: 'PK00XXXX0000ZZZZ',
+        bankName: 'UBL',
+        submittedAt: DateTime.now().subtract(const Duration(days: 120)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 110)),
+        // ── New KYC fields ──
+        warehouseAddress: 'Plot #47, Industrial Estate, Multan Road, Lahore',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-inside-lhr/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-street-lhr/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-door-lhr/400/300',
+        simOwnerName: 'Imran Akhtar',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 50000,
+        depositPaid: true,
+        depositAmount: 50000,
+        kycStep: 6,
+      ),
     ),
     // ── Islamabad Area-Bounded Accounts ──
     'barakahu_dealer': UserModel(
@@ -87,6 +192,38 @@ class MockData {
       zone: 'Bara Kahu',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 25,
+      accountStatus: AccountStatus.active,
+      balancePkr: 5000,
+      verification: DealerVerification(
+        cnicNumber: '61101-XXXXXXX-X',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-usman/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-usman/400/250',
+        businessName: 'Usman Recycling Bara Kahu',
+        businessAddress: 'Main Bazar, Bara Kahu, Islamabad',
+        area: 'Bara Kahu',
+        city: 'Islamabad',
+        policeVerificationCert: 'https://picsum.photos/seed/police-usman/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-usman/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-usman/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-usman/400/300',
+        bankAccountTitle: 'Usman Khan',
+        bankAccountNumber: 'PK00XXXX0000AAAA',
+        bankName: 'Meezan Bank',
+        submittedAt: DateTime.now().subtract(const Duration(days: 40)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 35)),
+        warehouseAddress: 'Near Main Chowk, Bara Kahu, Islamabad',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-usman/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-usman/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-usman/400/300',
+        simOwnerName: 'Usman Khan',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 5000,
+        depositPaid: true,
+        depositAmount: 5000,
+        kycStep: 6,
+      ),
     ),
     'g6_dealer': UserModel(
       id: 'u6',
@@ -101,7 +238,40 @@ class MockData {
       zone: 'G-6',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 20,
+      accountStatus: AccountStatus.active,
+      balancePkr: 8000,
+      verification: DealerVerification(
+        cnicNumber: '61101-XXXXXXX-Y',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-tariq/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-tariq/400/250',
+        businessName: 'Tariq Scrap G-6',
+        businessAddress: 'Aabpara Market, G-6, Islamabad',
+        area: 'G-6',
+        city: 'Islamabad',
+        policeVerificationCert: 'https://picsum.photos/seed/police-tariq/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-tariq/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-tariq/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-tariq/400/300',
+        bankAccountTitle: 'Tariq Mehmood',
+        bankAccountNumber: 'PK00XXXX0000BBBB',
+        bankName: 'Allied Bank',
+        submittedAt: DateTime.now().subtract(const Duration(days: 35)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 30)),
+        warehouseAddress: 'Plot #7, Near Aabpara, G-6/1, Islamabad',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-tariq/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-tariq/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-tariq/400/300',
+        simOwnerName: 'Tariq Mehmood',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 5000,
+        depositPaid: true,
+        depositAmount: 5000,
+        kycStep: 6,
+      ),
     ),
+    // ── G-8 dealer with ZERO balance — should be LOCKED ──
     'g8_dealer': UserModel(
       id: 'u7',
       name: 'Kashif G-8 Dealer',
@@ -115,6 +285,38 @@ class MockData {
       zone: 'G-8',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 15,
+      accountStatus: AccountStatus.active,
+      balancePkr: 0, // ← ZERO balance = screens locked
+      verification: DealerVerification(
+        cnicNumber: '61101-XXXXXXX-Z',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-kashif/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-kashif/400/250',
+        businessName: 'Kashif Recycling G-8',
+        businessAddress: 'Commercial Area, G-8, Islamabad',
+        area: 'G-8',
+        city: 'Islamabad',
+        policeVerificationCert: 'https://picsum.photos/seed/police-kashif/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-kashif/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-kashif/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-kashif/400/300',
+        bankAccountTitle: 'Kashif Raza',
+        bankAccountNumber: 'PK00XXXX0000CCCC',
+        bankName: 'Bank Alfalah',
+        submittedAt: DateTime.now().subtract(const Duration(days: 30)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 25)),
+        warehouseAddress: 'Godown #2, G-8 Markaz, Islamabad',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-kashif/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-kashif/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-kashif/400/300',
+        simOwnerName: 'Kashif Raza',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 5000,
+        depositPaid: true,
+        depositAmount: 5000,
+        kycStep: 6,
+      ),
     ),
     'isb_franchise': UserModel(
       id: 'u8',
@@ -129,6 +331,205 @@ class MockData {
       zone: 'Islamabad (All Areas)',
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 28,
+      accountStatus: AccountStatus.active,
+      balancePkr: 35000,
+      verification: DealerVerification(
+        cnicNumber: '61101-XXXXXXX-W',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-zubair/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-zubair/400/250',
+        businessName: 'Zubair Franchise Islamabad',
+        businessAddress: 'Blue Area, Islamabad',
+        area: 'Islamabad (All Areas)',
+        city: 'Islamabad',
+        policeVerificationCert: 'https://picsum.photos/seed/police-zubair/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-zubair/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-zubair/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-zubair/400/300',
+        bankAccountTitle: 'Zubair Ahmad',
+        bankAccountNumber: 'PK00XXXX0000DDDD',
+        bankName: 'Askari Bank',
+        submittedAt: DateTime.now().subtract(const Duration(days: 50)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 45)),
+        warehouseAddress: 'Plot #15, Blue Area, Jinnah Avenue, Islamabad',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-zubair/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-zubair/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-zubair/400/300',
+        simOwnerName: 'Zubair Ahmad',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 15000,
+        depositPaid: true,
+        depositAmount: 15000,
+        kycStep: 6,
+      ),
+    ),
+
+    // ══════════════════════════════════════════════════════════
+    //  KYC SCENARIO USERS — test different registration stages
+    // ══════════════════════════════════════════════════════════
+
+    // ── Scenario A: PENDING — just created by admin, docs NOT submitted yet ──
+    'pending_dealer': UserModel(
+      id: 'u9',
+      name: 'Farhan Rawalpindi',
+      nameUrdu: 'فرحان راولپنڈی',
+      phone: '+92 300-2220001',
+      email: 'farhan.rwp@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Rawalpindi',
+      kycStatus: KycStatus.pending,
+      languageCode: 'ur',
+      zone: 'Satellite Town',
+      subscriptionStatus: null,
+      accountStatus: AccountStatus.pendingVerification,
+      balancePkr: 0,
+      verification: DealerVerification(
+        cnicNumber: '',
+        businessName: '',
+        businessAddress: '',
+        area: 'Satellite Town',
+        city: 'Rawalpindi',
+        kycStep: 0, // hasn't started
+      ),
+    ),
+
+    // ── Scenario B: DOCUMENTS_SUBMITTED — dealer submitted all docs, awaiting review ──
+    'submitted_dealer': UserModel(
+      id: 'u10',
+      name: 'Nadeem I-8 Dealer',
+      nameUrdu: 'ندیم آئی-8 ڈیلر',
+      phone: '+92 300-2220002',
+      email: 'nadeem.i8@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Islamabad',
+      kycStatus: KycStatus.submitted,
+      languageCode: 'ur',
+      zone: 'I-8',
+      subscriptionStatus: null,
+      accountStatus: AccountStatus.documentsSubmitted,
+      balancePkr: 0,
+      verification: DealerVerification(
+        cnicNumber: '61101-1234567-3',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-nadeem/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-nadeem/400/250',
+        businessName: 'Nadeem Scrap I-8',
+        businessAddress: 'Shop #3, I-8 Markaz, Islamabad',
+        area: 'I-8',
+        city: 'Islamabad',
+        policeVerificationCert: 'https://picsum.photos/seed/police-nadeem/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-nadeem/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-nadeem/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-nadeem/400/300',
+        bankAccountTitle: 'Nadeem Hussain',
+        bankAccountNumber: 'PK00XXXX0000EEEE',
+        bankName: 'HBL',
+        submittedAt: DateTime.now().subtract(const Duration(days: 2)),
+        warehouseAddress: 'Godown #5, I-8/3, Islamabad',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-nadeem/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-nadeem/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-nadeem/400/300',
+        simOwnerName: 'Nadeem Hussain',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.pending, // awaiting police check
+        criminalFlagged: false,
+        requiredDeposit: 5000,
+        depositPaid: false,
+        depositAmount: 0,
+        kycStep: 5, // submitted but not yet approved
+      ),
+    ),
+
+    // ── Scenario C: REJECTED — flagged in criminal background check ──
+    'rejected_dealer': UserModel(
+      id: 'u11',
+      name: 'Sajid Suspect',
+      nameUrdu: 'ساجد مشتبہ',
+      phone: '+92 300-2220003',
+      email: 'sajid.flagged@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Lahore',
+      kycStatus: KycStatus.rejected,
+      languageCode: 'ur',
+      zone: 'Model Town',
+      subscriptionStatus: null,
+      accountStatus: AccountStatus.rejected,
+      balancePkr: 0,
+      verification: DealerVerification(
+        cnicNumber: '35202-9876543-1',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-sajid/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-sajid/400/250',
+        businessName: 'Sajid Scrap Dealers',
+        businessAddress: 'Shop #99, Model Town, Lahore',
+        area: 'Model Town',
+        city: 'Lahore',
+        policeVerificationCert: 'https://picsum.photos/seed/police-sajid/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-sajid/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-sajid/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-sajid/400/300',
+        submittedAt: DateTime.now().subtract(const Duration(days: 10)),
+        rejectionReason: 'Criminal record found: FIR #2024-1234 registered at Model Town PS. Applicant involved in theft. ID generation denied.',
+        warehouseAddress: 'Godown #12, Model Town Extension, Lahore',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-sajid/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-sajid/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-sajid/400/300',
+        simOwnerName: 'Sajid Ali',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.flagged,
+        criminalFlagged: true,
+        criminalCheckNotes: 'FIR #2024-1234 registered at Model Town Police Station, Lahore. Involved in theft of recyclable materials from warehouse.',
+        requiredDeposit: 5000,
+        depositPaid: false,
+        depositAmount: 0,
+        kycStep: 5, // completed form but rejected
+      ),
+    ),
+
+    // ── Scenario D: KYC APPROVED but DEPOSIT NOT PAID — balance-gate active ──
+    'deposit_pending_dealer': UserModel(
+      id: 'u12',
+      name: 'Waqar F-10 Dealer',
+      nameUrdu: 'وقار ایف-10 ڈیلر',
+      phone: '+92 300-2220004',
+      email: 'waqar.f10@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Islamabad',
+      kycStatus: KycStatus.approved,
+      languageCode: 'ur',
+      zone: 'F-10',
+      subscriptionStatus: null,
+      accountStatus: AccountStatus.active,
+      balancePkr: 0, // ← KYC approved but hasn't deposited yet
+      verification: DealerVerification(
+        cnicNumber: '61101-5555555-5',
+        cnicFrontImage: 'https://picsum.photos/seed/cnic-f-waqar/400/250',
+        cnicBackImage: 'https://picsum.photos/seed/cnic-b-waqar/400/250',
+        businessName: 'Waqar Recycling F-10',
+        businessAddress: 'Shop #11, F-10 Markaz, Islamabad',
+        area: 'F-10',
+        city: 'Islamabad',
+        policeVerificationCert: 'https://picsum.photos/seed/police-waqar/400/550',
+        characterCertificate: 'https://picsum.photos/seed/char-waqar/400/550',
+        dealerPhoto: 'https://picsum.photos/seed/dealer-waqar/300/300',
+        shopPhoto: 'https://picsum.photos/seed/shop-waqar/400/300',
+        bankAccountTitle: 'Waqar Ahmed',
+        bankAccountNumber: 'PK00XXXX0000FFFF',
+        bankName: 'Faysal Bank',
+        submittedAt: DateTime.now().subtract(const Duration(days: 5)),
+        approvedAt: DateTime.now().subtract(const Duration(days: 1)),
+        warehouseAddress: 'Basement Godown, F-10/3, Islamabad',
+        warehouseInsidePhoto: 'https://picsum.photos/seed/wh-in-waqar/400/300',
+        warehouseStreetPhoto: 'https://picsum.photos/seed/wh-st-waqar/400/300',
+        warehouseFrontDoorPhoto: 'https://picsum.photos/seed/wh-dr-waqar/400/300',
+        simOwnerName: 'Waqar Ahmed',
+        simVerified: true,
+        criminalCheckStatus: CriminalCheckStatus.cleared,
+        criminalFlagged: false,
+        requiredDeposit: 5000,
+        depositPaid: false, // ← NOT PAID — balance-gate will block
+        depositAmount: 0,
+        kycStep: 6,
+      ),
     ),
   };
 
@@ -159,6 +560,19 @@ class MockData {
     '03001110004': 'isb_franchise',
     '3001110004': 'isb_franchise',
     '+923001110004': 'isb_franchise',
+    // KYC scenario accounts
+    '03002220001': 'pending_dealer',
+    '3002220001': 'pending_dealer',
+    '+923002220001': 'pending_dealer',
+    '03002220002': 'submitted_dealer',
+    '3002220002': 'submitted_dealer',
+    '+923002220002': 'submitted_dealer',
+    '03002220003': 'rejected_dealer',
+    '3002220003': 'rejected_dealer',
+    '+923002220003': 'rejected_dealer',
+    '03002220004': 'deposit_pending_dealer',
+    '3002220004': 'deposit_pending_dealer',
+    '+923002220004': 'deposit_pending_dealer',
   };
 
   // Phone → OTP mapping
@@ -188,6 +602,19 @@ class MockData {
     '03001110004': '880004',
     '3001110004': '880004',
     '+923001110004': '880004',
+    // KYC scenario OTPs
+    '03002220001': '990001',
+    '3002220001': '990001',
+    '+923002220001': '990001',
+    '03002220002': '990002',
+    '3002220002': '990002',
+    '+923002220002': '990002',
+    '03002220003': '990003',
+    '3002220003': '990003',
+    '+923002220003': '990003',
+    '03002220004': '990004',
+    '3002220004': '990004',
+    '+923002220004': '990004',
   };
 
   // ── GEO-FENCE: user → allowed areas ─────────────────────
@@ -205,6 +632,11 @@ class MockData {
         'G-9', 'G-10', 'G-11', 'I-8', 'I-9', 'I-10', 'Blue Area',
         'Islamabad',
       ];
+      // ── KYC scenario dealers (area-bounded) ──
+      case 'u9': return ['Satellite Town'];              // Farhan — Rawalpindi (pending KYC)
+      case 'u10': return ['I-8'];                         // Nadeem — I-8 (submitted)
+      case 'u11': return ['Model Town'];                  // Sajid — Model Town (rejected)
+      case 'u12': return ['F-10'];                        // Waqar — F-10 (deposit pending)
       // ── Karachi dealer ──
       case 'u2': return ['Korangi', 'Korangi Industrial Area', 'SITE', 'SITE Industrial Area', 'Lyari'];
       // ── Karachi franchise ──
@@ -833,6 +1265,254 @@ class MockData {
     }
     // Default (Karachi users, customers, wholesale)
     return notifications;
+  }
+
+  // ── COLLECTIONS — Active pickup jobs for dealers ──────────
+  static final collections = [
+    // ── Active: Assigned to Bilal (Karachi dealer), waiting acceptance
+    CollectionModel(
+      id: 'col-1',
+      listingId: 'l1',
+      listingTitle: 'Copper Wire Scrap',
+      dealerId: 'u2',
+      dealerName: 'Bilal Traders',
+      customerId: 'u1',
+      customerName: 'Ali Hassan',
+      categoryName: 'Metals',
+      categoryId: 'c1',
+      status: CollectionStatus.assigned,
+      assignedAt: DateTime.now().subtract(const Duration(hours: 2)),
+      deadlineAt: DateTime.now().add(const Duration(hours: 4)),
+      listingLat: 24.8607,
+      listingLng: 67.0011,
+      city: 'Karachi',
+      area: 'Korangi',
+      address: 'Factory Area, Korangi Industrial, Karachi',
+    ),
+    // ── En Route: Bilal accepted and is heading to location
+    CollectionModel(
+      id: 'col-2',
+      listingId: 'l2',
+      listingTitle: 'Iron Scrap Bulk',
+      dealerId: 'u2',
+      dealerName: 'Bilal Traders',
+      customerId: 'u1',
+      customerName: 'Ali Hassan',
+      categoryName: 'Metals',
+      categoryId: 'c1',
+      status: CollectionStatus.enRoute,
+      assignedAt: DateTime.now().subtract(const Duration(hours: 5)),
+      acceptedAt: DateTime.now().subtract(const Duration(hours: 4, minutes: 30)),
+      enRouteAt: DateTime.now().subtract(const Duration(hours: 1)),
+      deadlineAt: DateTime.now().add(const Duration(hours: 1)),
+      listingLat: 24.9056,
+      listingLng: 67.0215,
+      responseTimeMin: 30,
+      city: 'Karachi',
+      area: 'SITE Industrial Area',
+      address: 'Demolition Site, SITE Industrial, Karachi',
+    ),
+    // ── Collected: Usman (Bara Kahu) already picked up
+    CollectionModel(
+      id: 'col-3',
+      listingId: 'l-isb-1',
+      listingTitle: 'Copper Cable Waste',
+      dealerId: 'u5',
+      dealerName: 'Usman BaraKahu',
+      customerId: 'u1',
+      customerName: 'Telecom Salvage Co.',
+      categoryName: 'Metals',
+      categoryId: 'c1',
+      status: CollectionStatus.collected,
+      assignedAt: DateTime.now().subtract(const Duration(days: 1)),
+      acceptedAt: DateTime.now().subtract(const Duration(hours: 22)),
+      enRouteAt: DateTime.now().subtract(const Duration(hours: 21)),
+      arrivedAt: DateTime.now().subtract(const Duration(hours: 20, minutes: 30)),
+      collectedAt: DateTime.now().subtract(const Duration(hours: 20)),
+      deadlineAt: DateTime.now().subtract(const Duration(hours: 18)),
+      listingLat: 33.7632,
+      listingLng: 73.1217,
+      dealerArriveLat: 33.7630,
+      dealerArriveLng: 73.1220,
+      gpsVerified: true,
+      confirmedWeightKg: 115,
+      photoUrls: [
+        'https://picsum.photos/seed/col-photo1/400/300',
+        'https://picsum.photos/seed/col-photo2/400/300',
+      ],
+      qualityRating: 4,
+      notes: 'Good quality copper cables, slightly corroded',
+      responseTimeMin: 120,
+      collectionTimeMin: 90,
+      totalTimeMin: 240,
+      carbonOffsetKg: 460,
+      city: 'Islamabad',
+      area: 'Bara Kahu',
+      address: 'Near Telecom Tower, Bara Kahu, Islamabad',
+    ),
+    // ── OVERDUE: Tariq (G-6) hasn't picked up — will escalate!
+    CollectionModel(
+      id: 'col-4',
+      listingId: 'l-isb-2',
+      listingTitle: 'Office Furniture Scrap',
+      dealerId: 'u6',
+      dealerName: 'Tariq G-6 Dealer',
+      customerId: 'u1',
+      customerName: 'Govt Office Clearance',
+      categoryName: 'Furniture',
+      categoryId: 'c6',
+      status: CollectionStatus.accepted,
+      assignedAt: DateTime.now().subtract(const Duration(hours: 8)),
+      acceptedAt: DateTime.now().subtract(const Duration(hours: 7)),
+      deadlineAt: DateTime.now().subtract(const Duration(hours: 2)), // ← OVERDUE!
+      listingLat: 33.7215,
+      listingLng: 73.0578,
+      responseTimeMin: 60,
+      city: 'Islamabad',
+      area: 'G-6',
+      address: 'Govt Building, Aabpara, G-6, Islamabad',
+    ),
+    // ── Delivered: Kashif (G-8) completed full cycle
+    CollectionModel(
+      id: 'col-5',
+      listingId: 'l-isb-3',
+      listingTitle: 'Electronic Waste - PCBs',
+      dealerId: 'u7',
+      dealerName: 'Kashif G-8 Dealer',
+      customerId: 'u1',
+      customerName: 'IT Hub Recyclers',
+      categoryName: 'Electronics',
+      categoryId: 'c4',
+      status: CollectionStatus.deliveredToCenter,
+      assignedAt: DateTime.now().subtract(const Duration(days: 2)),
+      acceptedAt: DateTime.now().subtract(const Duration(days: 2)).add(const Duration(minutes: 15)),
+      enRouteAt: DateTime.now().subtract(const Duration(days: 2)).add(const Duration(minutes: 45)),
+      arrivedAt: DateTime.now().subtract(const Duration(days: 2)).add(const Duration(hours: 1)),
+      collectedAt: DateTime.now().subtract(const Duration(days: 2)).add(const Duration(hours: 1, minutes: 30)),
+      deliveredAt: DateTime.now().subtract(const Duration(days: 2)).add(const Duration(hours: 3)),
+      deadlineAt: DateTime.now().subtract(const Duration(days: 1, hours: 18)),
+      listingLat: 33.6960,
+      listingLng: 73.0478,
+      dealerArriveLat: 33.6958,
+      dealerArriveLng: 73.0480,
+      dealerCollectLat: 33.6958,
+      dealerCollectLng: 73.0480,
+      gpsVerified: true,
+      confirmedWeightKg: 78,
+      photoUrls: [
+        'https://picsum.photos/seed/pcb-photo1/400/300',
+        'https://picsum.photos/seed/pcb-photo2/400/300',
+        'https://picsum.photos/seed/pcb-photo3/400/300',
+      ],
+      qualityRating: 5,
+      notes: 'High quality PCBs with gold contacts. Excellent material.',
+      responseTimeMin: 15,
+      collectionTimeMin: 75,
+      totalTimeMin: 180,
+      carbonOffsetKg: 195,
+      city: 'Islamabad',
+      area: 'G-8',
+      address: 'IT Complex, G-8 Markaz, Islamabad',
+    ),
+  ];
+
+  /// Collections for a specific dealer
+  static List<CollectionModel> collectionsForDealer(String? dealerId) {
+    if (dealerId == null) return [];
+    return collections.where((c) => c.dealerId == dealerId).toList();
+  }
+
+  // ── DEALER RATINGS ──────────────────────────────────────
+  static final dealerRatings = [
+    DealerRatingModel(
+      dealerId: 'u2',
+      dealerName: 'Bilal Traders',
+      overallScore: 4.3,
+      responseScore: 4.5,
+      collectionScore: 4.0,
+      complianceScore: 4.5,
+      customerScore: 4.2,
+      totalCollections: 45,
+      onTimeCollections: 40,
+      lateCollections: 3,
+      escalatedCollections: 2,
+      avgResponseTimeMin: 25,
+      avgCollectionTimeMin: 85,
+      period: '2026-03',
+    ),
+    DealerRatingModel(
+      dealerId: 'u5',
+      dealerName: 'Usman BaraKahu',
+      overallScore: 4.7,
+      responseScore: 4.8,
+      collectionScore: 4.6,
+      complianceScore: 4.9,
+      customerScore: 4.5,
+      totalCollections: 28,
+      onTimeCollections: 27,
+      lateCollections: 1,
+      escalatedCollections: 0,
+      avgResponseTimeMin: 18,
+      avgCollectionTimeMin: 60,
+      period: '2026-03',
+    ),
+    DealerRatingModel(
+      dealerId: 'u6',
+      dealerName: 'Tariq G-6 Dealer',
+      overallScore: 2.8,
+      responseScore: 3.0,
+      collectionScore: 2.5,
+      complianceScore: 2.0,
+      customerScore: 3.5,
+      totalCollections: 15,
+      onTimeCollections: 8,
+      lateCollections: 5,
+      escalatedCollections: 2,
+      avgResponseTimeMin: 120,
+      avgCollectionTimeMin: 200,
+      period: '2026-03',
+    ),
+    DealerRatingModel(
+      dealerId: 'u7',
+      dealerName: 'Kashif G-8 Dealer',
+      overallScore: 4.1,
+      responseScore: 4.5,
+      collectionScore: 4.0,
+      complianceScore: 3.8,
+      customerScore: 4.0,
+      totalCollections: 20,
+      onTimeCollections: 17,
+      lateCollections: 2,
+      escalatedCollections: 1,
+      avgResponseTimeMin: 30,
+      avgCollectionTimeMin: 95,
+      period: '2026-03',
+    ),
+    DealerRatingModel(
+      dealerId: 'u8',
+      dealerName: 'Zubair ISB Franchise',
+      overallScore: 4.5,
+      responseScore: 4.2,
+      collectionScore: 4.6,
+      complianceScore: 4.8,
+      customerScore: 4.4,
+      totalCollections: 65,
+      onTimeCollections: 60,
+      lateCollections: 3,
+      escalatedCollections: 2,
+      avgResponseTimeMin: 35,
+      avgCollectionTimeMin: 70,
+      period: '2026-03',
+    ),
+  ];
+
+  /// Get rating for a specific dealer
+  static DealerRatingModel? ratingForDealer(String? dealerId) {
+    if (dealerId == null) return null;
+    return dealerRatings.cast<DealerRatingModel?>().firstWhere(
+      (r) => r?.dealerId == dealerId,
+      orElse: () => null,
+    );
   }
 
   // ── SUBSCRIPTION PLANS ────────────────────────────────────

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/config/app_variant.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -13,14 +14,17 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneController = TextEditingController();
   bool _isLoading = false;
-  String _selectedRole = 'customer';
+  String _selectedRole = AppVariant.isPro ? 'dealer' : 'customer';
 
-  final _roles = {
-    'customer': '👤 Customer',
-    'dealer': '🏪 Local Dealer',
-    'franchise': '🏢 City Franchise',
-    'wholesale': '🏭 Wholesale',
-  };
+  Map<String, String> get _roles => AppVariant.isPro
+      ? {
+          'dealer': '🏪 Local Dealer',
+          'franchise': '🏢 City Franchise',
+          'wholesale': '🏭 Wholesale',
+        }
+      : {
+          'customer': '👤 Customer',
+        };
 
   Widget _testRow(String role, String phone, String otp) {
     return Padding(
@@ -58,27 +62,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Logo
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF16A34A).withOpacity(0.1),
-                  shape: BoxShape.circle,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(50),
+                child: Image.asset(
+                  'assets/images/logo_icon.png',
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16A34A).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.eco, size: 48, color: Color(0xFF16A34A)),
+                  ),
                 ),
-                child: const Icon(Icons.eco, size: 48, color: Color(0xFF16A34A)),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'GreenCollect',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              Text(
+                AppVariant.appName,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
-                'مارکیٹ پلیس',
+                AppVariant.appNameUrdu,
                 style: TextStyle(fontSize: 18, color: Colors.grey[600]),
               ),
               const SizedBox(height: 8),
               Text(
-                'Trade recyclable materials in Pakistan',
+                AppVariant.tagline,
                 style: TextStyle(fontSize: 14, color: Colors.grey[500]),
               ),
               const SizedBox(height: 40),
@@ -97,19 +110,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Role selector
-              DropdownButtonFormField<String>(
-                value: _selectedRole,
-                decoration: InputDecoration(
-                  labelText: 'I am a...',
-                  prefixIcon: const Icon(Icons.person),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              // Role selector (Pro only — customer app has single role)
+              if (AppVariant.showDealerRoles) ...[
+                DropdownButtonFormField<String>(
+                  value: _selectedRole,
+                  decoration: InputDecoration(
+                    labelText: 'I am a...',
+                    prefixIcon: const Icon(Icons.person),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  items: _roles.entries
+                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedRole = v ?? 'dealer'),
                 ),
-                items: _roles.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedRole = v ?? 'customer'),
-              ),
+              ],
               const SizedBox(height: 24),
 
               // Send OTP button
@@ -131,22 +146,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Register link
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("Don't have an account? ",
-                      style: TextStyle(color: Colors.grey[600])),
-                  GestureDetector(
-                    onTap: () => context.go('/auth/register'),
-                    child: const Text('Register',
-                        style: TextStyle(
-                          color: Color(0xFF16A34A),
-                          fontWeight: FontWeight.bold,
-                        )),
+              // Register link — only Customer app allows self-registration
+              // Pro accounts are created by admin only
+              if (AppVariant.isCustomer)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("Don't have an account? ",
+                        style: TextStyle(color: Colors.grey[600])),
+                    GestureDetector(
+                      onTap: () => context.go('/auth/register'),
+                      child: const Text('Register',
+                          style: TextStyle(
+                            color: Color(0xFF16A34A),
+                            fontWeight: FontWeight.bold,
+                          )),
+                    ),
+                  ],
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange[200]!),
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.verified_user, color: Colors.orange[700], size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pro accounts are created by admin only after document verification.',
+                          style: TextStyle(color: Colors.orange[800], fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 16),
 
               // Test accounts hint
@@ -155,7 +193,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue[50],
+                      color: AppVariant.isPro ? Colors.amber[50] : Colors.blue[50],
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
@@ -163,32 +201,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                            Icon(Icons.info_outline, size: 16,
+                                color: AppVariant.isPro ? Colors.amber[800] : Colors.blue[700]),
                             const SizedBox(width: 8),
                             Text('Test Accounts:',
                                 style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.blue[700])),
+                                    color: AppVariant.isPro ? Colors.amber[800] : Colors.blue[700])),
                           ],
                         ),
                         const SizedBox(height: 6),
-                        _testRow('Customer', '03001234567', '111111'),
-                        _testRow('Dealer (KHI)', '03219876543', '222222'),
-                        _testRow('Franchise (KHI)', '03335551234', '333333'),
-                        _testRow('Wholesale', '03451112233', '444444'),
-                        const SizedBox(height: 4),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 24),
-                          child: Text(
-                            '── Islamabad Area Dealers ──',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                        if (AppVariant.isCustomer) ...[
+                          _testRow('Customer', '03001234567', '111111'),
+                        ],
+                        if (AppVariant.isPro) ...[
+                          _testRow('Dealer (KHI)', '03219876543', '222222'),
+                          _testRow('Franchise (KHI)', '03335551234', '333333'),
+                          _testRow('Wholesale', '03451112233', '444444'),
+                          const SizedBox(height: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 24),
+                            child: Text(
+                              '── Islamabad Area Dealers ──',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber[900]),
+                            ),
                           ),
-                        ),
-                        _testRow('Bara Kahu', '03001110001', '550001'),
-                        _testRow('G-6', '03001110002', '660002'),
-                        _testRow('G-8', '03001110003', '770003'),
-                        _testRow('ISB Franchise', '03001110004', '880004'),
+                          _testRow('Bara Kahu', '03001110001', '550001'),
+                          _testRow('G-6', '03001110002', '660002'),
+                          _testRow('G-8', '03001110003', '770003'),
+                          _testRow('ISB Franchise', '03001110004', '880004'),
+                        ],
                       ],
                     ),
                   ),

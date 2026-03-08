@@ -62,7 +62,10 @@ app.use('/api/transactions', require('./routes/transactions.routes'));
 app.use('/api/chat', require('./routes/chat.routes'));
 app.use('/api/territories', require('./routes/territories.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
+app.use('/api/admin/dealers', require('./routes/dealers.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));
+app.use('/api/collections', require('./routes/collections.routes'));
+app.use('/api/kyc', require('./routes/kyc.routes'));
 
 // ── Mobile-specific routes (v1 prefix for backward compat) ──
 app.use('/v1/auth', require('./routes/auth.routes'));
@@ -70,6 +73,8 @@ app.use('/v1/listings', require('./routes/listings.routes'));
 app.use('/v1/categories', require('./routes/categories.routes'));
 app.use('/v1/notifications', require('./routes/notifications.routes'));
 app.use('/v1/territories', require('./routes/territories.routes'));
+app.use('/v1/collections', require('./routes/collections.routes'));
+app.use('/v1/kyc', require('./routes/kyc.routes'));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -129,18 +134,25 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found', code: 'NOT_FOUND' } });
 });
 
-// ── Escalation Cron Job (runs every hour) ─────────────────
-const { runEscalation } = require('./services/escalation.service');
+// ── Escalation Cron Jobs ──────────────────────────────────
+const { runEscalation, runCollectionEscalation } = require('./services/escalation.service');
 
 function startEscalationCron() {
-  const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-  console.log(`⏰ Escalation cron scheduled: every ${INTERVAL_MS / 60000} minutes`);
+  const LISTING_INTERVAL = 60 * 60 * 1000;     // 1 hour — listing visibility
+  const COLLECTION_INTERVAL = 15 * 60 * 1000;  // 15 min — collection deadline checks
+
+  console.log(`⏰ Listing escalation cron: every ${LISTING_INTERVAL / 60000} min`);
+  console.log(`⏰ Collection escalation cron: every ${COLLECTION_INTERVAL / 60000} min`);
   
   // Run once on startup (after 30s delay to let DB settle)
-  setTimeout(() => runEscalation(io), 30000);
+  setTimeout(() => {
+    runEscalation(io);
+    runCollectionEscalation(io);
+  }, 30000);
   
-  // Then every hour
-  setInterval(() => runEscalation(io), INTERVAL_MS);
+  // Recurring
+  setInterval(() => runEscalation(io), LISTING_INTERVAL);
+  setInterval(() => runCollectionEscalation(io), COLLECTION_INTERVAL);
 }
 
 const PORT = process.env.PORT || 4000;

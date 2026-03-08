@@ -6,6 +6,7 @@ import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 import '../../core/models/category.model.dart';
 import '../../core/models/user.model.dart';
+import '../../core/config/app_variant.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -14,17 +15,29 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider);
     final categories = MockData.categories;
-    // Geo-fenced: show only listings the logged-in user is allowed to see
-    final listings = MockData.listingsForUser(user?.id);
+    // Pro: geo-fenced (only designated area). Customer: see everything.
+    final listings = AppVariant.enforceGeoFencing
+        ? MockData.listingsForUser(user?.id)
+        : [...MockData.listings, ...MockData.islamabadListings];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.eco, size: 28, color: Color(0xFF16A34A)),
-            SizedBox(width: 8),
-            Text('GreenCollect',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.asset(
+                'assets/images/logo_icon_small.png',
+                width: 28,
+                height: 28,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.eco, size: 28, color: Color(0xFF16A34A)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(AppVariant.appName,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -194,7 +207,7 @@ class HomeScreen extends ConsumerWidget {
                   itemCount: listings.length,
                   itemBuilder: (_, i) => _ListingCard(
                     listing: listings[i],
-                    onTap: () => context.go('/listing/${listings[i].id}'),
+                    onTap: () => context.push('/listing/${listings[i].id}'),
                   ),
                 ),
               ),

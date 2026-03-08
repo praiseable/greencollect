@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo  GreenCollect - Android APK Builder
+echo  Kabariya - Android APK Builder
 echo ========================================
 echo.
 

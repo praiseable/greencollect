@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/auth.provider.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
+import '../../core/config/app_variant.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -153,7 +154,7 @@ class ProfileScreen extends ConsumerWidget {
                   side: BorderSide.none,
                   padding: EdgeInsets.zero,
                 ),
-                onTap: () => context.go('/listing/${listing.id}'),
+                onTap: () => context.push('/listing/${listing.id}'),
               ),
             )),
 
@@ -166,26 +167,45 @@ class ProfileScreen extends ConsumerWidget {
                   _menuItem(Icons.edit, 'Edit Profile / پروفائل ترمیم', () {
                     context.push('/edit-profile');
                   }),
-                  const Divider(height: 1),
-                  _menuItem(Icons.account_balance_wallet, 'Wallet / والیٹ', () {
-                    context.push('/wallet');
-                  }),
-                  const Divider(height: 1),
-                  _menuItem(Icons.map, 'My Territory / میرا علاقہ', () {
-                    context.push('/territory');
-                  }),
+                  // ── Pro-only features ──
+                  if (AppVariant.showWallet) ...[
+                    const Divider(height: 1),
+                    _menuItem(Icons.account_balance_wallet, 'Wallet / والیٹ', () {
+                      context.push('/wallet');
+                    }),
+                  ],
+                  if (AppVariant.showTerritoryScreen) ...[
+                    const Divider(height: 1),
+                    _menuItem(Icons.map, 'My Territory / میرا علاقہ', () {
+                      context.push('/territory');
+                    }),
+                  ],
+                  if (AppVariant.isPro) ...[
+                    const Divider(height: 1),
+                    _menuItem(Icons.local_shipping, 'Collections / مجموعے', () {
+                      context.push('/collections');
+                    }),
+                    const Divider(height: 1),
+                    _menuItem(Icons.star, 'My Rating / میری درجہ بندی', () {
+                      context.push('/my-rating');
+                    }),
+                  ],
                   const Divider(height: 1),
                   _menuItem(Icons.receipt_long, 'Transactions / لین دین', () {
                     context.push('/transactions');
                   }),
-                  const Divider(height: 1),
-                  _menuItem(Icons.card_membership, 'Subscription / سبسکرپشن', () {
-                    context.push('/subscription');
-                  }),
-                  const Divider(height: 1),
-                  _menuItem(Icons.bar_chart, 'Analytics / تجزیات', () {
-                    context.push('/analytics');
-                  }),
+                  if (AppVariant.showSubscription) ...[
+                    const Divider(height: 1),
+                    _menuItem(Icons.card_membership, 'Subscription / سبسکرپشن', () {
+                      context.push('/subscription');
+                    }),
+                  ],
+                  if (AppVariant.showAnalytics) ...[
+                    const Divider(height: 1),
+                    _menuItem(Icons.bar_chart, 'Analytics / تجزیات', () {
+                      context.push('/analytics');
+                    }),
+                  ],
                   const Divider(height: 1),
                   _menuItem(Icons.chat, 'Chat / چیٹ', () {
                     context.push('/chat/demo-room');
@@ -197,7 +217,7 @@ class ProfileScreen extends ConsumerWidget {
                   const Divider(height: 1),
                   _menuItem(Icons.help_outline, 'Help & Support', () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('support@greencollect.pk')),
+                      const SnackBar(content: Text('support@kabariya.pk')),
                     );
                   }),
                 ],

@@ -12,6 +12,16 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: FiHome },
   { to: '/users', label: 'Users', icon: FiUsers },
   {
+    label: '🏪 Dealers (Revenue)',
+    icon: FiDollarSign,
+    children: [
+      { to: '/dealer-onboarding', label: '➕ New Dealer / KYC' },
+      { to: '/kyc-review', label: '🔍 KYC Review & Verify' },
+      { to: '/balance-management', label: '💰 Balance Management' },
+      { to: '/territories', label: '📍 Territories' },
+    ],
+  },
+  {
     label: 'Catalog',
     icon: FiPackage,
     children: [
@@ -21,8 +31,15 @@ const navItems = [
     ],
   },
   { to: '/listings', label: 'Listings', icon: FiList },
+  {
+    label: '📦 Collections',
+    icon: FiGrid,
+    children: [
+      { to: '/collections', label: '🚛 Collection Tracking' },
+      { to: '/carbon-analytics', label: '🌿 Carbon Analytics' },
+    ],
+  },
   { to: '/geo-zones', label: 'Geo Zones', icon: FiMapPin },
-  { to: '/territories', label: 'Territories', icon: FiMapPin },
   {
     label: 'Localization',
     icon: FiGlobe,
@@ -92,11 +109,11 @@ export default function Layout() {
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
         <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
-          <span className="text-white font-bold text-lg">G</span>
+          <span className="text-white font-bold text-lg">K</span>
         </div>
         {sidebarOpen && (
           <div>
-            <h1 className="font-bold text-gray-900 text-lg leading-tight">GreenCollect</h1>
+            <h1 className="font-bold text-gray-900 text-lg leading-tight">Kabariya</h1>
             <p className="text-[10px] text-gray-400 uppercase tracking-widest">Admin Portal</p>
           </div>
         )}

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/config/app_variant.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -40,8 +41,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
 
-    final user = ref.read(authProvider);
-    if (user != null) {
+    // Try to restore persisted session first
+    final restored = await ref.read(authProvider.notifier).tryRestoreSession();
+    if (!mounted) return;
+
+    if (restored) {
       context.go('/home');
     } else {
       // Check if first launch
@@ -77,31 +81,41 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // App logo from asset
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  width: 200,
+                  height: 200,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white.withOpacity(0.15),
                   ),
-                  child: const Icon(
-                    Icons.recycling,
-                    size: 100,
-                    color: Colors.white,
+                  padding: const EdgeInsets.all(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(100),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.recycling,
+                        size: 100,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'GreenCollect',
-                  style: TextStyle(
+                Text(
+                  AppVariant.appName,
+                  style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const Text(
-                  'مارکیٹ پلیس',
-                  style: TextStyle(
-                    fontSize: 24,
+                Text(
+                  AppVariant.taglineUrdu,
+                  style: const TextStyle(
+                    fontSize: 20,
                     color: Colors.white70,
                   ),
                 ),

@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/config/app_variant.dart';
+import '../../core/models/user.model.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String phone;
@@ -27,7 +29,19 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     setState(() => _isLoading = false);
 
     if (success && mounted) {
-      context.go('/home');
+      // Pro app: If dealer/franchise role, redirect to KYC registration
+      final user = ref.read(authProvider);
+      if (AppVariant.isPro && user != null && user.role != UserRole.customer) {
+        // Check if KYC is already completed
+        if (user.kycStatus == KycStatus.approved) {
+          context.go('/home');
+        } else {
+          context.go('/auth/kyc');
+        }
+      } else {
+        // Customer: free registration, go directly to home
+        context.go('/home');
+      }
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

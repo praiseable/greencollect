@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/category.model.dart';
+import '../../core/config/app_variant.dart';
 
 class CreateListingScreen extends ConsumerStatefulWidget {
   const CreateListingScreen({super.key});
@@ -28,7 +31,10 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
   bool _negotiable = true;
   bool _loading = false;
   String _selectedCity = 'Karachi';
-  final List<String> _mockPhotos = [];
+
+  // ── Image handling ──
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<XFile> _selectedImages = [];
 
   final _units = ['kg', 'ton', 'piece', 'meter', 'liter', 'bag'];
   final _cities = [
@@ -293,7 +299,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
     );
   }
 
-  // ── STEP 2: Photos ──
+  // ── STEP 2: Photos (with real image picker) ──
   Widget _buildStep2Photos() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -302,8 +308,13 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         children: [
           const Text('Add Photos (up to 5)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Text('تصاویر شامل کریں',
+          const Text('تصاویر شامل کریں (زیادہ سے زیادہ 5)',
               style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(height: 4),
+          Text(
+            'Take a clear photo of your scrap material to attract buyers.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
           const SizedBox(height: 16),
           GridView.builder(
             shrinkWrap: true,
@@ -313,101 +324,322 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
             ),
-            itemCount: _mockPhotos.length + (_mockPhotos.length < 5 ? 1 : 0),
+            itemCount: _selectedImages.length + (_selectedImages.length < 5 ? 1 : 0),
             itemBuilder: (_, i) {
-              if (i == _mockPhotos.length) {
-                // Add button
+              if (i == _selectedImages.length) {
+                // ── Add Photo button ──
                 return GestureDetector(
-                  onTap: _addMockPhoto,
+                  onTap: _showImageSourcePicker,
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(
-                          color: Colors.grey[300]!, style: BorderStyle.solid),
+                          color: const Color(0xFF16A34A),
+                          style: BorderStyle.solid,
+                          width: 1.5),
                       borderRadius: BorderRadius.circular(12),
-                      color: Colors.grey[50],
+                      color: Colors.green[50],
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.add_a_photo,
-                            size: 28, color: Colors.grey[400]),
+                            size: 28, color: Colors.green[600]),
                         const SizedBox(height: 4),
-                        Text('Add',
+                        Text('Add Photo',
                             style: TextStyle(
-                                color: Colors.grey[500], fontSize: 12)),
+                                color: Colors.green[700],
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
                 );
               }
-              // Photo thumbnail
-              return Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(_mockPhotos[i],
+              // ── Photo thumbnail (from local file) ──
+              return GestureDetector(
+                onTap: () => _previewImage(i),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(_selectedImages[i].path),
                         fit: BoxFit.cover,
                         width: double.infinity,
                         height: double.infinity,
                         errorBuilder: (_, __, ___) => Container(
-                              color: Colors.grey[200],
-                              child: const Icon(Icons.image, color: Colors.grey),
-                            )),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: GestureDetector(
-                      onTap: () =>
-                          setState(() => _mockPhotos.removeAt(i)),
-                      child: const CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Colors.red,
-                        child:
-                            Icon(Icons.close, size: 14, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  if (i == 0)
-                    Positioned(
-                      bottom: 4,
-                      left: 4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.broken_image, color: Colors.grey),
                         ),
-                        child: const Text('Cover',
-                            style: TextStyle(
-                                color: Colors.white, fontSize: 10)),
                       ),
                     ),
-                ],
+                    // Remove button
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () => _removeImage(i),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(Icons.close, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    // Cover badge
+                    if (i == 0)
+                      Positioned(
+                        bottom: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF16A34A),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('Cover',
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 10)),
+                        ),
+                      ),
+                  ],
+                ),
               );
             },
           ),
           const SizedBox(height: 12),
-          Text(
-            '${_mockPhotos.length}/5 photos · At least 1 required',
-            style: TextStyle(
-              color: _mockPhotos.isEmpty ? Colors.red : Colors.grey[600],
-              fontSize: 13,
-            ),
+          Row(
+            children: [
+              Icon(
+                _selectedImages.isEmpty ? Icons.warning_amber_rounded : Icons.check_circle,
+                size: 16,
+                color: _selectedImages.isEmpty ? Colors.red : Colors.green,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${_selectedImages.length}/5 photos${_selectedImages.isEmpty ? " · At least 1 required" : ""}',
+                style: TextStyle(
+                  color: _selectedImages.isEmpty ? Colors.red : Colors.grey[600],
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
+          if (_selectedImages.isEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Tip: Clear and well-lit photos get 3x more interest from buyers.',
+              style: TextStyle(
+                color: Colors.blue[700],
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  void _addMockPhoto() {
-    if (_mockPhotos.length >= 5) return;
-    final seeds = ['copper', 'iron', 'electronics', 'paper', 'plastic'];
-    final seed = seeds[_mockPhotos.length % seeds.length];
+  /// Show bottom sheet to choose Camera or Gallery
+  void _showImageSourcePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Select Image Source',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue[50],
+                  child: Icon(Icons.camera_alt, color: Colors.blue[700]),
+                ),
+                title: const Text('Camera'),
+                subtitle: const Text('Take a new photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.green[50],
+                  child: Icon(Icons.photo_library, color: Colors.green[700]),
+                ),
+                title: const Text('Gallery'),
+                subtitle: const Text('Choose from your photos'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              if (_selectedImages.length < 4)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.purple[50],
+                    child: Icon(Icons.photo_library_outlined, color: Colors.purple[700]),
+                  ),
+                  title: const Text('Multiple from Gallery'),
+                  subtitle: Text('Select up to ${5 - _selectedImages.length} photos'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickMultipleImages();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Pick a single image from camera or gallery
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+      if (image != null && _selectedImages.length < 5) {
+        setState(() {
+          _selectedImages.add(image);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not pick image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Pick multiple images from gallery
+  Future<void> _pickMultipleImages() async {
+    try {
+      final List<XFile> images = await _imagePicker.pickMultiImage(
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+      if (images.isNotEmpty) {
+        final remaining = 5 - _selectedImages.length;
+        final toAdd = images.take(remaining).toList();
+        setState(() {
+          _selectedImages.addAll(toAdd);
+        });
+        if (images.length > remaining && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Only $remaining more photo(s) allowed. Extra photos were skipped.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not pick images: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Remove an image at a given index
+  void _removeImage(int index) {
     setState(() {
-      _mockPhotos.add('https://picsum.photos/seed/$seed${_mockPhotos.length}/400/300');
+      _selectedImages.removeAt(index);
     });
+  }
+
+  /// Preview a full-size image in a dialog
+  void _previewImage(int index) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  child: Image.file(
+                    File(_selectedImages[index].path),
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.black54,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showImageSourcePicker(); // Replace with new photo
+                    },
+                    icon: const Icon(Icons.swap_horiz),
+                    label: const Text('Replace'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _removeImage(index);
+                    },
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    label: const Text('Remove', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── STEP 3: Details ──
@@ -471,9 +703,9 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               controller: _priceCtrl,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Price (₨ PKR per unit) *',
+                labelText: 'Price (Rs. PKR per unit) *',
                 hintText: '5000',
-                prefixText: '₨ ',
+                prefixText: 'Rs. ',
                 prefixIcon: Icon(Icons.monetization_on),
               ),
               validator: (v) =>
@@ -615,20 +847,22 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               style: TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 16),
 
-          // Mock image
-          if (_mockPhotos.isNotEmpty)
+          // Preview image from local file
+          if (_selectedImages.isNotEmpty)
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(_mockPhotos.first,
+              child: Image.file(
+                File(_selectedImages.first.path),
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
                   height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                        height: 200,
-                        color: Colors.grey[200],
-                        child: const Center(
-                            child: Icon(Icons.image, size: 48, color: Colors.grey)),
-                      )),
+                  color: Colors.grey[200],
+                  child: const Center(
+                      child: Icon(Icons.image, size: 48, color: Colors.grey)),
+                ),
+              ),
             )
           else
             Container(
@@ -675,7 +909,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
           Row(
             children: [
               Text(
-                '₨ ${_priceCtrl.text.isEmpty ? "0" : _priceCtrl.text} / $_selectedUnit',
+                'Rs. ${_priceCtrl.text.isEmpty ? "0" : _priceCtrl.text} / $_selectedUnit',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -706,8 +940,32 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               '${_addressCtrl.text.isNotEmpty ? "${_addressCtrl.text}, " : ""}$_selectedCity'),
           _previewRow(Icons.phone, 'Contact',
               _contactCtrl.text.isEmpty ? 'Not provided' : '+92 ${_contactCtrl.text}'),
-          _previewRow(Icons.photo, 'Photos', '${_mockPhotos.length} photos'),
+          _previewRow(Icons.photo, 'Photos', '${_selectedImages.length} photo(s)'),
           const SizedBox(height: 12),
+
+          // Photo thumbnails row
+          if (_selectedImages.length > 1) ...[
+            SizedBox(
+              height: 60,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _selectedImages.length,
+                itemBuilder: (_, i) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      File(_selectedImages[i].path),
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
 
           // Description
           if (_descCtrl.text.isNotEmpty) ...[
@@ -755,7 +1013,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       case 0:
         return _selectedCategory != null;
       case 1:
-        return _mockPhotos.isNotEmpty;
+        return _selectedImages.isNotEmpty;
       case 2:
         return _titleCtrl.text.isNotEmpty &&
             _quantityCtrl.text.isNotEmpty &&
@@ -794,8 +1052,9 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               Text('Listing Posted!'),
             ],
           ),
-          content: const Text(
-              'Your listing has been successfully posted! 🎉\n\nBuyers in your zone will be notified.'),
+          content: Text(AppVariant.isPro
+              ? 'Your listing has been posted! \n\nDealers in your zone will be notified. If no interest, it will escalate to adjacent areas.'
+              : 'Your listing has been posted! \n\nNearby dealers and buyers will be notified.'),
           actions: [
             ElevatedButton(
               onPressed: () {

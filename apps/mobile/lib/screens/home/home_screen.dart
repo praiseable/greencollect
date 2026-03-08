@@ -33,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Icon(Icons.eco, size: 28),
             SizedBox(width: 8),
-            Text('GreenCollect', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('Kabariya', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [

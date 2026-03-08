@@ -145,7 +145,7 @@ export default function Home() {
 
       {/* Features */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h2 className="text-2xl font-bold text-gray-900 text-center mb-8">Why GreenCollect?</h2>
+        <h2 className="text-2xl font-bold text-gray-900 text-center mb-8">Why Kabariya?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
             { icon: <FiMapPin className="text-primary-600" size={28} />, title: 'Geo-Zone Based', desc: 'Find dealers and listings within your local geo-zone. City-level matching across Pakistan.' },

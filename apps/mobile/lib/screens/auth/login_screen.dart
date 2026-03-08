@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
 
-              const Text('GreenCollect', textAlign: TextAlign.center,
+              const Text('Kabariya', textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text('Pakistan\'s Recyclable Marketplace', textAlign: TextAlign.center,

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/chat.provider.dart';
+import '../../core/providers/auth.provider.dart';
+import '../../core/models/chat_message.model.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String roomId;
@@ -13,70 +16,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
-  final List<_ChatMessage> _messages = [
-    _ChatMessage(
-      text: 'Hi, I\'m interested in your Copper Wire Scrap listing.',
-      isMe: false,
-      senderName: 'Bilal Traders',
-      time: '2:30 PM',
-    ),
-    _ChatMessage(
-      text: 'Great! It\'s 200kg of 99% pure copper wire from a factory.',
-      isMe: true,
-      senderName: 'You',
-      time: '2:31 PM',
-    ),
-    _ChatMessage(
-      text: null,
-      isMe: false,
-      senderName: 'Bilal Traders',
-      time: '2:33 PM',
-      isOffer: true,
-      offerPrice: 820,
-      offerUnit: 'kg',
-    ),
-    _ChatMessage(
-      text: 'Can you do ₨840/kg? That\'s a fair price for this quality.',
-      isMe: true,
-      senderName: 'You',
-      time: '2:35 PM',
-    ),
-    _ChatMessage(
-      text: 'Deal! ₨840/kg for 200kg. I\'ll arrange pickup tomorrow.',
-      isMe: false,
-      senderName: 'Bilal Traders',
-      time: '2:37 PM',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[ChatScreen] initState for room: ${widget.roomId}');
+  }
 
   void _sendMessage() {
     if (_controller.text.trim().isEmpty) return;
 
-    setState(() {
-      _messages.add(_ChatMessage(
-        text: _controller.text.trim(),
-        isMe: true,
-        senderName: 'You',
-        time: _formatTime(DateTime.now()),
-      ));
-    });
+    final user = ref.read(authProvider);
+    if (user == null) return;
+
+    ref.read(chatRoomProvider(widget.roomId).notifier).sendMessage(
+      text: _controller.text.trim(),
+      fromUserId: user.id,
+      toUserId: 'bilal_traders', // In production, resolve from room metadata
+    );
+
     _controller.clear();
-
-    // Simulate reply
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _messages.add(_ChatMessage(
-            text: 'Thanks for the message! I\'ll get back to you shortly.',
-            isMe: false,
-            senderName: 'Bilal Traders',
-            time: _formatTime(DateTime.now()),
-          ));
-        });
-        _scrollToBottom();
-      }
-    });
-
     _scrollToBottom();
   }
 
@@ -93,7 +51,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   String _formatTime(DateTime dt) {
-    final h = dt.hour > 12 ? dt.hour - 12 : dt.hour;
+    final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final m = dt.minute.toString().padLeft(2, '0');
     final ap = dt.hour >= 12 ? 'PM' : 'AM';
     return '$h:$m $ap';
@@ -101,6 +59,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[ChatScreen] build() for room: ${widget.roomId}');
+
+    final ChatRoomState chatState;
+    try {
+      chatState = ref.watch(chatRoomProvider(widget.roomId));
+    } catch (e) {
+      debugPrint('[ChatScreen] ERROR watching provider: $e');
+      return Scaffold(
+        appBar: AppBar(title: const Text('Chat')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('Failed to load chat: $e'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final messages = chatState.messages;
+
+    // Auto-scroll when messages change
+    if (messages.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -108,7 +100,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: Colors.blue[100],
-              child: Text('B', style: TextStyle(color: Colors.blue[800], fontWeight: FontWeight.bold)),
+              child: Text('B',
+                  style: TextStyle(
+                      color: Colors.blue[800], fontWeight: FontWeight.bold)),
             ),
             const SizedBox(width: 10),
             Column(
@@ -120,10 +114,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.green),
+                      decoration: const BoxDecoration(
+                          shape: BoxShape.circle, color: Colors.green),
                     ),
                     const SizedBox(width: 4),
-                    Text('Online', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    Text('Online',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey[600])),
                   ],
                 ),
               ],
@@ -131,6 +128,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
+          if (chatState.isSyncing)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.call),
             onPressed: () {
@@ -149,46 +155,98 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             color: Colors.green[50],
             child: Row(
               children: [
-                const Icon(Icons.inventory_2, size: 20, color: Color(0xFF16A34A)),
+                const Icon(Icons.inventory_2,
+                    size: 20, color: Color(0xFF16A34A)),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Copper Wire Scrap',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                      Text('200 kg • ₨ 850/kg',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                      Text('200 kg \u2022 Rs. 850/kg',
                           style: TextStyle(fontSize: 12, color: Colors.grey)),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.orange[100],
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text('NEGOTIATING',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange[800])),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[800])),
                 ),
               ],
             ),
           ),
 
+          // Error message
+          if (chatState.error != null)
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: Colors.red[50],
+              child: Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.red[400], size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      chatState.error!,
+                      style: TextStyle(fontSize: 12, color: Colors.red[700]),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => ref.read(chatRoomProvider(widget.roomId).notifier).refresh(),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+
+          // Loading indicator
+          if (chatState.isLoading)
+            const LinearProgressIndicator(minHeight: 2),
+
           // Messages
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (_, i) {
-                final msg = _messages[i];
-                if (msg.isOffer) {
-                  return _OfferCard(msg: msg);
-                }
-                return _MessageBubble(msg: msg);
-              },
-            ),
+            child: chatState.isLoading && messages.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : messages.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chat_bubble_outline,
+                                size: 48, color: Colors.grey[400]),
+                            const SizedBox(height: 8),
+                            Text('No messages yet',
+                                style: TextStyle(color: Colors.grey[500])),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: messages.length,
+                        itemBuilder: (_, i) {
+                          final msg = messages[i];
+                          return _MessageBubble(
+                            msg: msg,
+                            onRetry: msg.status == MessageStatus.failed
+                                ? () => ref
+                                    .read(chatRoomProvider(widget.roomId).notifier)
+                                    .retryMessage(msg.id)
+                                : null,
+                          );
+                        },
+                      ),
           ),
 
           // Input bar
@@ -211,7 +269,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     icon: const Icon(Icons.attach_file),
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Image sharing coming soon')),
+                        const SnackBar(
+                            content: Text('Image sharing coming soon')),
                       );
                     },
                   ),
@@ -226,7 +285,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
                       ),
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
@@ -236,7 +296,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   CircleAvatar(
                     backgroundColor: const Color(0xFF16A34A),
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      icon: const Icon(Icons.send,
+                          color: Colors.white, size: 20),
                       onPressed: _sendMessage,
                     ),
                   ),
@@ -257,130 +318,120 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-class _ChatMessage {
-  final String? text;
-  final bool isMe;
-  final String senderName;
-  final String time;
-  final bool isOffer;
-  final int? offerPrice;
-  final String? offerUnit;
-
-  const _ChatMessage({
-    this.text,
-    required this.isMe,
-    required this.senderName,
-    required this.time,
-    this.isOffer = false,
-    this.offerPrice,
-    this.offerUnit,
-  });
-}
-
 class _MessageBubble extends StatelessWidget {
-  final _ChatMessage msg;
-  const _MessageBubble({required this.msg});
+  final ChatMessageModel msg;
+  final VoidCallback? onRetry;
+  const _MessageBubble({required this.msg, this.onRetry});
 
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: msg.isMe ? const Color(0xFF16A34A) : Colors.grey[200],
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: msg.isMe ? const Radius.circular(16) : Radius.zero,
-            bottomRight: msg.isMe ? Radius.zero : const Radius.circular(16),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Text(
-              msg.text!,
-              style: TextStyle(
-                color: msg.isMe ? Colors.white : Colors.black87,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              msg.time,
-              style: TextStyle(
-                fontSize: 10,
-                color: msg.isMe ? Colors.white60 : Colors.grey[500],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _statusIcon(MessageStatus status) {
+    switch (status) {
+      case MessageStatus.pending:
+        return const Icon(Icons.schedule, size: 12, color: Colors.white60);
+      case MessageStatus.sent:
+        return const Icon(Icons.done, size: 12, color: Colors.white70);
+      case MessageStatus.delivered:
+        return const Icon(Icons.done_all, size: 12, color: Colors.white70);
+      case MessageStatus.read:
+        return Icon(Icons.done_all, size: 12, color: Colors.blue[200]);
+      case MessageStatus.failed:
+        return const Icon(Icons.error_outline, size: 12, color: Colors.red);
+    }
   }
-}
 
-class _OfferCard extends StatelessWidget {
-  final _ChatMessage msg;
-  const _OfferCard({required this.msg});
+  Widget _statusIconGrey(MessageStatus status) {
+    switch (status) {
+      case MessageStatus.pending:
+        return Icon(Icons.schedule, size: 12, color: Colors.grey[400]);
+      case MessageStatus.sent:
+        return Icon(Icons.done, size: 12, color: Colors.grey[400]);
+      case MessageStatus.delivered:
+        return Icon(Icons.done_all, size: 12, color: Colors.grey[400]);
+      case MessageStatus.read:
+        return Icon(Icons.done_all, size: 12, color: Colors.blue[400]);
+      case MessageStatus.failed:
+        return const Icon(Icons.error_outline, size: 12, color: Colors.red);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.orange[300]!),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.orange[50],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.local_offer, color: Colors.orange, size: 20),
-              const SizedBox(width: 8),
-              Text('${msg.senderName} made an offer',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            ],
+    final isMe = msg.isMe;
+    final h = msg.createdAt.hour > 12
+        ? msg.createdAt.hour - 12
+        : (msg.createdAt.hour == 0 ? 12 : msg.createdAt.hour);
+    final m = msg.createdAt.minute.toString().padLeft(2, '0');
+    final ap = msg.createdAt.hour >= 12 ? 'PM' : 'AM';
+    final timeStr = '$h:$m $ap';
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onTap: msg.status == MessageStatus.failed ? onRetry : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75),
+          decoration: BoxDecoration(
+            color: msg.status == MessageStatus.failed
+                ? Colors.red[50]
+                : (isMe ? const Color(0xFF16A34A) : Colors.grey[200]),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft:
+                  isMe ? const Radius.circular(16) : Radius.zero,
+              bottomRight:
+                  isMe ? Radius.zero : const Radius.circular(16),
+            ),
+            border: msg.status == MessageStatus.failed
+                ? Border.all(color: Colors.red[200]!)
+                : null,
           ),
-          const SizedBox(height: 12),
-          Text(
-            '₨ ${msg.offerPrice}/${msg.offerUnit}',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.orange[800]),
-          ),
-          const SizedBox(height: 12),
-          Row(
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Offer rejected'), backgroundColor: Colors.red),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Reject'),
+              Text(
+                msg.message,
+                style: TextStyle(
+                  color: msg.status == MessageStatus.failed
+                      ? Colors.red[900]
+                      : (isMe ? Colors.white : Colors.black87),
+                  fontSize: 14,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Offer accepted! 🤝'), backgroundColor: Colors.green),
-                    );
-                  },
-                  child: const Text('Accept'),
-                ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: msg.status == MessageStatus.failed
+                          ? Colors.red[300]
+                          : (isMe ? Colors.white60 : Colors.grey[500]),
+                    ),
+                  ),
+                  if (isMe) ...[
+                    const SizedBox(width: 4),
+                    isMe && msg.status != MessageStatus.failed
+                        ? _statusIcon(msg.status)
+                        : _statusIconGrey(msg.status),
+                  ],
+                  if (msg.status == MessageStatus.failed) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      'Tap to retry',
+                      style: TextStyle(fontSize: 10, color: Colors.red[400]),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
-          Text(msg.time, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-        ],
+        ),
       ),
     );
   }

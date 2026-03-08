@@ -30,6 +30,13 @@ class MockService {
     return simulate(MockData.users[role] ?? MockData.users['customer']!);
   }
 
+  /// Login by user ID — used for restoring persisted sessions
+  Future<UserModel?> loginById(String userId) {
+    final user = MockData.users.values.where((u) => u.id == userId).firstOrNull;
+    if (user != null) return simulate(user);
+    return simulate(null);
+  }
+
   /// Verify OTP — checks per-phone OTP, then falls back to universal 123456
   Future<bool> verifyOtp(String otp, {String? phone}) {
     if (phone != null) {

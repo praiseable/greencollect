@@ -160,7 +160,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('support@greencollect.pk')),
+                      const SnackBar(content: Text('support@kabariya.pk')),
                     );
                   },
                 ),

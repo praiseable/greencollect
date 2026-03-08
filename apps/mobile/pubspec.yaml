@@ -1,4 +1,4 @@
-name: greencollect
+name: kabariya
 description: Geo-Franchise Marketplace - Pakistan Edition
 publish_to: 'none'
 version: 1.0.0+1
@@ -27,6 +27,8 @@ dependencies:
 
   # Storage
   shared_preferences: ^2.2.2
+  sqflite: ^2.3.2
+  path_provider: ^2.1.2
 
   # Networking
   dio: ^5.4.1
@@ -37,6 +39,12 @@ dependencies:
 
   # Charts
   fl_chart: ^0.66.2
+
+  # Connectivity
+  connectivity_plus: ^5.0.2
+
+  # Image Picker
+  image_picker: ^1.0.7
 
   # Utilities
   uuid: ^4.3.3

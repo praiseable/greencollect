@@ -59,9 +59,9 @@ class WalletScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '₨ 12,500',
-                    style: TextStyle(
+                  Text(
+                    '₨ ${user?.balancePkr.toStringAsFixed(0) ?? "0"}',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
