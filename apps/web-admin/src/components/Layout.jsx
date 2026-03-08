@@ -17,12 +17,22 @@ const navItems = [
     children: [
       { to: '/catalog/categories', label: 'Categories' },
       { to: '/catalog/product-types', label: 'Product Types' },
+      { to: '/catalog/units', label: 'Units' },
     ],
   },
   { to: '/listings', label: 'Listings', icon: FiList },
   { to: '/geo-zones', label: 'Geo Zones', icon: FiMapPin },
-  { to: '/translations', label: 'Translations', icon: FiGlobe },
+  {
+    label: 'Localization',
+    icon: FiGlobe,
+    children: [
+      { to: '/languages', label: 'Languages' },
+      { to: '/translations', label: 'Translations' },
+      { to: '/countries', label: 'Countries' },
+    ],
+  },
   { to: '/currencies', label: 'Currencies', icon: FiDollarSign },
+  { to: '/payments', label: 'Payments', icon: FiSettings },
   { to: '/subscriptions', label: 'Subscriptions', icon: FiCreditCard },
   { to: '/analytics', label: 'Analytics', icon: FiBarChart2 },
   { to: '/notifications', label: 'Notifications', icon: FiBell },

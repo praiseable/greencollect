@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { FiMenu, FiX, FiBell, FiPlus, FiUser, FiLogOut, FiSearch } from 'react-icons/fi';
+import { FiMenu, FiX, FiBell, FiPlus, FiUser, FiLogOut, FiSearch, FiMessageSquare } from 'react-icons/fi';
 import useAuthStore from '../store/authStore';
 
 export default function Navbar() {
@@ -56,13 +56,22 @@ export default function Navbar() {
                 <Link to="/create-listing" className="btn-primary flex items-center gap-1.5 text-sm !py-2 !px-4">
                   <FiPlus size={16} /> Post Listing
                 </Link>
-                <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-gray-700">
+                <Link to="/transactions" className="text-gray-600 hover:text-gray-900 text-sm font-medium px-2 py-2">
+                  Deals
+                </Link>
+                <Link to="/wallet" className="text-gray-600 hover:text-gray-900 text-sm font-medium px-2 py-2">
+                  Wallet
+                </Link>
+                <Link to="/chat" className="relative p-2 text-gray-500 hover:text-gray-700" title="Chat">
+                  <FiMessageSquare size={20} />
+                </Link>
+                <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-gray-700" title="Notifications">
                   <FiBell size={20} />
                 </Link>
-                <Link to="/dashboard" className="p-2 text-gray-500 hover:text-gray-700">
+                <Link to="/dashboard" className="p-2 text-gray-500 hover:text-gray-700" title="Dashboard">
                   <FiUser size={20} />
                 </Link>
-                <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500">
+                <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500" title="Logout">
                   <FiLogOut size={18} />
                 </button>
               </>
@@ -94,6 +103,10 @@ export default function Navbar() {
               <>
                 <Link to="/create-listing" className="block py-2 text-primary-600 font-medium" onClick={() => setMenuOpen(false)}>+ Post Listing</Link>
                 <Link to="/dashboard" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+                <Link to="/transactions" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Transactions</Link>
+                <Link to="/wallet" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Wallet</Link>
+                <Link to="/chat" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Chat</Link>
+                <Link to="/subscriptions" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Subscription</Link>
                 <Link to="/notifications" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Notifications</Link>
                 <Link to="/profile" className="block py-2 text-gray-700" onClick={() => setMenuOpen(false)}>Profile</Link>
                 <button onClick={handleLogout} className="block w-full text-left py-2 text-red-500">Logout</button>

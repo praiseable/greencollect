@@ -58,6 +58,7 @@ app.use('/api/translations', require('./routes/translations.routes'));
 app.use('/api/notifications', require('./routes/notifications.routes'));
 app.use('/api/subscriptions', require('./routes/subscriptions.routes'));
 app.use('/api/payments', require('./routes/payments.routes'));
+app.use('/api/transactions', require('./routes/transactions.routes'));
 app.use('/api/chat', require('./routes/chat.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));

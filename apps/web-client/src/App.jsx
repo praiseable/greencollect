@@ -13,6 +13,9 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
 import Subscriptions from './pages/Subscriptions';
+import Transactions from './pages/Transactions';
+import Wallet from './pages/Wallet';
+import Chat from './pages/Chat';
 import useAuthStore from './store/authStore';
 
 function PrivateRoute({ children }) {
@@ -41,6 +44,10 @@ function App() {
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
           <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
           <Route path="/subscriptions" element={<PrivateRoute><Subscriptions /></PrivateRoute>} />
+          <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
+          <Route path="/wallet" element={<PrivateRoute><Wallet /></PrivateRoute>} />
+          <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />
+          <Route path="/chat/:roomId" element={<PrivateRoute><Chat /></PrivateRoute>} />
         </Route>
       </Routes>
     </Router>

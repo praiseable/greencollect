@@ -9,6 +9,10 @@ import Listings from './pages/Listings';
 import GeoZones from './pages/GeoZones';
 import Translations from './pages/Translations';
 import Currencies from './pages/Currencies';
+import Languages from './pages/Languages';
+import Units from './pages/Units';
+import Countries from './pages/Countries';
+import Payments from './pages/Payments';
 import Subscriptions from './pages/Subscriptions';
 import Analytics from './pages/Analytics';
 import Notifications from './pages/Notifications';
@@ -29,10 +33,14 @@ export default function App() {
         <Route path="users" element={<Users />} />
         <Route path="catalog/categories" element={<Categories />} />
         <Route path="catalog/product-types" element={<ProductTypes />} />
+        <Route path="catalog/units" element={<Units />} />
         <Route path="listings" element={<Listings />} />
         <Route path="geo-zones" element={<GeoZones />} />
+        <Route path="languages" element={<Languages />} />
         <Route path="translations" element={<Translations />} />
         <Route path="currencies" element={<Currencies />} />
+        <Route path="countries" element={<Countries />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="subscriptions" element={<Subscriptions />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="notifications" element={<Notifications />} />

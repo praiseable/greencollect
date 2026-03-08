@@ -12,3 +12,15 @@ dist/
 *.log
 package-lock.json
 mnt/
+
+# Mobile build artifacts
+apps/mobile/build/
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+
+# Temp files from testing
+screenshot_*.png
+ui_*.xml
+*.xml.bak
