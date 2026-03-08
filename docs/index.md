@@ -16,12 +16,11 @@ Welcome to the GreenCollect documentation! This is your complete guide to unders
   - Mobile app guide
 
 ### For Developers
-- **[README](../README.md)** — Project overview, setup, and deployment
-  - Architecture
-  - Tech stack
-  - Quick start guide
-  - Development setup
-  - Deployment instructions
+- **[Project README](../README.md)** — Project overview, setup, and deployment
+- **[Backend README](../backend/README.md)** — API endpoints, database, WebSocket events
+- **[Web Client README](../apps/web-client/README.md)** — Pages, routes, map integration
+- **[Web Admin README](../apps/web-admin/README.md)** — Admin pages, sidebar, login
+- **[Mobile App README](../apps/mobile/README.md)** — Flutter build, test accounts, APK
 
 ### For Product Managers
 - **[Product Overview](./PRODUCT_OVERVIEW.md)** — Complete product description
@@ -31,6 +30,14 @@ Welcome to the GreenCollect documentation! This is your complete guide to unders
   - Features and capabilities
   - Roadmap
 
+### Technical References
+- **[Database Persistence](./DATABASE_PERSISTENCE.md)** — Data safety guarantees
+- **[Validation Checklist](./VALIDATION_CHECKLIST.md)** — Requirements compliance tracking
+
+### AI Development Prompts
+- **[Full-Stack Specification](./prompts/cursor_prompt.md)** — Master prompt for entire platform
+- **[Mobile App Specification](./prompts/android_avd_prompt.md)** — Flutter AVD build specification
+
 ---
 
 ## 🚀 Quick Links
@@ -39,6 +46,13 @@ Welcome to the GreenCollect documentation! This is your complete guide to unders
 - [Installation Guide](../README.md#quick-start)
 - [User Registration](./USER_MANUAL.md#creating-an-account)
 - [First Listing](./USER_MANUAL.md#creating-a-listing)
+- [Admin Login](../apps/web-admin/README.md#-admin-login)
+
+### Per-Project Setup
+- [Backend Setup](../backend/README.md#-quick-start)
+- [Web Client Setup](../apps/web-client/README.md#-quick-start)
+- [Web Admin Setup](../apps/web-admin/README.md#-quick-start)
+- [Mobile App Setup](../apps/mobile/README.md#-quick-start)
 
 ### Key Features
 - [Interactive Maps](./USER_MANUAL.md#map-view)
@@ -49,7 +63,7 @@ Welcome to the GreenCollect documentation! This is your complete guide to unders
 ### Deployment
 - [Production Deployment](../README.md#deployment)
 - [Environment Variables](../README.md#environment-variables)
-- [SSL Configuration](../README.md#deployment)
+- [Database Safety](./DATABASE_PERSISTENCE.md)
 
 ---
 
@@ -72,16 +86,30 @@ Welcome to the GreenCollect documentation! This is your complete guide to unders
 
 ```
 docs/
-├── index.md              # This file (documentation hub)
-├── USER_MANUAL.md        # Complete user guide
-└── PRODUCT_OVERVIEW.md   # Product description and architecture
+├── index.md                  # This file (documentation hub)
+├── PRODUCT_OVERVIEW.md       # Product description and architecture
+├── USER_MANUAL.md            # Complete user guide
+├── DATABASE_PERSISTENCE.md   # Data safety guarantees
+├── VALIDATION_CHECKLIST.md   # Requirements compliance
+└── prompts/                  # AI development prompts
+    ├── cursor_prompt.md      # Full-stack specification
+    └── android_avd_prompt.md # Flutter mobile app specification
+```
+
+**Per-project docs live in their respective folders:**
+
+```
+backend/README.md             # Backend API docs
+apps/web-client/README.md     # Web client docs
+apps/web-admin/README.md      # Admin portal docs
+apps/mobile/README.md         # Mobile app docs
 ```
 
 ---
 
 ## 🆘 Need Help?
 
-- **User Support**: See [User Manual - Troubleshooting](./USER_MANUAL.md#troubleshooting)
+- **User Support**: See [User Manual — Troubleshooting](./USER_MANUAL.md#troubleshooting)
 - **Technical Issues**: Open a [GitHub Issue](https://github.com/praiseable/greencollect/issues)
 - **Email Support**: support@greencollect.pk
 

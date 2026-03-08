@@ -18,8 +18,8 @@
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
+- [Documentation](#documentation)
 - [Deployment](#deployment)
-- [User Manual](#user-manual)
 - [API Documentation](#api-documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -60,12 +60,14 @@
 
 - ✅ Dashboard with analytics and statistics
 - ✅ Manage users, roles, and permissions
-- ✅ Configure categories, product types, and attributes
+- ✅ Configure categories, product types, units, and attributes
 - ✅ Manage geo-zones (countries, provinces, cities)
 - ✅ Translation management (add/edit UI strings)
 - ✅ Currency and exchange rate management
+- ✅ Language & country configuration
+- ✅ Payment gateway management
 - ✅ Subscription plan configuration
-- ✅ Audit logs and system monitoring
+- ✅ System notifications and audit logs
 
 ### Technical Features
 
@@ -84,43 +86,31 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Client Applications                        │
+│                    Client Applications                       │
 ├──────────────────┬──────────────────┬───────────────────────┤
 │  Mobile App      │  Web Client      │  Web Admin            │
 │  (Flutter)       │  (React.js)      │  (React.js)           │
-│  Android + iOS   │  Public Portal  │  Admin Dashboard      │
-└────────┬─────────┴────────┬──────────┴───────────┬──────────┘
-         │                  │                       │
-         └──────────────────┼───────────────────────┘
+│  Android + iOS   │  Public Portal   │  Admin Dashboard      │
+└────────┬─────────┴────────┬─────────┴───────────┬───────────┘
+         │                  │                      │
+         └──────────────────┼──────────────────────┘
                             │
-         ┌──────────────────▼───────────────────────┐
-         │         Backend API (Express.js)          │
-         │  ┌────────────────────────────────────┐ │
-         │  │  REST API + WebSocket (Socket.io)   │ │
-         │  │  Authentication (JWT + OTP)          │ │
-         │  │  File Uploads (Multer)              │ │
-         │  └────────────────────────────────────┘ │
-         └────────┬─────────────────────────────────┘
+         ┌──────────────────▼──────────────────────┐
+         │         Backend API (Express.js)         │
+         │  ┌───────────────────────────────────┐   │
+         │  │  REST API + WebSocket (Socket.io)  │  │
+         │  │  Authentication (JWT + OTP)         │  │
+         │  │  File Uploads (Multer)             │  │
+         │  └───────────────────────────────────┘   │
+         └────────┬────────────────────────────────┘
                   │
     ┌─────────────┼─────────────┐
     │             │             │
 ┌───▼───┐   ┌────▼────┐   ┌───▼────┐
-│PostgreSQL│  │  Redis  │   │  S3    │
-│+ PostGIS│  │  Cache  │   │Storage │
-└─────────┘  └─────────┘   └────────┘
+│PostgreSQL│  │  Redis  │  │  S3    │
+│+ PostGIS│  │  Cache  │  │Storage │
+└─────────┘  └─────────┘  └────────┘
 ```
-
-### Database Schema Highlights
-
-- **Users & Roles**: Multi-role system (SUPER_ADMIN, ADMIN, COLLECTION_MANAGER, DEALER, BUYER)
-- **Listings**: Product listings with geo-coordinates, images, attributes, pricing
-- **Geo-Zones**: Hierarchical zones (Country → Province → City → Local Area)
-- **Categories**: Dynamic category tree with translations
-- **Product Types**: Admin-managed product types with EAV (Entity-Attribute-Value) attributes
-- **Transactions**: Order management with digital bonds
-- **Notifications**: Real-time notification system
-- **Subscriptions**: Plan-based access control
-- **Currencies & Languages**: Multi-currency and multi-language support
 
 ---
 
@@ -148,23 +138,50 @@
 
 ```
 gc-app/
-├── apps/
-│   ├── mobile/              # Flutter mobile app (Android + iOS)
-│   ├── web-client/           # React.js public web portal
-│   └── web-admin/            # React.js admin dashboard
-├── backend/                  # Express.js API server
+├── README.md                   ← You are here
+│
+├── docs/                        # Shared documentation
+│   ├── index.md                 # Documentation hub (GitHub Pages)
+│   ├── PRODUCT_OVERVIEW.md      # Product description & architecture
+│   ├── USER_MANUAL.md           # End-user guide (buyers, sellers, admins)
+│   ├── DATABASE_PERSISTENCE.md  # Data safety & persistence guarantees
+│   ├── VALIDATION_CHECKLIST.md  # Requirements compliance tracking
+│   └── prompts/                 # AI development prompts
+│       ├── cursor_prompt.md     # Full-stack specification
+│       └── android_avd_prompt.md# Flutter mobile app specification
+│
+├── backend/                     # Express.js API server
+│   ├── README.md                # Backend-specific docs & API reference
 │   ├── src/
-│   │   ├── routes/          # API route handlers
-│   │   ├── middleware/      # Auth, validation, etc.
-│   │   ├── services/        # Business logic
-│   │   └── index.js         # Entry point
+│   │   ├── routes/              # API route handlers (18 modules)
+│   │   ├── middleware/          # Auth, validation
+│   │   ├── services/            # Business logic
+│   │   └── index.js             # Entry point
 │   └── prisma/
-│       ├── schema.prisma    # Database schema
-│       └── seed.js          # Database seeding
-├── docker-compose.yml        # Development environment
-├── docker-compose.prod.yml   # Production environment
-├── deploy.sh                 # Production deployment script
-└── README.md                 # This file
+│       ├── schema.prisma        # Full database schema
+│       └── seed.js              # Seeding (uses upsert — safe)
+│
+├── apps/
+│   ├── mobile/                  # Flutter mobile app
+│   │   ├── README.md            # Build, test accounts, troubleshooting
+│   │   ├── lib/
+│   │   │   ├── core/            # Models, providers, router, theme
+│   │   │   └── features/        # Screens (16 feature modules)
+│   │   └── android/             # Android native config
+│   │
+│   ├── web-client/              # React.js public portal
+│   │   ├── README.md            # Pages, routes, map integration
+│   │   └── src/                 # Components, pages, store, services
+│   │
+│   └── web-admin/               # React.js admin dashboard
+│       ├── README.md            # Admin pages, sidebar, login
+│       └── src/                 # Components, pages, services
+│
+├── docker-compose.yml           # Development environment
+├── docker-compose.prod.yml      # Production environment
+├── deploy.sh                    # Production deployment script
+└── .github/workflows/
+    └── deploy.yml               # CI/CD via GitHub Actions
 ```
 
 ---
@@ -175,8 +192,6 @@ gc-app/
 
 - **Node.js** 18+ and npm
 - **Docker** and Docker Compose
-- **PostgreSQL** 15+ (or use Docker)
-- **Redis** (or use Docker)
 - **Git**
 
 ### Development Setup
@@ -200,7 +215,7 @@ gc-app/
 
 3. **Run database migrations and seed**
    ```bash
-   docker compose exec backend npx prisma migrate dev
+   docker compose exec backend npx prisma db push
    docker compose exec backend node prisma/seed.js
    ```
 
@@ -215,6 +230,30 @@ After seeding:
 - **Email**: `admin@greencollect.pk`
 - **Password**: `Admin@123`
 - **Role**: SUPER_ADMIN
+
+---
+
+## 📚 Documentation
+
+Each project has its own README with specific instructions:
+
+| Document | Description |
+|----------|-------------|
+| **[Backend README](./backend/README.md)** | API endpoints, database setup, WebSocket events |
+| **[Web Client README](./apps/web-client/README.md)** | Pages, routes, map integration, Docker |
+| **[Web Admin README](./apps/web-admin/README.md)** | Admin pages, sidebar navigation, login |
+| **[Mobile App README](./apps/mobile/README.md)** | Build APK, test accounts, Flutter setup |
+| **[User Manual](./docs/USER_MANUAL.md)** | Complete end-user guide |
+| **[Product Overview](./docs/PRODUCT_OVERVIEW.md)** | Architecture, user flows, roadmap |
+| **[Database Persistence](./docs/DATABASE_PERSISTENCE.md)** | Data safety guarantees |
+| **[Validation Checklist](./docs/VALIDATION_CHECKLIST.md)** | Requirements compliance |
+
+### AI Development Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| **[cursor_prompt.md](./docs/prompts/cursor_prompt.md)** | Full-stack specification (all modules) |
+| **[android_avd_prompt.md](./docs/prompts/android_avd_prompt.md)** | Flutter mobile app specification |
 
 ---
 
@@ -238,18 +277,7 @@ After seeding:
 3. **Configure domain and SSL**
    - Point your domain to the server IP
    - Update `docker-compose.prod.yml` with your domain
-   - Run Certbot for SSL:
-     ```bash
-     docker run -it --rm \
-       -v ./certbot/conf:/etc/letsencrypt \
-       -v ./certbot/www:/var/www/certbot \
-       certbot/certbot certonly --webroot \
-       --webroot-path=/var/www/certbot \
-       --email admin@yourdomain.com \
-       --agree-tos \
-       --no-eff-email \
-       -d yourdomain.com
-     ```
+   - Run Certbot for SSL certificates
 
 4. **Restart services**
    ```bash
@@ -277,66 +305,36 @@ VITE_API_BASE_URL=https://yourdomain.com/api
 
 ---
 
-## 📖 User Manual
+## 📡 API Documentation
 
-See [docs/USER_MANUAL.md](./docs/USER_MANUAL.md) for complete user guides:
-- How to create a listing
-- How to browse and search listings
-- How to use the map view
-- How to contact sellers
-- How to manage your profile
-- Admin portal guide
-
----
-
-## 📚 API Documentation
-
-### Base URL
-- **Development**: `http://localhost:4000/api`
-- **Production**: `https://yourdomain.com/api`
-
-### Authentication
-Most endpoints require a JWT token in the `Authorization` header:
-```
-Authorization: Bearer <your-jwt-token>
-```
+See **[Backend README](./backend/README.md)** for the full API reference.
 
 ### Key Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/auth/register` | Register new user |
-| `POST` | `/auth/login` | Login (email/phone + password or OTP) |
-| `GET` | `/listings` | Browse listings (public) |
-| `POST` | `/listings` | Create listing (authenticated) |
-| `GET` | `/listings/:id` | Get listing details |
-| `GET` | `/categories` | List categories |
-| `GET` | `/geo-zones/cities` | List cities |
-| `GET` | `/notifications` | Get user notifications |
-| `POST` | `/chat/messages` | Send chat message |
-
-See [docs/API.md](./docs/API.md) for complete API reference.
+| `POST` | `/api/auth/register` | Register new user |
+| `POST` | `/api/auth/login` | Login |
+| `GET`  | `/api/listings` | Browse listings (geo-fenced) |
+| `POST` | `/api/listings` | Create listing |
+| `GET`  | `/api/categories` | List categories |
+| `GET`  | `/api/geo-zones/cities` | List cities |
+| `GET`  | `/api/notifications` | Get user notifications |
+| `POST` | `/api/chat/messages` | Send chat message |
 
 ---
 
 ## 🧪 Testing
 
-### Backend Tests
 ```bash
-cd backend
-npm test
-```
+# Backend
+cd backend && npm test
 
-### Mobile App Tests
-```bash
-cd apps/mobile
-flutter test
-```
+# Mobile
+cd apps/mobile && flutter test
 
-### Web Client Tests
-```bash
-cd apps/web-client
-npm test
+# Web Client
+cd apps/web-client && npm test
 ```
 
 ---
@@ -353,7 +351,7 @@ npm test
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -362,14 +360,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Email**: support@greencollect.pk
 - **Website**: https://greencollect.pk
 - **GitHub Issues**: [Report bugs or request features](https://github.com/praiseable/greencollect/issues)
-
----
-
-## 🙏 Acknowledgments
-
-- Built for Pakistan's recycling and waste management industry
-- Designed to support franchise-based supply chain digitization
-- Open-source marketplace platform for sustainable trade
 
 ---
 
