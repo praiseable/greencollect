@@ -13,8 +13,8 @@ class TerritoryScreen extends ConsumerWidget {
             user.role == UserRole.cityFranchise ||
             user.role == UserRole.wholesale);
 
-    // Mock territory data based on user role
-    final territories = _getMockTerritories(user?.role);
+    // Mock territory data based on user id and role
+    final territories = _getMockTerritories(user?.role, userId: user?.id);
     final escalationRules = _getEscalationRules();
 
     return Scaffold(
@@ -432,7 +432,58 @@ class TerritoryScreen extends ConsumerWidget {
 
   // ─── Mock Data ─────────────────────────────────────────
 
-  List<Map<String, dynamic>> _getMockTerritories(dynamic role) {
+  List<Map<String, dynamic>> _getMockTerritories(dynamic role, {String? userId}) {
+    // ── Islamabad area-specific dealers ──
+    if (userId == 'u5') {
+      // Usman — Bara Kahu dealer
+      return [
+        {
+          'name': 'Bara Kahu',
+          'type': 'LOCAL_AREA',
+          'parent': 'Islamabad, Islamabad Capital',
+          'exclusive': true,
+          'subAreas': <String>[],
+        },
+      ];
+    } else if (userId == 'u6') {
+      // Tariq — G-6 dealer
+      return [
+        {
+          'name': 'G-6',
+          'type': 'LOCAL_AREA',
+          'parent': 'Islamabad, Islamabad Capital',
+          'exclusive': true,
+          'subAreas': <String>[],
+        },
+      ];
+    } else if (userId == 'u7') {
+      // Kashif — G-8 dealer
+      return [
+        {
+          'name': 'G-8',
+          'type': 'LOCAL_AREA',
+          'parent': 'Islamabad, Islamabad Capital',
+          'exclusive': true,
+          'subAreas': <String>[],
+        },
+      ];
+    } else if (userId == 'u8') {
+      // Zubair — Islamabad city franchise
+      return [
+        {
+          'name': 'Islamabad',
+          'type': 'CITY',
+          'parent': 'Islamabad Capital',
+          'exclusive': true,
+          'subAreas': [
+            'Bara Kahu', 'G-6', 'G-8', 'F-6', 'F-7', 'F-8',
+            'G-9', 'G-10', 'G-11', 'I-8', 'I-9', 'I-10', 'Blue Area',
+          ],
+        },
+      ];
+    }
+
+    // ── Original accounts (fallback by role) ──
     if (role == UserRole.localDealer) {
       return [
         {

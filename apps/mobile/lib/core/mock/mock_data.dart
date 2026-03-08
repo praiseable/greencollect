@@ -7,13 +7,17 @@ import '../models/subscription.model.dart';
 
 class MockData {
   // ── AUTH ──────────────────────────────────────────────────
-  // 4 test accounts — each has a unique phone and OTP
+  // 8 test accounts — 4 original + 4 Islamabad area-based
   //
-  //  #  Phone          Role            OTP
-  //  1  03001234567    Customer        111111
-  //  2  03219876543    Local Dealer    222222
-  //  3  03335551234    City Franchise  333333
-  //  4  03451112233    Wholesale       444444
+  //  #  Phone          Role              OTP     Area
+  //  1  03001234567    Customer          111111  Karachi
+  //  2  03219876543    Local Dealer      222222  Korangi, Karachi
+  //  3  03335551234    City Franchise    333333  Karachi
+  //  4  03451112233    Wholesale         444444  Lahore
+  //  5  03001110001    Local Dealer      550001  Bara Kahu, Islamabad
+  //  6  03001110002    Local Dealer      660002  G-6, Islamabad
+  //  7  03001110003    Local Dealer      770003  G-8, Islamabad
+  //  8  03001110004    City Franchise    880004  Islamabad (City-level)
   //
   static final users = {
     'customer': UserModel(
@@ -69,6 +73,63 @@ class MockData {
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 30,
     ),
+    // ── Islamabad Area-Bounded Accounts ──
+    'barakahu_dealer': UserModel(
+      id: 'u5',
+      name: 'Usman BaraKahu',
+      nameUrdu: 'عثمان بارہ کہو',
+      phone: '+92 300-1110001',
+      email: 'barakahu@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Islamabad',
+      kycStatus: KycStatus.approved,
+      languageCode: 'ur',
+      zone: 'Bara Kahu',
+      subscriptionStatus: SubscriptionStatus.active,
+      subscriptionDaysLeft: 25,
+    ),
+    'g6_dealer': UserModel(
+      id: 'u6',
+      name: 'Tariq G-6 Dealer',
+      nameUrdu: 'طارق جی-6 ڈیلر',
+      phone: '+92 300-1110002',
+      email: 'g6dealer@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Islamabad',
+      kycStatus: KycStatus.approved,
+      languageCode: 'ur',
+      zone: 'G-6',
+      subscriptionStatus: SubscriptionStatus.active,
+      subscriptionDaysLeft: 20,
+    ),
+    'g8_dealer': UserModel(
+      id: 'u7',
+      name: 'Kashif G-8 Dealer',
+      nameUrdu: 'کاشف جی-8 ڈیلر',
+      phone: '+92 300-1110003',
+      email: 'g8dealer@marketplace.pk',
+      role: UserRole.localDealer,
+      city: 'Islamabad',
+      kycStatus: KycStatus.approved,
+      languageCode: 'ur',
+      zone: 'G-8',
+      subscriptionStatus: SubscriptionStatus.active,
+      subscriptionDaysLeft: 15,
+    ),
+    'isb_franchise': UserModel(
+      id: 'u8',
+      name: 'Zubair Islamabad Franchise',
+      nameUrdu: 'زبیر اسلام آباد فرنچائز',
+      phone: '+92 300-1110004',
+      email: 'isb.franchise@marketplace.pk',
+      role: UserRole.cityFranchise,
+      city: 'Islamabad',
+      kycStatus: KycStatus.approved,
+      languageCode: 'ur',
+      zone: 'Islamabad (All Areas)',
+      subscriptionStatus: SubscriptionStatus.active,
+      subscriptionDaysLeft: 28,
+    ),
   };
 
   // Phone → role mapping for login
@@ -85,6 +146,19 @@ class MockData {
     '03451112233': 'wholesale',
     '3451112233': 'wholesale',
     '+923451112233': 'wholesale',
+    // Islamabad accounts
+    '03001110001': 'barakahu_dealer',
+    '3001110001': 'barakahu_dealer',
+    '+923001110001': 'barakahu_dealer',
+    '03001110002': 'g6_dealer',
+    '3001110002': 'g6_dealer',
+    '+923001110002': 'g6_dealer',
+    '03001110003': 'g8_dealer',
+    '3001110003': 'g8_dealer',
+    '+923001110003': 'g8_dealer',
+    '03001110004': 'isb_franchise',
+    '3001110004': 'isb_franchise',
+    '+923001110004': 'isb_franchise',
   };
 
   // Phone → OTP mapping
@@ -101,7 +175,122 @@ class MockData {
     '03451112233': '444444',
     '3451112233': '444444',
     '+923451112233': '444444',
+    // Islamabad OTPs
+    '03001110001': '550001',
+    '3001110001': '550001',
+    '+923001110001': '550001',
+    '03001110002': '660002',
+    '3001110002': '660002',
+    '+923001110002': '660002',
+    '03001110003': '770003',
+    '3001110003': '770003',
+    '+923001110003': '770003',
+    '03001110004': '880004',
+    '3001110004': '880004',
+    '+923001110004': '880004',
   };
+
+  // ── ISLAMABAD AREA LISTINGS ─────────────────────────────
+  // These listings are geo-fenced to specific Islamabad areas
+  // to test area-bounded dealer visibility
+  static final islamabadListings = [
+    ListingModel(
+      id: 'l-isb-1',
+      title: 'Copper Cable Waste',
+      titleUrdu: 'تانبے کی کیبل کا فضلہ',
+      description: 'Old copper cables from telecom tower maintenance in Bara Kahu.',
+      descUrdu: 'بارہ کہو میں ٹیلی کام ٹاور کی دیکھ بھال سے پرانی تانبے کی کیبلیں',
+      pricePkr: 780,
+      unit: 'kg',
+      quantity: 120,
+      categoryId: 'c1',
+      categoryName: 'Metals',
+      categoryNameUr: 'دھاتیں',
+      sellerName: 'Telecom Salvage Co.',
+      sellerPhone: '+92 300-5550001',
+      city: 'Islamabad',
+      area: 'Bara Kahu',
+      latitude: 33.7632,
+      longitude: 73.1217,
+      status: ListingStatus.active,
+      visibilityLevel: VisibilityLevel.local,
+      images: ['https://picsum.photos/seed/copper-cable/400/300'],
+      daysAgo: 1,
+      interestedCount: 1,
+    ),
+    ListingModel(
+      id: 'l-isb-2',
+      title: 'Office Furniture Scrap',
+      titleUrdu: 'دفتری فرنیچر کا کباڑ',
+      description: 'Used office furniture from a government building in G-6.',
+      descUrdu: 'جی-6 میں سرکاری عمارت سے استعمال شدہ فرنیچر',
+      pricePkr: 200,
+      unit: 'piece',
+      quantity: 50,
+      categoryId: 'c6',
+      categoryName: 'Furniture',
+      categoryNameUr: 'فرنیچر',
+      sellerName: 'Govt Office Clearance',
+      sellerPhone: '+92 300-5550002',
+      city: 'Islamabad',
+      area: 'G-6',
+      latitude: 33.7215,
+      longitude: 73.0578,
+      status: ListingStatus.active,
+      visibilityLevel: VisibilityLevel.local,
+      images: ['https://picsum.photos/seed/furniture-g6/400/300'],
+      daysAgo: 2,
+      interestedCount: 3,
+    ),
+    ListingModel(
+      id: 'l-isb-3',
+      title: 'Electronic Waste - PCBs',
+      titleUrdu: 'الیکٹرانک کباڑ - پی سی بی',
+      description: 'PCB boards and old computer parts from IT office in G-8.',
+      descUrdu: 'جی-8 میں آئی ٹی دفتر سے پی سی بی بورڈز اور پرانے کمپیوٹر پارٹس',
+      pricePkr: 450,
+      unit: 'kg',
+      quantity: 80,
+      categoryId: 'c4',
+      categoryName: 'Electronics',
+      categoryNameUr: 'الیکٹرانکس',
+      sellerName: 'IT Hub Recyclers',
+      sellerPhone: '+92 300-5550003',
+      city: 'Islamabad',
+      area: 'G-8',
+      latitude: 33.6960,
+      longitude: 73.0478,
+      status: ListingStatus.active,
+      visibilityLevel: VisibilityLevel.local,
+      images: ['https://picsum.photos/seed/electronics-g8/400/300'],
+      daysAgo: 3,
+      interestedCount: 2,
+    ),
+    ListingModel(
+      id: 'l-isb-4',
+      title: 'Newspaper & Magazine Bundle',
+      titleUrdu: 'اخبارات اور رسالے کا بنڈل',
+      description: 'Old newspapers and magazines from library in Islamabad.',
+      descUrdu: 'اسلام آباد کی لائبریری سے پرانے اخبارات اور رسالے',
+      pricePkr: 35,
+      unit: 'kg',
+      quantity: 500,
+      categoryId: 'c3',
+      categoryName: 'Paper & Cardboard',
+      categoryNameUr: 'کاغذ اور گتہ',
+      sellerName: 'National Library',
+      sellerPhone: '+92 300-5550004',
+      city: 'Islamabad',
+      area: 'F-6',
+      latitude: 33.7294,
+      longitude: 73.0753,
+      status: ListingStatus.active,
+      visibilityLevel: VisibilityLevel.city,
+      images: ['https://picsum.photos/seed/paper-isb/400/300'],
+      daysAgo: 5,
+      interestedCount: 0,
+    ),
+  ];
 
   // ── CATEGORIES ────────────────────────────────────────────
   static final categories = [

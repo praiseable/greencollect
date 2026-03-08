@@ -142,7 +142,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     '03001234567 → 111111\n'
                     '03219876543 → 222222\n'
                     '03335551234 → 333333\n'
-                    '03451112233 → 444444',
+                    '03451112233 → 444444\n'
+                    '── Islamabad ──\n'
+                    '03001110001 (BaraKahu) → 550001\n'
+                    '03001110002 (G-6) → 660002\n'
+                    '03001110003 (G-8) → 770003\n'
+                    '03001110004 (ISB Fran) → 880004',
                     style: TextStyle(fontSize: 11, color: Colors.blue[600]),
                     textAlign: TextAlign.center,
                   ),

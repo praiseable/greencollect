@@ -150,32 +150,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 16),
 
               // Test accounts hint
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
-                        const SizedBox(width: 8),
-                        Text('Test Accounts:',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue[700])),
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                            const SizedBox(width: 8),
+                            Text('Test Accounts:',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue[700])),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        _testRow('Customer', '03001234567', '111111'),
+                        _testRow('Dealer (KHI)', '03219876543', '222222'),
+                        _testRow('Franchise (KHI)', '03335551234', '333333'),
+                        _testRow('Wholesale', '03451112233', '444444'),
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 24),
+                          child: Text(
+                            '── Islamabad Area Dealers ──',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                          ),
+                        ),
+                        _testRow('Bara Kahu', '03001110001', '550001'),
+                        _testRow('G-6', '03001110002', '660002'),
+                        _testRow('G-8', '03001110003', '770003'),
+                        _testRow('ISB Franchise', '03001110004', '880004'),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    _testRow('Customer', '03001234567', '111111'),
-                    _testRow('Dealer', '03219876543', '222222'),
-                    _testRow('Franchise', '03335551234', '333333'),
-                    _testRow('Wholesale', '03451112233', '444444'),
-                  ],
+                  ),
                 ),
               ),
             ],

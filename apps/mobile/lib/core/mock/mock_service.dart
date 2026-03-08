@@ -11,10 +11,12 @@ class MockService {
     return data;
   }
 
-  Future<List<ListingModel>> getListings({String? categoryId, String? role}) =>
-      simulate(MockData.listings
-          .where((l) => categoryId == null || l.categoryId == categoryId)
-          .toList());
+  Future<List<ListingModel>> getListings({String? categoryId, String? role}) {
+    final allListings = [...MockData.listings, ...MockData.islamabadListings];
+    return simulate(allListings
+        .where((l) => categoryId == null || l.categoryId == categoryId)
+        .toList());
+  }
 
   /// Login: resolve user by phone first, fall back to role string
   Future<UserModel> login(String phone, String role) {

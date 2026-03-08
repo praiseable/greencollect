@@ -20,7 +20,9 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   final _searchController = TextEditingController();
 
   List<ListingModel> get _filteredListings {
-    var listings = MockData.listings.where((l) {
+    // Combine all listings (original + Islamabad area-specific)
+    final allListings = [...MockData.listings, ...MockData.islamabadListings];
+    var listings = allListings.where((l) {
       final matchesCategory = _selectedCategory == null || l.categoryId == _selectedCategory;
       final matchesSearch = _searchQuery.isEmpty ||
           l.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||

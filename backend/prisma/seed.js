@@ -234,7 +234,7 @@ async function main() {
       { name: 'Gwadar', slug: 'gwadar', lat: 25.1264, lng: 62.3225 },
     ]},
     'Islamabad Capital': { lat: 33.6844, lng: 73.0479, cities: [
-      { name: 'Islamabad', slug: 'islamabad', lat: 33.6844, lng: 73.0479, areas: ['F-6', 'F-7', 'F-8', 'G-9', 'G-10', 'G-11', 'I-8', 'I-9', 'I-10', 'Blue Area'] },
+      { name: 'Islamabad', slug: 'islamabad', lat: 33.6844, lng: 73.0479, areas: ['Bara Kahu', 'G-6', 'G-8', 'F-6', 'F-7', 'F-8', 'G-9', 'G-10', 'G-11', 'I-8', 'I-9', 'I-10', 'Blue Area'] },
     ]},
     'Gilgit-Baltistan': { lat: 35.8026, lng: 74.9832, cities: [
       { name: 'Gilgit', slug: 'gilgit', lat: 35.9208, lng: 74.3144 },
@@ -445,6 +445,11 @@ async function main() {
     { email: 'franchise@marketplace.pk', phone: '+929999990005', firstName: 'Ali', lastName: 'Franchise', role: 'FRANCHISE_OWNER', password: 'Franchise@123', city: 'Lahore', geoZoneId: lahoreZone?.id },
     { email: 'customer@marketplace.pk', phone: '+929999990006', firstName: 'Muhammad', lastName: 'Customer', role: 'CUSTOMER', password: 'Customer@123', city: 'Islamabad', geoZoneId: islamabadZone?.id },
     { email: 'wholesale@marketplace.pk', phone: '+929999990007', firstName: 'Imran', lastName: 'Wholesale', role: 'WHOLESALE_BUYER', password: 'Wholesale@123', city: 'Faisalabad' },
+    // ── Islamabad Test Accounts (4 bounded area dealers) ──
+    { email: 'barakahu@marketplace.pk', phone: '+923001110001', firstName: 'Usman', lastName: 'BaraKahu', role: 'DEALER', password: 'BaraKahu@123', city: 'Islamabad', geoZoneId: null },  // Will be set below
+    { email: 'g6dealer@marketplace.pk', phone: '+923001110002', firstName: 'Tariq', lastName: 'G6-Dealer', role: 'DEALER', password: 'G6Dealer@123', city: 'Islamabad', geoZoneId: null },
+    { email: 'g8dealer@marketplace.pk', phone: '+923001110003', firstName: 'Kashif', lastName: 'G8-Dealer', role: 'DEALER', password: 'G8Dealer@123', city: 'Islamabad', geoZoneId: null },
+    { email: 'isb.franchise@marketplace.pk', phone: '+923001110004', firstName: 'Zubair', lastName: 'Islamabad-Franchise', role: 'FRANCHISE_OWNER', password: 'IsbFranchise@123', city: 'Islamabad', geoZoneId: islamabadZone?.id },
   ];
 
   const userIds = {};
@@ -488,6 +493,13 @@ async function main() {
     { title: 'Aluminum Cans - 50kg', desc: 'Crushed aluminum beverage cans ready for melting.', catId: metalsCat?.id, price: 18000, qty: 50, unit: 'kg', city: 'Lahore', lat: 31.5300, lng: 74.3600, zone: lahoreZone?.id, seller: userIds['dealer@marketplace.pk'] },
     { title: 'Cardboard Boxes - Truckload', desc: 'Large quantity of used cardboard boxes in good condition.', catId: paperCat?.id, price: 12000, qty: 1, unit: 'truck-load', city: 'Faisalabad', lat: 31.4504, lng: 73.1350, zone: null, seller: userIds['franchise@marketplace.pk'] },
     { title: 'Used Tires - 200 Pieces', desc: 'Mixed size used tires suitable for recycling or retreading.', catId: metalsCat?.id, price: 40000, qty: 200, unit: 'piece', city: 'Karachi', lat: 24.8800, lng: 67.0100, zone: karachiZone?.id, seller: userIds['wholesale@marketplace.pk'] || userIds['dealer@marketplace.pk'] },
+    // ── Islamabad Area-Specific Listings (for testing area-bounded dealers) ──
+    { title: 'Copper Cable Waste - Bara Kahu', desc: 'Old copper cables from telecom tower maintenance in Bara Kahu.', catId: copperCat?.id || metalsCat?.id, price: 78000, qty: 120, unit: 'kg', city: 'Islamabad', lat: 33.7632, lng: 73.1217, zone: null, seller: userIds['customer@marketplace.pk'], areaSlug: 'islamabad-bara-kahu' },
+    { title: 'Office Furniture Scrap - G-6', desc: 'Used office furniture from a government building in G-6.', catId: furnitureCat?.id, price: 10000, qty: 50, unit: 'piece', city: 'Islamabad', lat: 33.7215, lng: 73.0578, zone: null, seller: userIds['customer@marketplace.pk'], areaSlug: 'islamabad-g-6' },
+    { title: 'Electronic Waste PCBs - G-8', desc: 'PCB boards and old computer parts from IT office in G-8.', catId: electronicsCat?.id, price: 36000, qty: 80, unit: 'kg', city: 'Islamabad', lat: 33.6960, lng: 73.0478, zone: null, seller: userIds['regional@marketplace.pk'], areaSlug: 'islamabad-g-8' },
+    { title: 'Newspaper Bundle - F-6 Library', desc: 'Old newspapers and magazines from library in F-6, Islamabad.', catId: paperCat?.id, price: 17500, qty: 500, unit: 'kg', city: 'Islamabad', lat: 33.7294, lng: 73.0753, zone: islamabadZone?.id, seller: userIds['regional@marketplace.pk'] },
+    { title: 'Iron Gate Scrap - Bara Kahu', desc: 'Old iron gates and grills collected from renovation in Bara Kahu.', catId: ironCat?.id || metalsCat?.id, price: 45000, qty: 300, unit: 'kg', city: 'Islamabad', lat: 33.7680, lng: 73.1150, zone: null, seller: userIds['customer@marketplace.pk'], areaSlug: 'islamabad-bara-kahu' },
+    { title: 'Plastic Crates - G-6 Market', desc: 'Used plastic vegetable crates from wholesale market in G-6.', catId: plasticsCat?.id, price: 8000, qty: 100, unit: 'piece', city: 'Islamabad', lat: 33.7200, lng: 73.0600, zone: null, seller: userIds['customer@marketplace.pk'], areaSlug: 'islamabad-g-6' },
   ];
 
   const kgUnit = await prisma.unit.findUnique({ where: { slug: 'kg' } });
@@ -495,6 +507,13 @@ async function main() {
     if (!l.catId) continue;
     const unitRecord = await prisma.unit.findUnique({ where: { slug: l.unit } });
     if (!unitRecord) continue;
+
+    // Resolve geoZoneId — use areaSlug if provided, otherwise use zone
+    let resolvedZone = l.zone;
+    if (l.areaSlug) {
+      const areaZone = await prisma.geoZone.findUnique({ where: { slug: l.areaSlug } });
+      resolvedZone = areaZone?.id || islamabadZone?.id;
+    }
 
     const existingListing = await prisma.listing.findFirst({ where: { title: l.title } });
     if (!existingListing) {
@@ -509,7 +528,7 @@ async function main() {
           quantity: l.qty,
           unitId: unitRecord.id,
           sellerId: l.seller,
-          geoZoneId: l.zone || karachiZone?.id,
+          geoZoneId: resolvedZone || karachiZone?.id,
           latitude: l.lat,
           longitude: l.lng,
           cityName: l.city,
@@ -525,7 +544,7 @@ async function main() {
   // 15. WALLETS FOR DEALERS
   // ═══════════════════════════════════════════════
   console.log('  15/17 Wallets...');
-  for (const email of ['dealer@marketplace.pk', 'franchise@marketplace.pk']) {
+  for (const email of ['dealer@marketplace.pk', 'franchise@marketplace.pk', 'barakahu@marketplace.pk', 'g6dealer@marketplace.pk', 'g8dealer@marketplace.pk', 'isb.franchise@marketplace.pk']) {
     if (userIds[email]) {
       await prisma.wallet.upsert({
         where: { userId: userIds[email] },
@@ -723,6 +742,74 @@ async function main() {
     });
   }
 
+  // ── Islamabad Area Dealers + City Franchise ──
+  const baraKahuZone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-bara-kahu' } });
+  const g6Zone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-g-6' } });
+  const g8Zone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-g-8' } });
+
+  const baraKahuUserId = userIds['barakahu@marketplace.pk'];
+  const g6UserId = userIds['g6dealer@marketplace.pk'];
+  const g8UserId = userIds['g8dealer@marketplace.pk'];
+  const isbFranchiseUserId = userIds['isb.franchise@marketplace.pk'];
+
+  // Update geoZoneId on the user records
+  if (baraKahuUserId && baraKahuZone) {
+    await prisma.user.update({ where: { id: baraKahuUserId }, data: { geoZoneId: baraKahuZone.id } });
+  }
+  if (g6UserId && g6Zone) {
+    await prisma.user.update({ where: { id: g6UserId }, data: { geoZoneId: g6Zone.id } });
+  }
+  if (g8UserId && g8Zone) {
+    await prisma.user.update({ where: { id: g8UserId }, data: { geoZoneId: g8Zone.id } });
+  }
+
+  // Usman BaraKahu (DEALER) → exclusive territory: Bara Kahu
+  if (baraKahuUserId && baraKahuZone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: baraKahuUserId, geoZoneId: baraKahuZone.id } },
+      update: { isActive: true, isExclusive: true },
+      create: { userId: baraKahuUserId, geoZoneId: baraKahuZone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+
+  // Tariq G6-Dealer (DEALER) → exclusive territory: G-6
+  if (g6UserId && g6Zone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: g6UserId, geoZoneId: g6Zone.id } },
+      update: { isActive: true, isExclusive: true },
+      create: { userId: g6UserId, geoZoneId: g6Zone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+
+  // Kashif G8-Dealer (DEALER) → exclusive territory: G-8
+  if (g8UserId && g8Zone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: g8UserId, geoZoneId: g8Zone.id } },
+      update: { isActive: true, isExclusive: true },
+      create: { userId: g8UserId, geoZoneId: g8Zone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+
+  // Zubair Islamabad-Franchise (FRANCHISE_OWNER) → city-level: Islamabad + all Islamabad areas
+  if (isbFranchiseUserId && islamabadZone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: isbFranchiseUserId, geoZoneId: islamabadZone.id } },
+      update: { isActive: true, isExclusive: true },
+      create: { userId: isbFranchiseUserId, geoZoneId: islamabadZone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+  // Also give franchise all sub-areas of Islamabad for wider reach
+  const isbSubAreas = [baraKahuZone, g6Zone, g8Zone].filter(Boolean);
+  for (const zone of isbSubAreas) {
+    if (isbFranchiseUserId && zone) {
+      await prisma.dealerTerritory.upsert({
+        where: { userId_geoZoneId: { userId: isbFranchiseUserId, geoZoneId: zone.id } },
+        update: { isActive: true },
+        create: { userId: isbFranchiseUserId, geoZoneId: zone.id, isExclusive: false, assignedBy: userIds['admin@marketplace.pk'] },
+      });
+    }
+  }
+
   // ═══════════════════════════════════════════════
   // 20. TERRITORY NOTIFICATIONS SAMPLE
   // ═══════════════════════════════════════════════
@@ -744,23 +831,60 @@ async function main() {
     }
   }
 
+  // Islamabad territory notifications
+  const isbTerritoryNotifs = [
+    { userId: baraKahuUserId, area: 'Bara Kahu' },
+    { userId: g6UserId, area: 'G-6' },
+    { userId: g8UserId, area: 'G-8' },
+    { userId: isbFranchiseUserId, area: 'Islamabad (City) + Bara Kahu, G-6, G-8' },
+  ];
+  for (const n of isbTerritoryNotifs) {
+    if (n.userId) {
+      const existing = await prisma.notification.findFirst({
+        where: { userId: n.userId, type: 'SYSTEM', title: 'Territory Assigned' },
+      });
+      if (!existing) {
+        await prisma.notification.create({
+          data: {
+            userId: n.userId,
+            type: 'SYSTEM',
+            title: 'Territory Assigned',
+            body: `You have been assigned to manage ${n.area} area in Islamabad.`,
+            data: { area: n.area },
+          },
+        });
+      }
+    }
+  }
+
   console.log('\n✅ Seeding complete! Pakistan marketplace is ready.\n');
   console.log('  Default Logins:');
-  console.log('    Admin:     admin@marketplace.pk / Admin@123456');
-  console.log('    Manager:   manager@marketplace.pk / Manager@123');
-  console.log('    Regional:  regional@marketplace.pk / Regional@123');
-  console.log('    Dealer:    dealer@marketplace.pk / Dealer@123');
-  console.log('    Franchise: franchise@marketplace.pk / Franchise@123');
-  console.log('    Customer:  customer@marketplace.pk / Customer@123');
+  console.log('    Admin:         admin@marketplace.pk / Admin@123456');
+  console.log('    Manager:       manager@marketplace.pk / Manager@123');
+  console.log('    Regional:      regional@marketplace.pk / Regional@123');
+  console.log('    Dealer:        dealer@marketplace.pk / Dealer@123');
+  console.log('    Franchise:     franchise@marketplace.pk / Franchise@123');
+  console.log('    Customer:      customer@marketplace.pk / Customer@123');
+  console.log('    Wholesale:     wholesale@marketplace.pk / Wholesale@123');
+  console.log('');
+  console.log('  ── Islamabad Test Accounts ──');
+  console.log('    Bara Kahu Dealer:   barakahu@marketplace.pk / BaraKahu@123   (Ph: +923001110001)');
+  console.log('    G-6 Dealer:         g6dealer@marketplace.pk / G6Dealer@123   (Ph: +923001110002)');
+  console.log('    G-8 Dealer:         g8dealer@marketplace.pk / G8Dealer@123   (Ph: +923001110003)');
+  console.log('    ISB Franchise:      isb.franchise@marketplace.pk / IsbFranchise@123 (Ph: +923001110004)');
   console.log('');
   console.log('  Escalation Timeline:');
   console.log('    LOCAL → 24h → NEIGHBOR → 48h → CITY → 72h → PROVINCE → 120h → NATIONAL → 168h → PUBLIC');
   console.log('');
   console.log('  Territory Assignments:');
-  console.log('    Ahmed Dealer  → Korangi, SITE, Lyari (Karachi LOCAL_AREA)');
-  console.log('    Ali Franchise → Lahore (CITY) + Johar Town, Gulberg, Model Town');
-  console.log('    Regional Mgr  → Islamabad Capital (PROVINCE)');
-  console.log('    Wholesale     → Punjab (PROVINCE)');
+  console.log('    Ahmed Dealer     → Korangi, SITE, Lyari (Karachi LOCAL_AREA)');
+  console.log('    Ali Franchise    → Lahore (CITY) + Johar Town, Gulberg, Model Town');
+  console.log('    Regional Mgr     → Islamabad Capital (PROVINCE)');
+  console.log('    Wholesale        → Punjab (PROVINCE)');
+  console.log('    Usman BaraKahu   → Bara Kahu (Islamabad LOCAL_AREA) [EXCLUSIVE]');
+  console.log('    Tariq G6-Dealer  → G-6 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
+  console.log('    Kashif G8-Dealer → G-8 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
+  console.log('    Zubair ISB-Fran  → Islamabad (CITY) + Bara Kahu, G-6, G-8');
   console.log('');
 }
 

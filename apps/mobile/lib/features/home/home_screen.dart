@@ -14,7 +14,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider);
     final categories = MockData.categories;
-    final listings = MockData.listings;
+    final listings = [...MockData.listings, ...MockData.islamabadListings];
 
     return Scaffold(
       appBar: AppBar(
