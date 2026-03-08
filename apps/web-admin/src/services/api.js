@@ -91,3 +91,14 @@ export const getListingsByZone = () => api.get('/analytics/listings-by-zone');
 // Platform Config
 export const getPlatformConfig = () => api.get('/admin/platform-config');
 export const updatePlatformConfig = (data) => api.put('/admin/platform-config', data);
+
+// Territories
+export const getTerritories = (params) => api.get('/territories', { params });
+export const getMyTerritories = () => api.get('/territories/my');
+export const getZoneDealers = (zoneId) => api.get(`/territories/zone/${zoneId}`);
+export const assignTerritory = (data) => api.post('/territories', data);
+export const bulkAssignTerritories = (data) => api.post('/territories/bulk', data);
+export const updateTerritory = (id, data) => api.put(`/territories/${id}`, data);
+export const removeTerritory = (id) => api.delete(`/territories/${id}`);
+export const getEscalationRules = () => api.get('/territories/escalation-rules');
+export const updateEscalationRule = (id, data) => api.put(`/territories/escalation-rules/${id}`, data);

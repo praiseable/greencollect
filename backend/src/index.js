@@ -60,6 +60,7 @@ app.use('/api/subscriptions', require('./routes/subscriptions.routes'));
 app.use('/api/payments', require('./routes/payments.routes'));
 app.use('/api/transactions', require('./routes/transactions.routes'));
 app.use('/api/chat', require('./routes/chat.routes'));
+app.use('/api/territories', require('./routes/territories.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));
 
@@ -68,6 +69,7 @@ app.use('/v1/auth', require('./routes/auth.routes'));
 app.use('/v1/listings', require('./routes/listings.routes'));
 app.use('/v1/categories', require('./routes/categories.routes'));
 app.use('/v1/notifications', require('./routes/notifications.routes'));
+app.use('/v1/territories', require('./routes/territories.routes'));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -127,11 +129,28 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found', code: 'NOT_FOUND' } });
 });
 
+// ── Escalation Cron Job (runs every hour) ─────────────────
+const { runEscalation } = require('./services/escalation.service');
+
+function startEscalationCron() {
+  const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  console.log(`⏰ Escalation cron scheduled: every ${INTERVAL_MS / 60000} minutes`);
+  
+  // Run once on startup (after 30s delay to let DB settle)
+  setTimeout(() => runEscalation(io), 30000);
+  
+  // Then every hour
+  setInterval(() => runEscalation(io), INTERVAL_MS);
+}
+
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`🚀 Geo-Franchise Marketplace API running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
   console.log(`   Country: Pakistan (PKR, +92)`);
+  
+  // Start the escalation engine
+  startEscalationCron();
 });
 
 module.exports = { app, server, io };

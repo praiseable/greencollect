@@ -16,6 +16,7 @@ import Payments from './pages/Payments';
 import Subscriptions from './pages/Subscriptions';
 import Analytics from './pages/Analytics';
 import Notifications from './pages/Notifications';
+import Territories from './pages/Territories';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('admin_token');
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="catalog/units" element={<Units />} />
         <Route path="listings" element={<Listings />} />
         <Route path="geo-zones" element={<GeoZones />} />
+        <Route path="territories" element={<Territories />} />
         <Route path="languages" element={<Languages />} />
         <Route path="translations" element={<Translations />} />
         <Route path="currencies" element={<Currencies />} />

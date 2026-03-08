@@ -199,49 +199,89 @@ async function buildGeoFenceWhere(user, options = {}) {
 
   // NATIONAL: same country (already filtered by countryId)
 
+  // ── TERRITORY-BASED ACCESS ──
+  // Dealers with territory assignments can see listings in ALL their assigned zones
+  const territoryZoneIds = [];
+  if (['DEALER', 'FRANCHISE_OWNER', 'REGIONAL_MANAGER', 'WHOLESALE_BUYER'].includes(user.role)) {
+    const territories = await prisma.dealerTerritory.findMany({
+      where: { userId: user.id, isActive: true },
+      select: { geoZoneId: true },
+    });
+    for (const t of territories) {
+      territoryZoneIds.push(t.geoZoneId);
+      // Also include children of territory zones (e.g., city franchise sees all local areas in city)
+      const children = await prisma.geoZone.findMany({
+        where: { parentId: t.geoZoneId, isActive: true },
+        select: { id: true },
+      });
+      territoryZoneIds.push(...children.map(c => c.id));
+      // And grandchildren (province manager sees all areas in all cities)
+      for (const child of children) {
+        const grandchildren = await prisma.geoZone.findMany({
+          where: { parentId: child.id, isActive: true },
+          select: { id: true },
+        });
+        territoryZoneIds.push(...grandchildren.map(gc => gc.id));
+      }
+    }
+  }
+
+  // Merge territory zone IDs with geo-fence zone IDs
+  const allAllowedZoneIds = [...new Set([...allowedZoneIds, ...territoryZoneIds])];
+
   // Build OR conditions for visibility levels
   // Structure: (visibilityLevel = PUBLIC) OR (visibilityLevel = LOCAL AND geoZoneId matches) OR ...
+  const orConditions = [
+    // PUBLIC: everyone can see
+    { visibilityLevel: 'PUBLIC' },
+    // LOCAL: same zone
+    {
+      AND: [
+        { visibilityLevel: 'LOCAL' },
+        { geoZoneId: { in: allAllowedZoneIds } },
+      ],
+    },
+    // NEIGHBOR: same city zones
+    {
+      AND: [
+        { visibilityLevel: 'NEIGHBOR' },
+        { geoZoneId: { in: allAllowedZoneIds } },
+      ],
+    },
+    // CITY: same city
+    {
+      AND: [
+        { visibilityLevel: 'CITY' },
+        { geoZoneId: { in: allAllowedZoneIds } },
+      ],
+    },
+    // PROVINCE: same province
+    {
+      AND: [
+        { visibilityLevel: 'PROVINCE' },
+        { geoZoneId: { in: allAllowedZoneIds } },
+      ],
+    },
+    // NATIONAL: same country
+    {
+      AND: [
+        { visibilityLevel: 'NATIONAL' },
+        { countryId: userCountry || userZone.countryId },
+      ],
+    },
+  ];
+
+  // If dealer has territories, also allow them to see ANY listing in their territory zones
+  // regardless of visibility level (they're the zone manager)
+  if (territoryZoneIds.length > 0) {
+    orConditions.push({
+      geoZoneId: { in: territoryZoneIds },
+    });
+  }
+
   return {
     countryId,
-    OR: [
-      // PUBLIC: everyone can see
-      { visibilityLevel: 'PUBLIC' },
-      // LOCAL: same zone
-      {
-        AND: [
-          { visibilityLevel: 'LOCAL' },
-          { geoZoneId: userZone.id },
-        ],
-      },
-      // NEIGHBOR: same city
-      {
-        AND: [
-          { visibilityLevel: 'NEIGHBOR' },
-          { geoZoneId: { in: allowedZoneIds } },
-        ],
-      },
-      // CITY: same city
-      {
-        AND: [
-          { visibilityLevel: 'CITY' },
-          { geoZoneId: { in: allowedZoneIds } },
-        ],
-      },
-      // PROVINCE: same province
-      {
-        AND: [
-          { visibilityLevel: 'PROVINCE' },
-          { geoZoneId: { in: allowedZoneIds } },
-        ],
-      },
-      // NATIONAL: same country
-      {
-        AND: [
-          { visibilityLevel: 'NATIONAL' },
-          { countryId: userCountry || userZone.countryId },
-        ],
-      },
-    ],
+    OR: orConditions,
   };
 }
 

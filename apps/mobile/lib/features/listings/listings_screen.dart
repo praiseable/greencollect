@@ -343,11 +343,15 @@ class _BrowseListingCard extends StatelessWidget {
       case VisibilityLevel.neighbor:
         return const Color(0xFF2563EB);
       case VisibilityLevel.city:
+        return const Color(0xFF8B5CF6);
+      case VisibilityLevel.province:
         return const Color(0xFFF59E0B);
+      case VisibilityLevel.national:
+        return const Color(0xFFEF4444);
       case VisibilityLevel.wholesale:
         return const Color(0xFF7C3AED);
       case VisibilityLevel.public:
-        return const Color(0xFFDC2626);
+        return const Color(0xFF6B7280);
     }
   }
 }

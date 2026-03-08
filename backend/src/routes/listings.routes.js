@@ -3,6 +3,7 @@ const prisma = require('../services/prisma');
 const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const { addFormattedPrice } = require('../services/currency.service');
 const { buildGeoFenceWhere, canUserViewListing } = require('../services/geoFencing.service');
+const { notifyZoneDealersOnNewListing } = require('../services/escalation.service');
 const multer = require('multer');
 const path = require('path');
 
@@ -258,35 +259,9 @@ router.post('/', authenticate, async (req, res) => {
       },
     });
 
-    // Notify admins/managers of new listing
-    const admins = await prisma.user.findMany({
-      where: { role: { in: ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'] }, isActive: true },
-      select: { id: true },
-    });
-    if (admins.length > 0) {
-      await prisma.notification.createMany({
-        data: admins.map(a => ({
-          userId: a.id,
-          type: 'NEW_LISTING',
-          title: 'New Listing Posted',
-          body: `${req.user.firstName} posted: ${title}`,
-          data: { listingId: listing.id },
-        })),
-      });
-
-      // Emit real-time notification via Socket.io
-      const io = req.app.get('io');
-      if (io) {
-        admins.forEach(a => {
-          io.to(`user-${a.id}`).emit('notification', {
-            type: 'NEW_LISTING',
-            title: 'New Listing Posted',
-            body: `${req.user.firstName} posted: ${title}`,
-            data: { listingId: listing.id },
-          });
-        });
-      }
-    }
+    // Notify zone dealers + admins (territory-based notification routing)
+    const io = req.app.get('io');
+    await notifyZoneDealersOnNewListing(listing, req.user, io);
 
     res.status(201).json({ ...listing, pricePaisa: listing.pricePaisa.toString() });
   } catch (err) {

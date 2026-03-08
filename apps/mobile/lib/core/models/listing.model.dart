@@ -9,6 +9,8 @@ enum VisibilityLevel {
   local,
   neighbor,
   city,
+  province,
+  national,
   wholesale,
   public,
 }

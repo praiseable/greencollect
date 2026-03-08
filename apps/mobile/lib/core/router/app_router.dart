@@ -22,6 +22,7 @@ import '../../features/settings/settings_screen.dart';
 import '../../features/chat/chat_screen.dart';
 import '../../features/analytics/analytics_screen.dart';
 import '../../features/wallet/wallet_screen.dart';
+import '../../features/territory/territory_screen.dart';
 import '../../features/shell/shell_screen.dart';
 import '../providers/auth.provider.dart';
 
@@ -179,6 +180,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/wallet/recharge',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const RechargeScreen(),
+      ),
+      GoRoute(
+        path: '/territory',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const TerritoryScreen(),
       ),
     ],
   );

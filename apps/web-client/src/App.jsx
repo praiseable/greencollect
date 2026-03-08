@@ -16,6 +16,7 @@ import Subscriptions from './pages/Subscriptions';
 import Transactions from './pages/Transactions';
 import Wallet from './pages/Wallet';
 import Chat from './pages/Chat';
+import MyTerritory from './pages/MyTerritory';
 import useAuthStore from './store/authStore';
 
 function PrivateRoute({ children }) {
@@ -48,6 +49,7 @@ function App() {
           <Route path="/wallet" element={<PrivateRoute><Wallet /></PrivateRoute>} />
           <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />
           <Route path="/chat/:roomId" element={<PrivateRoute><Chat /></PrivateRoute>} />
+          <Route path="/my-territory" element={<PrivateRoute><MyTerritory /></PrivateRoute>} />
         </Route>
       </Routes>
     </Router>

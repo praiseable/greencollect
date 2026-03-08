@@ -612,6 +612,138 @@ async function main() {
     }
   }
 
+  // ═══════════════════════════════════════════════
+  // 18. ESCALATION RULES
+  // ═══════════════════════════════════════════════
+  console.log('  18/20 Escalation Rules...');
+  const escalationRules = [
+    {
+      fromLevel: 'LOCAL', toLevel: 'NEIGHBOR', delayHours: 24,
+      notifyRoles: ['DEALER'], sortOrder: 0,
+    },
+    {
+      fromLevel: 'NEIGHBOR', toLevel: 'CITY', delayHours: 48,
+      notifyRoles: ['DEALER', 'FRANCHISE_OWNER'], sortOrder: 1,
+    },
+    {
+      fromLevel: 'CITY', toLevel: 'PROVINCE', delayHours: 72,
+      notifyRoles: ['FRANCHISE_OWNER', 'REGIONAL_MANAGER'], sortOrder: 2,
+    },
+    {
+      fromLevel: 'PROVINCE', toLevel: 'NATIONAL', delayHours: 120,
+      notifyRoles: ['REGIONAL_MANAGER', 'WHOLESALE_BUYER'], sortOrder: 3,
+    },
+    {
+      fromLevel: 'NATIONAL', toLevel: 'PUBLIC', delayHours: 168,
+      notifyRoles: ['SUPER_ADMIN'], sortOrder: 4,
+    },
+  ];
+  for (const rule of escalationRules) {
+    await prisma.escalationRule.upsert({
+      where: { fromLevel_toLevel: { fromLevel: rule.fromLevel, toLevel: rule.toLevel } },
+      update: { delayHours: rule.delayHours, notifyRoles: rule.notifyRoles, sortOrder: rule.sortOrder },
+      create: rule,
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // 19. DEALER TERRITORY ASSIGNMENTS
+  // ═══════════════════════════════════════════════
+  console.log('  19/20 Dealer Territories...');
+
+  // Fetch area zones for Karachi
+  const korangiZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi-korangi' } });
+  const siteZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi-site' } });
+  const lyariZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi-lyari' } });
+  const saddarZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi-saddar' } });
+  const cliftonZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi-clifton' } });
+  const dhaKarachiZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi-dha-karachi' } });
+
+  // Fetch area zones for Lahore
+  const joharTownZone = await prisma.geoZone.findUnique({ where: { slug: 'lahore-johar-town' } });
+  const gulbergZone = await prisma.geoZone.findUnique({ where: { slug: 'lahore-gulberg' } });
+  const modelTownZone = await prisma.geoZone.findUnique({ where: { slug: 'lahore-model-town' } });
+
+  // Fetch province zones
+  const sindhZone = await prisma.geoZone.findUnique({ where: { slug: 'sindh' } });
+  const punjabZone = await prisma.geoZone.findUnique({ where: { slug: 'punjab' } });
+
+  const dealerUserId = userIds['dealer@marketplace.pk'];
+  const franchiseUserId = userIds['franchise@marketplace.pk'];
+  const regionalUserId = userIds['regional@marketplace.pk'];
+  const wholesaleUserId = userIds['wholesale@marketplace.pk'];
+
+  // Ahmed Dealer (DEALER role) → assigned to Korangi, SITE local areas in Karachi
+  const dealerZones = [korangiZone, siteZone, lyariZone].filter(Boolean);
+  for (const zone of dealerZones) {
+    if (dealerUserId && zone) {
+      await prisma.dealerTerritory.upsert({
+        where: { userId_geoZoneId: { userId: dealerUserId, geoZoneId: zone.id } },
+        update: { isActive: true, isExclusive: true },
+        create: { userId: dealerUserId, geoZoneId: zone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+      });
+    }
+  }
+
+  // Ali Franchise (FRANCHISE_OWNER) → assigned to Lahore city + some Lahore areas
+  if (franchiseUserId && lahoreZone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: franchiseUserId, geoZoneId: lahoreZone.id } },
+      update: { isActive: true, isExclusive: true },
+      create: { userId: franchiseUserId, geoZoneId: lahoreZone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+  const franchiseAreaZones = [joharTownZone, gulbergZone, modelTownZone].filter(Boolean);
+  for (const zone of franchiseAreaZones) {
+    if (franchiseUserId && zone) {
+      await prisma.dealerTerritory.upsert({
+        where: { userId_geoZoneId: { userId: franchiseUserId, geoZoneId: zone.id } },
+        update: { isActive: true },
+        create: { userId: franchiseUserId, geoZoneId: zone.id, isExclusive: false, assignedBy: userIds['admin@marketplace.pk'] },
+      });
+    }
+  }
+
+  // Regional Manager → assigned to Islamabad Capital province
+  const icpZone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-capital' } });
+  if (regionalUserId && icpZone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: regionalUserId, geoZoneId: icpZone.id } },
+      update: { isActive: true },
+      create: { userId: regionalUserId, geoZoneId: icpZone.id, isExclusive: true, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+
+  // Wholesale Buyer → assigned to Punjab province (wider reach)
+  if (wholesaleUserId && punjabZone) {
+    await prisma.dealerTerritory.upsert({
+      where: { userId_geoZoneId: { userId: wholesaleUserId, geoZoneId: punjabZone.id } },
+      update: { isActive: true },
+      create: { userId: wholesaleUserId, geoZoneId: punjabZone.id, isExclusive: false, assignedBy: userIds['admin@marketplace.pk'] },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // 20. TERRITORY NOTIFICATIONS SAMPLE
+  // ═══════════════════════════════════════════════
+  console.log('  20/20 Territory Notifications...');
+  if (dealerUserId) {
+    const existingTerritoryNotif = await prisma.notification.findFirst({
+      where: { userId: dealerUserId, type: 'SYSTEM', title: 'Territory Assigned' },
+    });
+    if (!existingTerritoryNotif) {
+      await prisma.notification.create({
+        data: {
+          userId: dealerUserId,
+          type: 'SYSTEM',
+          title: 'Territory Assigned',
+          body: 'You have been assigned to manage Korangi, SITE, and Lyari areas in Karachi.',
+          data: { zones: ['Korangi', 'SITE', 'Lyari'] },
+        },
+      });
+    }
+  }
+
   console.log('\n✅ Seeding complete! Pakistan marketplace is ready.\n');
   console.log('  Default Logins:');
   console.log('    Admin:     admin@marketplace.pk / Admin@123456');
@@ -620,6 +752,15 @@ async function main() {
   console.log('    Dealer:    dealer@marketplace.pk / Dealer@123');
   console.log('    Franchise: franchise@marketplace.pk / Franchise@123');
   console.log('    Customer:  customer@marketplace.pk / Customer@123');
+  console.log('');
+  console.log('  Escalation Timeline:');
+  console.log('    LOCAL → 24h → NEIGHBOR → 48h → CITY → 72h → PROVINCE → 120h → NATIONAL → 168h → PUBLIC');
+  console.log('');
+  console.log('  Territory Assignments:');
+  console.log('    Ahmed Dealer  → Korangi, SITE, Lyari (Karachi LOCAL_AREA)');
+  console.log('    Ali Franchise → Lahore (CITY) + Johar Town, Gulberg, Model Town');
+  console.log('    Regional Mgr  → Islamabad Capital (PROVINCE)');
+  console.log('    Wholesale     → Punjab (PROVINCE)');
   console.log('');
 }
 

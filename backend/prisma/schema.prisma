@@ -380,6 +380,7 @@ model User {
   otps          OTP[]
   chatMessagesFrom ChatMessage[] @relation("MessageFrom")
   chatMessagesTo   ChatMessage[] @relation("MessageTo")
+  dealerTerritories DealerTerritory[] @relation("DealerTerritories")
   auditLogs     AuditLog[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -445,6 +446,7 @@ model GeoZone {
   isActive    Boolean   @default(true)
   users       User[]
   listings    Listing[]
+  dealerTerritories DealerTerritory[] @relation("TerritoryZones")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -529,8 +531,43 @@ enum VisibilityLevel {
 }
 
 // ═══════════════════════════════════════════════════════════
+// DEALER TERRITORIES
+// ═══════════════════════════════════════════════════════════
+
+model DealerTerritory {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation("DealerTerritories", fields: [userId], references: [id], onDelete: Cascade)
+  geoZoneId   String
+  geoZone     GeoZone   @relation("TerritoryZones", fields: [geoZoneId], references: [id])
+  isExclusive Boolean   @default(true)          // No other dealer of same role at same zone
+  isActive    Boolean   @default(true)
+  assignedBy  String?                           // Admin who assigned it
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, geoZoneId])                 // One assignment per user per zone
+  @@index([geoZoneId])
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
 // ESCALATION ENGINE
 // ═══════════════════════════════════════════════════════════
+
+model EscalationRule {
+  id            String          @id @default(uuid())
+  fromLevel     VisibilityLevel
+  toLevel       VisibilityLevel
+  delayHours    Int                               // Hours after listing creation (or last escalation) to escalate
+  notifyRoles   Json?                             // ["DEALER","FRANCHISE_OWNER",...] - roles to notify at this level
+  isActive      Boolean         @default(true)
+  sortOrder     Int             @default(0)       // Order of escalation
+  createdAt     DateTime        @default(now())
+
+  @@unique([fromLevel, toLevel])
+}
 
 model EscalationLog {
   id           String          @id @default(uuid())
@@ -539,6 +576,7 @@ model EscalationLog {
   fromLevel    VisibilityLevel
   toLevel      VisibilityLevel
   reason       String?
+  notifiedUserIds Json?                           // Track who was notified
   escalatedAt  DateTime        @default(now())
 }
 

@@ -171,6 +171,10 @@ class ProfileScreen extends ConsumerWidget {
                     context.push('/wallet');
                   }),
                   const Divider(height: 1),
+                  _menuItem(Icons.map, 'My Territory / میرا علاقہ', () {
+                    context.push('/territory');
+                  }),
+                  const Divider(height: 1),
                   _menuItem(Icons.receipt_long, 'Transactions / لین دین', () {
                     context.push('/transactions');
                   }),

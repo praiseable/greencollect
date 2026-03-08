@@ -22,6 +22,7 @@ const navItems = [
   },
   { to: '/listings', label: 'Listings', icon: FiList },
   { to: '/geo-zones', label: 'Geo Zones', icon: FiMapPin },
+  { to: '/territories', label: 'Territories', icon: FiMapPin },
   {
     label: 'Localization',
     icon: FiGlobe,
