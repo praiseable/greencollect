@@ -16,7 +16,7 @@
 
 const express = require('express');
 const router = express.Router();
-const prisma = require('../prisma');
+const prisma = require('../services/prisma');
 const { body, param, query, validationResult } = require('express-validator');
 
 const validate = (req, res, next) => {
