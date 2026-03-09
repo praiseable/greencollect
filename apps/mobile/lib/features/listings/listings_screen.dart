@@ -5,6 +5,7 @@ import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 import '../../core/models/category.model.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/providers/listings.provider.dart';
 import '../../core/config/app_variant.dart';
 
 class ListingsScreen extends ConsumerStatefulWidget {
@@ -21,11 +22,12 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   String _visibilityFilter = 'all'; // all, local, neighbor, city, wholesale
   final _searchController = TextEditingController();
 
-  List<ListingModel> _getFilteredListings(String? userId) {
-    // Pro: geo-fenced. Customer: see all listings.
-    final allListings = AppVariant.enforceGeoFencing
+  List<ListingModel> _getFilteredListings(String? userId, List<ListingModel> posted) {
+    // Pro: geo-fenced mock + all user-posted. Customer: see all.
+    final mockListings = AppVariant.enforceGeoFencing
         ? MockData.listingsForUser(userId)
         : [...MockData.listings, ...MockData.islamabadListings];
+    final allListings = [...posted, ...mockListings];
     var listings = allListings.where((l) {
       final matchesCategory = _selectedCategory == null || l.categoryId == _selectedCategory;
       final matchesSearch = _searchQuery.isEmpty ||
@@ -58,7 +60,8 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider);
-    final listings = _getFilteredListings(user?.id);
+    final posted = ref.watch(userPostedListingsProvider);
+    final listings = _getFilteredListings(user?.id, posted);
     final categories = MockData.categories;
 
     return Scaffold(

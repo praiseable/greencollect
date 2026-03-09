@@ -208,7 +208,7 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                   const Divider(height: 1),
                   _menuItem(Icons.chat, 'Chat / چیٹ', () {
-                    context.push('/chat/demo-room');
+                    context.push('/chat-inbox');
                   }),
                   const Divider(height: 1),
                   _menuItem(Icons.settings, 'Settings / ترتیبات', () {

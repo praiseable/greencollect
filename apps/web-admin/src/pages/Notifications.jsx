@@ -20,8 +20,9 @@ export default function Notifications() {
       if (filter === 'UNREAD') params.unread = true;
       if (filter === 'READ') params.read = true;
       const res = await getNotifications(params);
-      setNotifications(res.data?.notifications || res.data || []);
-      setTotal(res.data?.total || 0);
+      const list = res.data?.data ?? res.data?.notifications ?? res.data;
+      setNotifications(Array.isArray(list) ? list : []);
+      setTotal(res.data?.total ?? 0);
     } catch { toast.error('Failed to load notifications'); }
     finally { setLoading(false); }
   };

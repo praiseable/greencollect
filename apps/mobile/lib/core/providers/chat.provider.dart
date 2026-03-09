@@ -1,12 +1,29 @@
+/// Chat state and sync. Used by both **Pro** (Kabariya Pro) and **Customer** (Kabariya) app builds;
+/// no variant-specific logic — same code path for both.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/chat_message.model.dart';
+import '../mock/mock_data.dart';
+import 'auth.provider.dart';
 import '../../services/chat_db_service.dart';
 
 const _uuid = Uuid();
+
+/// Enable verbose chat module debug logs (provider, send, sync).
+const bool kChatProviderDebug = true;
+
+void _log(String msg, [Object? detail]) {
+  if (kChatProviderDebug) {
+    if (detail != null) {
+      debugPrint('[ChatProvider] $msg $detail');
+    } else {
+      debugPrint('[ChatProvider] $msg');
+    }
+  }
+}
 
 /// State for a single chat room
 class ChatRoomState {
@@ -74,59 +91,72 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
   bool _dbAvailable = true;
 
   ChatRoomNotifier(this.roomId, this._ref) : super(ChatRoomState(roomId: roomId)) {
-    debugPrint('[Chat] ChatRoomNotifier created for room: $roomId');
+    _log('ChatRoomNotifier created', 'roomId=$roomId');
     _loadFromLocal();
   }
 
   /// 1. Load messages from local SQLite
   Future<void> _loadFromLocal() async {
+    _log('_loadFromLocal start', 'roomId=$roomId');
     state = state.copyWith(isLoading: true, error: null);
     try {
-      debugPrint('[Chat] Loading messages from local DB for room: $roomId');
-      final messages = await _chatDb.getMessages(roomId);
-      debugPrint('[Chat] Got ${messages.length} messages from local DB');
+      List<ChatMessageModel> messages = await _chatDb.getMessages(roomId);
+      _log('_loadFromLocal got messages', 'count=${messages.length}');
 
-      // If no local messages, seed with mock data for this room
+      // If no local messages, seed with mock data for this room (both participants so both see room in inbox)
       if (messages.isEmpty) {
-        debugPrint('[Chat] No messages, seeding mock data');
+        _log('_loadFromLocal seeding mock data');
         await _seedMockMessages();
-        final seeded = await _chatDb.getMessages(roomId);
-        debugPrint('[Chat] Seeded ${seeded.length} mock messages');
-        if (mounted) {
-          state = state.copyWith(messages: seeded, isLoading: false);
-        }
-      } else {
-        if (mounted) {
-          state = state.copyWith(messages: messages, isLoading: false);
-        }
+        messages = await _chatDb.getMessages(roomId);
+        _log('_loadFromLocal seeded', 'count=${messages.length}');
       }
 
-      // Attempt background sync with server
+      // Set isMe from current user so each user sees correct alignment (requires auth in ref)
+      final currentUserId = _ref.read(authProvider)?.id;
+      if (currentUserId != null && messages.isNotEmpty) {
+        messages = messages.map((m) => m.copyWith(isMe: m.fromUserId == currentUserId)).toList();
+      }
+
+      if (mounted) {
+        state = state.copyWith(messages: messages, isLoading: false);
+      }
+
       _syncWithServer();
     } catch (e, st) {
-      debugPrint('[Chat] ERROR loading from local DB: $e');
+      _log('_loadFromLocal ERROR', e);
       debugPrint('[Chat] Stack trace: $st');
       _dbAvailable = false;
-      // Fall back to in-memory mock messages
       if (mounted) {
         state = state.copyWith(
           messages: _getInMemoryMockMessages(),
           isLoading: false,
-          error: null, // Don't show error, just use in-memory
+          error: null,
         );
       }
     }
   }
 
-  /// Get in-memory mock messages (fallback when DB not available)
+  /// Get participant user ids for this room so both see it in their inbox.
+  List<String> _getRoomParticipantIds() {
+    if (!roomId.startsWith('chat_')) return ['u1', 'u2'];
+    final digits = roomId.replaceFirst('chat_', '');
+    final userId1 = MockData.getUserIdForPhoneDigits(digits);
+    if (userId1 == null) return ['u1', 'u2'];
+    final userId2 = userId1 == 'u1' ? 'u2' : 'u1';
+    return [userId1, userId2];
+  }
+
+  /// Get in-memory mock messages (fallback when DB not available). Uses real user ids so both participants see room.
   List<ChatMessageModel> _getInMemoryMockMessages() {
+    final ids = _getRoomParticipantIds();
+    final a = ids[0], b = ids[1];
     return [
       ChatMessageModel(
         id: _uuid.v4(),
         roomId: roomId,
-        fromUserId: 'bilal_traders',
-        toUserId: 'u1',
-        message: "Hi, I'm interested in your Copper Wire Scrap listing.",
+        fromUserId: b,
+        toUserId: a,
+        message: "Hi, I'm interested in your listing.",
         status: MessageStatus.sent,
         createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 30)),
         syncedAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 30)),
@@ -135,20 +165,20 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
       ChatMessageModel(
         id: _uuid.v4(),
         roomId: roomId,
-        fromUserId: 'u1',
-        toUserId: 'bilal_traders',
-        message: "Great! It's 200kg of 99% pure copper wire from a factory.",
+        fromUserId: a,
+        toUserId: b,
+        message: "Great! I can share more details.",
         status: MessageStatus.sent,
         createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 29)),
         syncedAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 29)),
-        isMe: true,
+        isMe: false,
       ),
       ChatMessageModel(
         id: _uuid.v4(),
         roomId: roomId,
-        fromUserId: 'bilal_traders',
-        toUserId: 'u1',
-        message: "Can you do Rs. 820/kg?",
+        fromUserId: b,
+        toUserId: a,
+        message: "Can you do a better price?",
         status: MessageStatus.sent,
         createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 27)),
         syncedAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 27)),
@@ -157,20 +187,20 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
       ChatMessageModel(
         id: _uuid.v4(),
         roomId: roomId,
-        fromUserId: 'u1',
-        toUserId: 'bilal_traders',
-        message: "Can you do Rs. 840/kg? That's a fair price for this quality.",
+        fromUserId: a,
+        toUserId: b,
+        message: "Sure, we can negotiate.",
         status: MessageStatus.sent,
         createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 25)),
         syncedAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 25)),
-        isMe: true,
+        isMe: false,
       ),
       ChatMessageModel(
         id: _uuid.v4(),
         roomId: roomId,
-        fromUserId: 'bilal_traders',
-        toUserId: 'u1',
-        message: "Deal! Rs. 840/kg for 200kg. I'll arrange pickup tomorrow.",
+        fromUserId: b,
+        toUserId: a,
+        message: "Deal! I'll arrange pickup.",
         status: MessageStatus.sent,
         createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 23)),
         syncedAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 23)),
@@ -179,7 +209,7 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
     ];
   }
 
-  /// Seed the local DB with mock messages for the room
+  /// Seed the local DB with mock messages for the room (uses real u1/u2 so both users see room in inbox).
   Future<void> _seedMockMessages() async {
     final mockMessages = _getInMemoryMockMessages();
     await _chatDb.insertMessages(mockMessages);
@@ -191,6 +221,7 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
     required String fromUserId,
     required String toUserId,
   }) async {
+    _log('sendMessage', 'from=$fromUserId to=$toUserId text=${text.length} chars');
     final msg = ChatMessageModel(
       id: _uuid.v4(),
       roomId: roomId,
@@ -201,51 +232,55 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
       createdAt: DateTime.now(),
       isMe: true,
     );
+    _log('sendMessage created msg', 'id=${msg.id}');
 
-    // Save locally first (offline-first)
     try {
       if (_dbAvailable) {
         await _chatDb.insertMessage(msg);
+        _log('sendMessage saved to DB');
+      } else {
+        _log('sendMessage DB not available, skip persist');
       }
     } catch (e) {
-      debugPrint('[Chat] Failed to save message locally: $e');
+      _log('sendMessage FAILED to save locally', e);
     }
 
-    // Update UI immediately
     state = state.copyWith(messages: [...state.messages, msg]);
+    _log('sendMessage UI updated', 'total messages=${state.messages.length}');
 
-    // Try to sync this message
     await _trySendToServer(msg);
   }
 
   /// 3. Try to send a single message to the server
   Future<void> _trySendToServer(ChatMessageModel msg) async {
+    _log('_trySendToServer', 'msgId=${msg.id}');
     try {
       final isOnline = await _checkOnline();
+      _log('_trySendToServer connectivity', 'isOnline=$isOnline');
       if (!isOnline) return;
 
-      // In mock mode, simulate server send
       await Future.delayed(const Duration(milliseconds: 300));
       final now = DateTime.now();
 
       try {
         if (_dbAvailable) {
           await _chatDb.updateMessageStatus(msg.id, MessageStatus.sent, syncedAt: now);
+          _log('_trySendToServer status updated to sent');
         }
       } catch (e) {
-        debugPrint('[Chat] Failed to update message status in DB: $e');
+        _log('_trySendToServer FAILED update status', e);
       }
 
-      // Update UI
       if (mounted) {
         final updated = state.messages.map((m) {
           if (m.id == msg.id) return m.copyWith(status: MessageStatus.sent, syncedAt: now);
           return m;
         }).toList();
         state = state.copyWith(messages: updated);
+        _log('_trySendToServer UI state updated to sent');
       }
 
-      // Simulate auto-reply after 2 seconds
+      _log('_trySendToServer scheduling auto-reply in 2s');
       Future.delayed(const Duration(seconds: 2), () async {
         if (!mounted) return;
         final reply = ChatMessageModel(
@@ -268,10 +303,11 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
         }
         if (mounted) {
           state = state.copyWith(messages: [...state.messages, reply]);
+          _log('_trySendToServer auto-reply added to state');
         }
       });
     } catch (e) {
-      debugPrint('[Chat] Failed to send message to server: $e');
+      _log('_trySendToServer FAILED', e);
       try {
         if (_dbAvailable) {
           await _chatDb.updateMessageStatus(msg.id, MessageStatus.failed);
@@ -289,14 +325,18 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
 
   /// 4. Background sync — send unsent messages and fetch new ones from server
   Future<void> _syncWithServer() async {
+    _log('_syncWithServer start');
     try {
       final isOnline = await _checkOnline();
-      if (!isOnline || !_dbAvailable) return;
+      if (!isOnline || !_dbAvailable) {
+        _log('_syncWithServer skip', 'isOnline=$isOnline dbAvailable=$_dbAvailable');
+        return;
+      }
 
       if (mounted) state = state.copyWith(isSyncing: true);
 
-      // Retry failed/pending messages
       final unsent = await _chatDb.getUnsentMessages();
+      _log('_syncWithServer unsent count', unsent.length);
       for (final msg in unsent) {
         if (msg.roomId == roomId) {
           await _trySendToServer(msg);
@@ -304,8 +344,9 @@ class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
       }
 
       if (mounted) state = state.copyWith(isSyncing: false);
+      _log('_syncWithServer done');
     } catch (e) {
-      debugPrint('[Chat] Sync error: $e');
+      _log('_syncWithServer ERROR', e);
       if (mounted) state = state.copyWith(isSyncing: false);
     }
   }

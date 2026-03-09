@@ -71,6 +71,8 @@ app.use('/api/kyc', require('./routes/kyc.routes'));
 app.use('/v1/auth', require('./routes/auth.routes'));
 app.use('/v1/listings', require('./routes/listings.routes'));
 app.use('/v1/categories', require('./routes/categories.routes'));
+app.use('/v1/units', require('./routes/units.routes'));
+app.use('/v1/geo-zones', require('./routes/geoZones.routes'));
 app.use('/v1/notifications', require('./routes/notifications.routes'));
 app.use('/v1/territories', require('./routes/territories.routes'));
 app.use('/v1/collections', require('./routes/collections.routes'));

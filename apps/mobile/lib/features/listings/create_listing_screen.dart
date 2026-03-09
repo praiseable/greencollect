@@ -1,10 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/category.model.dart';
+import '../../core/models/listing.model.dart';
+import '../../core/providers/auth.provider.dart';
+import '../../core/providers/listings.provider.dart';
 import '../../core/config/app_variant.dart';
 
 class CreateListingScreen extends ConsumerStatefulWidget {
@@ -306,13 +311,13 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Add Photos (up to 5)',
+          const Text('Add Photos (up to 5, optional)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Text('تصاویر شامل کریں (زیادہ سے زیادہ 5)',
+          const Text('تصاویر شامل کریں (اختیاری)',
               style: TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 4),
           Text(
-            'Take a clear photo of your scrap material to attract buyers.',
+            'Take a clear photo of your scrap material to attract buyers. You can skip and add later.',
             style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
           const SizedBox(height: 16),
@@ -421,15 +426,15 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
           Row(
             children: [
               Icon(
-                _selectedImages.isEmpty ? Icons.warning_amber_rounded : Icons.check_circle,
+                _selectedImages.isEmpty ? Icons.photo_library_outlined : Icons.check_circle,
                 size: 16,
-                color: _selectedImages.isEmpty ? Colors.red : Colors.green,
+                color: _selectedImages.isEmpty ? Colors.grey : Colors.green,
               ),
               const SizedBox(width: 6),
               Text(
-                '${_selectedImages.length}/5 photos${_selectedImages.isEmpty ? " · At least 1 required" : ""}',
+                '${_selectedImages.length}/5 photos${_selectedImages.isEmpty ? " · Optional" : ""}',
                 style: TextStyle(
-                  color: _selectedImages.isEmpty ? Colors.red : Colors.grey[600],
+                  color: Colors.grey[600],
                   fontSize: 13,
                 ),
               ),
@@ -663,6 +668,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                 hintText: 'e.g. 500kg Copper Wire — Grade A',
                 prefixIcon: Icon(Icons.title),
               ),
+              onChanged: (_) => setState(() {}),
               validator: (v) =>
                   (v?.isEmpty ?? true) ? 'Title is required' : null,
             ),
@@ -679,6 +685,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                       hintText: '500',
                       prefixIcon: Icon(Icons.scale),
                     ),
+                    onChanged: (_) => setState(() {}),
                     validator: (v) =>
                         (v?.isEmpty ?? true) ? 'Required' : null,
                   ),
@@ -708,6 +715,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                 prefixText: 'Rs. ',
                 prefixIcon: Icon(Icons.monetization_on),
               ),
+              onChanged: (_) => setState(() {}),
               validator: (v) =>
                   (v?.isEmpty ?? true) ? 'Required' : null,
             ),
@@ -733,6 +741,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                   child: Icon(Icons.description),
                 ),
               ),
+              onChanged: (_) => setState(() {}),
               validator: (v) =>
                   (v?.isEmpty ?? true) ? 'Description required' : null,
             ),
@@ -1013,7 +1022,8 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       case 0:
         return _selectedCategory != null;
       case 1:
-        return _selectedImages.isNotEmpty;
+        // Photos optional: user can skip or add; no default image is set
+        return true;
       case 2:
         return _titleCtrl.text.isNotEmpty &&
             _quantityCtrl.text.isNotEmpty &&
@@ -1038,13 +1048,19 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
   Future<void> _handleSubmit() async {
     setState(() => _loading = true);
     await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
     setState(() => _loading = false);
+
+    // Build and save listing so it appears in Home/Listings (and for Pro, visible to all area users)
+    final user = ref.read(authProvider);
+    final listing = _buildListingModel(user?.name ?? 'Seller', user?.phone ?? _contactCtrl.text);
+    ref.read(userPostedListingsProvider.notifier).addListing(listing);
 
     if (mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           title: const Row(
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 28),
@@ -1058,8 +1074,10 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
           actions: [
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
-                context.go('/home');
+                Navigator.pop(dialogContext);
+                SchedulerBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) context.go('/home');
+                });
               },
               child: const Text('Go to Home'),
             ),
@@ -1067,6 +1085,45 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         ),
       );
     }
+  }
+
+  ListingModel _buildListingModel(String sellerName, String sellerPhone) {
+    const uuid = Uuid();
+    final cat = MockData.categories.firstWhere(
+          (c) => c.id == _selectedCategory,
+          orElse: () => MockData.categories.first,
+        );
+    final price = int.tryParse(_priceCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+    final qty = double.tryParse(_quantityCtrl.text.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0;
+    final lat = 24.8607;
+    final lng = 67.0011;
+    final images = _selectedImages.isNotEmpty
+        ? _selectedImages.map((x) => x.path).toList()
+        : <String>[];
+    return ListingModel(
+      id: 'posted-${uuid.v4()}',
+      title: _titleCtrl.text.trim().isEmpty ? 'Untitled' : _titleCtrl.text.trim(),
+      titleUrdu: '',
+      description: _descCtrl.text.trim().isEmpty ? 'No description' : _descCtrl.text.trim(),
+      descUrdu: null,
+      pricePkr: price,
+      unit: _selectedUnit,
+      quantity: qty,
+      categoryId: _selectedCategory ?? 'c1',
+      categoryName: cat.nameEn,
+      categoryNameUr: cat.nameUr,
+      sellerName: sellerName,
+      sellerPhone: sellerPhone.startsWith('+') ? sellerPhone : '+92 ${sellerPhone.replaceAll(RegExp(r'[^\d]'), '')}',
+      city: _selectedCity,
+      area: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+      latitude: lat,
+      longitude: lng,
+      status: ListingStatus.active,
+      visibilityLevel: VisibilityLevel.public,
+      images: images,
+      daysAgo: 0,
+      interestedCount: 0,
+    );
   }
 
   @override

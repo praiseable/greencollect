@@ -3,6 +3,19 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../core/models/chat_message.model.dart';
 
+/// Set to true to enable verbose chat module logging (DB, provider, UI).
+const bool kChatDebug = true;
+
+void _chatLog(String tag, String message, [Object? detail]) {
+  if (kChatDebug) {
+    if (detail != null) {
+      debugPrint('[$tag] $message $detail');
+    } else {
+      debugPrint('[$tag] $message');
+    }
+  }
+}
+
 /// Local SQLite database for offline-first chat persistence.
 ///
 /// Flow:
@@ -20,11 +33,13 @@ class ChatDbService {
 
   Future<Database> get database async {
     if (_initFailed) {
+      _chatLog('ChatDB', 'database get: already failed, rethrowing');
       throw StateError('Chat database initialization previously failed');
     }
     if (_db != null) return _db!;
     try {
       _db = await _initDb();
+      _chatLog('ChatDB', 'database get: initialized');
       return _db!;
     } catch (e) {
       _initFailed = true;
@@ -72,12 +87,14 @@ class ChatDbService {
 
   /// Insert a new message locally
   Future<void> insertMessage(ChatMessageModel msg) async {
+    _chatLog('ChatDB', 'insertMessage', 'room=${msg.roomId} id=${msg.id} from=${msg.fromUserId} to=${msg.toUserId} status=${msg.status.name}');
     final db = await database;
     await db.insert(
       'chat_messages',
       msg.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _chatLog('ChatDB', 'insertMessage done', msg.id);
   }
 
   /// Insert multiple messages (batch, for initial sync from server)
@@ -96,6 +113,7 @@ class ChatDbService {
 
   /// Get all messages for a room, ordered by creation time
   Future<List<ChatMessageModel>> getMessages(String roomId, {int limit = 200, int offset = 0}) async {
+    _chatLog('ChatDB', 'getMessages', 'roomId=$roomId limit=$limit offset=$offset');
     final db = await database;
     final rows = await db.query(
       'chat_messages',
@@ -105,7 +123,9 @@ class ChatDbService {
       limit: limit,
       offset: offset,
     );
-    return rows.map((r) => ChatMessageModel.fromMap(r)).toList();
+    final list = rows.map((r) => ChatMessageModel.fromMap(r)).toList();
+    _chatLog('ChatDB', 'getMessages result', 'count=${list.length}');
+    return list;
   }
 
   /// Get all unsent messages (pending or failed) for retry/sync
@@ -121,6 +141,7 @@ class ChatDbService {
 
   /// Update message status (e.g. pending → sent, pending → failed)
   Future<void> updateMessageStatus(String messageId, MessageStatus status, {DateTime? syncedAt}) async {
+    _chatLog('ChatDB', 'updateMessageStatus', 'id=$messageId status=${status.name}');
     final db = await database;
     final values = <String, dynamic>{'status': status.name};
     if (syncedAt != null) values['syncedAt'] = syncedAt.toIso8601String();
@@ -131,6 +152,7 @@ class ChatDbService {
       where: 'id = ?',
       whereArgs: [messageId],
     );
+    _chatLog('ChatDB', 'updateMessageStatus done', messageId);
   }
 
   /// Check if a message already exists locally
@@ -167,6 +189,19 @@ class ChatDbService {
     final db = await database;
     final rows = await db.rawQuery(
       'SELECT DISTINCT roomId FROM chat_messages ORDER BY createdAt DESC',
+    );
+    return rows.map((r) => r['roomId'] as String).toList();
+  }
+
+  /// Get room IDs where this user participated (for per-user inbox).
+  /// Only rooms with at least one message from or to [userId] are returned, newest first.
+  Future<List<String>> getRoomIdsForUser(String userId) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''SELECT roomId, MAX(createdAt) as lastAt FROM chat_messages
+         WHERE fromUserId = ? OR toUserId = ?
+         GROUP BY roomId ORDER BY lastAt DESC''',
+      [userId, userId],
     );
     return rows.map((r) => r['roomId'] as String).toList();
   }

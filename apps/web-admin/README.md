@@ -107,6 +107,27 @@ npm run build
 
 ## 📄 Pages & Routes
 
+### 📱 Marketplace (same as mobile app)
+
+These routes mirror the mobile app so the portal and app behave the same:
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/marketplace` | MarketplaceHome | Home: welcome, Post Listing, search, categories, recent listings |
+| `/marketplace/listings` | MarketplaceListings | Browse listings (same API as app, with search/category filter) |
+| `/marketplace/create` | CreateListing | Post a listing (category, details, location, preview → POST /listings) |
+| `/marketplace/listing/:id` | ListingDetail | Listing detail: price, description, seller, Call / Message (→ chat) |
+| `/marketplace/profile` | Profile | Current user profile + quick links (Wallet, Territory, Chat, etc.) |
+| `/marketplace/chat` | ChatInbox | Chat inbox (conversations list) |
+| `/marketplace/chat/:userId` | Chat | Conversation with a user (send/receive messages) |
+| `/marketplace/transactions` | TransactionsApp | Transactions: Active / Completed / Cancelled tabs |
+| `/marketplace/transactions/:id` | TransactionDetail | Transaction detail, accept/reject, bond view |
+| `/marketplace/wallet` | Wallet | Wallet balance (same as app) |
+
+All of the above use the same backend API as the mobile app (`/api/listings`, `/api/chat`, `/api/transactions`, `/api/notifications`, `/api/auth/me`, etc.), so data is consistent between portal and app.
+
+### Admin-only routes
+
 | Route                  | Component      | Description                           |
 |------------------------|----------------|---------------------------------------|
 | `/login`               | Login          | Admin authentication                  |
@@ -115,7 +136,7 @@ npm run build
 | `/catalog/categories`  | Categories     | Category tree with translations       |
 | `/catalog/product-types` | ProductTypes | Product types + EAV attributes        |
 | `/catalog/units`       | Units          | Measurement units (kg, ton, etc.)     |
-| `/listings`            | Listings       | All listings, approve/reject/edit     |
+| `/listings`            | Listings       | All listings (admin view), approve/reject/edit     |
 | `/geo-zones`           | GeoZones       | Country → Province → City → Area      |
 | `/languages`           | Languages      | Language config (code, direction, flag)|
 | `/translations`        | Translations   | Translation key-value pairs by locale |
@@ -132,6 +153,14 @@ npm run build
 
 ```
 📊 Dashboard
+📱 Marketplace (same as app)
+   ├── Home
+   ├── Post Listing
+   ├── Browse Listings
+   ├── Profile
+   ├── Chat Inbox
+   ├── Transactions
+   └── Wallet
 👥 Users
 📦 Catalog
    ├── Categories

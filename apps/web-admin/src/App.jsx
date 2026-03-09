@@ -22,6 +22,16 @@ import BalanceManagement from './pages/BalanceManagement';
 import CollectionsAdmin from './pages/Collections';
 import CarbonAnalytics from './pages/CarbonAnalytics';
 import KycReview from './pages/KycReview';
+import MarketplaceHome from './pages/MarketplaceHome';
+import MarketplaceListings from './pages/MarketplaceListings';
+import CreateListing from './pages/CreateListing';
+import ListingDetail from './pages/ListingDetail';
+import Profile from './pages/Profile';
+import ChatInbox from './pages/ChatInbox';
+import Chat from './pages/Chat';
+import TransactionsApp from './pages/TransactionsApp';
+import TransactionDetail from './pages/TransactionDetail';
+import Wallet from './pages/Wallet';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('admin_token');
@@ -56,6 +66,17 @@ export default function App() {
         <Route path="carbon-analytics" element={<CarbonAnalytics />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="notifications" element={<Notifications />} />
+        {/* Marketplace — same experience as mobile app */}
+        <Route path="marketplace" element={<MarketplaceHome />} />
+        <Route path="marketplace/listings" element={<MarketplaceListings />} />
+        <Route path="marketplace/create" element={<CreateListing />} />
+        <Route path="marketplace/listing/:id" element={<ListingDetail />} />
+        <Route path="marketplace/profile" element={<Profile />} />
+        <Route path="marketplace/chat" element={<ChatInbox />} />
+        <Route path="marketplace/chat/:userId" element={<Chat />} />
+        <Route path="marketplace/transactions" element={<TransactionsApp />} />
+        <Route path="marketplace/transactions/:id" element={<TransactionDetail />} />
+        <Route path="marketplace/wallet" element={<Wallet />} />
       </Route>
     </Routes>
   );

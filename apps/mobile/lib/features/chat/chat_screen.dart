@@ -1,8 +1,10 @@
+/// Chat conversation UI. Runs for both **Pro** and **Customer** app types; no variant gating.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/chat.provider.dart';
 import '../../core/providers/auth.provider.dart';
 import '../../core/models/chat_message.model.dart';
+import '../../core/mock/mock_data.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String roomId;
@@ -16,22 +18,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
+  static const bool _kChatScreenDebug = true;
+
   @override
   void initState() {
     super.initState();
-    debugPrint('[ChatScreen] initState for room: ${widget.roomId}');
+    if (_kChatScreenDebug) {
+      debugPrint('[ChatScreen] initState roomId=${widget.roomId}');
+    }
   }
 
   void _sendMessage() {
-    if (_controller.text.trim().isEmpty) return;
+    if (_controller.text.trim().isEmpty) {
+      if (_kChatScreenDebug) debugPrint('[ChatScreen] _sendMessage skipped: empty text');
+      return;
+    }
 
     final user = ref.read(authProvider);
-    if (user == null) return;
+    if (user == null) {
+      if (_kChatScreenDebug) debugPrint('[ChatScreen] _sendMessage skipped: no user');
+      return;
+    }
 
+    final phoneDigits = widget.roomId.startsWith('chat_')
+        ? widget.roomId.replaceFirst('chat_', '')
+        : '';
+    final toUserId = phoneDigits.isNotEmpty
+        ? (MockData.getUserIdForPhoneDigits(phoneDigits) ?? 'unknown')
+        : 'unknown';
+    if (_kChatScreenDebug) {
+      debugPrint('[ChatScreen] _sendMessage from=${user.id} to=$toUserId room=${widget.roomId}');
+    }
     ref.read(chatRoomProvider(widget.roomId).notifier).sendMessage(
       text: _controller.text.trim(),
       fromUserId: user.id,
-      toUserId: 'bilal_traders', // In production, resolve from room metadata
+      toUserId: toUserId,
     );
 
     _controller.clear();
@@ -59,13 +80,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('[ChatScreen] build() for room: ${widget.roomId}');
+    if (_kChatScreenDebug) {
+      debugPrint('[ChatScreen] build() roomId=${widget.roomId}');
+    }
+
+    // Validate roomId
+    if (widget.roomId.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Chat')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text('Invalid chat room ID'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     final ChatRoomState chatState;
     try {
       chatState = ref.watch(chatRoomProvider(widget.roomId));
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[ChatScreen] ERROR watching provider: $e');
+      debugPrint('[ChatScreen] Stack trace: $stackTrace');
       return Scaffold(
         appBar: AppBar(title: const Text('Chat')),
         body: Center(
@@ -93,6 +139,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
 
+    final otherPartyPhone = widget.roomId.startsWith('chat_')
+        ? widget.roomId.replaceFirst('chat_', '')
+        : '';
+    final otherPartyName = otherPartyPhone.isNotEmpty
+        ? MockData.getDisplayNameForPhoneDigits(otherPartyPhone)
+        : 'Chat';
+    final otherInitial = otherPartyName.isNotEmpty
+        ? otherPartyName.substring(0, 1).toUpperCase()
+        : '?';
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -100,7 +156,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: Colors.blue[100],
-              child: Text('B',
+              child: Text(otherInitial,
                   style: TextStyle(
                       color: Colors.blue[800], fontWeight: FontWeight.bold)),
             ),
@@ -108,7 +164,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Bilal Traders', style: TextStyle(fontSize: 16)),
+                Text(otherPartyName, style: const TextStyle(fontSize: 16)),
                 Row(
                   children: [
                     Container(
@@ -141,7 +197,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             icon: const Icon(Icons.call),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Calling Bilal Traders...')),
+                SnackBar(content: Text('Calling $otherPartyName...')),
               );
             },
           ),
@@ -149,7 +205,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
-          // Deal context card
+          // Deal context card (listing inquiry with this contact)
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.green[50],
@@ -158,30 +214,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 const Icon(Icons.inventory_2,
                     size: 20, color: Color(0xFF16A34A)),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Copper Wire Scrap',
-                          style: TextStyle(
+                      Text('Chat with $otherPartyName',
+                          style: const TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 13)),
-                      Text('200 kg \u2022 Rs. 850/kg',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text('Listing inquiry',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                     ],
                   ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[100],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text('NEGOTIATING',
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange[800])),
                 ),
               ],
             ),

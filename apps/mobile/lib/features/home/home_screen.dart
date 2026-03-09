@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth.provider.dart';
+import '../../core/providers/listings.provider.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 import '../../core/models/category.model.dart';
@@ -15,10 +16,12 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider);
     final categories = MockData.categories;
-    // Pro: geo-fenced (only designated area). Customer: see everything.
-    final listings = AppVariant.enforceGeoFencing
+    final posted = ref.watch(userPostedListingsProvider);
+    // Pro: geo-fenced mock data + all user-posted (so new listings visible to all area users). Customer: see everything.
+    final mockListings = AppVariant.enforceGeoFencing
         ? MockData.listingsForUser(user?.id)
         : [...MockData.listings, ...MockData.islamabadListings];
+    final listings = [...posted, ...mockListings];
 
     return Scaffold(
       appBar: AppBar(

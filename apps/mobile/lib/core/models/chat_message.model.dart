@@ -34,6 +34,7 @@ class ChatMessageModel {
   ChatMessageModel copyWith({
     MessageStatus? status,
     DateTime? syncedAt,
+    bool? isMe,
   }) {
     return ChatMessageModel(
       id: id,
@@ -44,7 +45,7 @@ class ChatMessageModel {
       status: status ?? this.status,
       createdAt: createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
-      isMe: isMe,
+      isMe: isMe ?? this.isMe,
     );
   }
 

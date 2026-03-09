@@ -6,10 +6,19 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/config/app_variant.dart';
 import 'core/providers/chat.provider.dart';
+import 'services/chat_db_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+
+  // Initialize chat database early to prevent initialization errors
+  try {
+    await ChatDbService().database;
+    debugPrint('[App] Chat database initialized');
+  } catch (e) {
+    debugPrint('[App] Chat database initialization failed: $e');
+  }
 
   runApp(
     EasyLocalization(

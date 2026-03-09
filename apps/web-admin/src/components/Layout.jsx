@@ -4,12 +4,26 @@ import { toast } from 'react-toastify';
 import {
   FiHome, FiUsers, FiGrid, FiList, FiMapPin, FiGlobe,
   FiDollarSign, FiCreditCard, FiBarChart2, FiBell, FiLogOut,
-  FiMenu, FiX, FiChevronDown, FiChevronRight, FiPackage, FiSettings
+  FiMenu, FiX, FiChevronDown, FiChevronRight, FiPackage, FiSettings,
+  FiMessageCircle, FiFileText, FiShoppingBag
 } from 'react-icons/fi';
 import { getNotifications, markAllRead } from '../services/api';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: FiHome },
+  {
+    label: '📱 Marketplace (same as app)',
+    icon: FiShoppingBag,
+    children: [
+      { to: '/marketplace', label: 'Home' },
+      { to: '/marketplace/create', label: 'Post Listing' },
+      { to: '/marketplace/listings', label: 'Browse Listings' },
+      { to: '/marketplace/profile', label: 'Profile' },
+      { to: '/marketplace/chat', label: 'Chat Inbox' },
+      { to: '/marketplace/transactions', label: 'Transactions' },
+      { to: '/marketplace/wallet', label: 'Wallet' },
+    ],
+  },
   { to: '/users', label: 'Users', icon: FiUsers },
   {
     label: '🏪 Dealers (Revenue)',
@@ -68,7 +82,8 @@ export default function Layout() {
   const fetchNotifs = useCallback(async () => {
     try {
       const res = await getNotifications({ unread: true, limit: 10 });
-      setNotifications(res.data?.notifications || res.data || []);
+      const raw = res.data?.data ?? res.data?.notifications ?? res.data;
+      setNotifications(Array.isArray(raw) ? raw : []);
     } catch {
       /* ignore */
     }

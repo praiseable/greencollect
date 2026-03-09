@@ -22,8 +22,9 @@ export default function Login() {
       const { token, refreshToken, user } = res.data;
 
       // Validate admin role
-      const adminRoles = ['SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'];
-      if (!adminRoles.includes(user.role?.name)) {
+      const adminRoles = ['SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN', 'COLLECTION_MANAGER', 'REGIONAL_MANAGER'];
+      const role = user.role?.name ?? user.role;
+      if (!adminRoles.includes(role)) {
         toast.error('Access denied. Admin privileges required.');
         setLoading(false);
         return;

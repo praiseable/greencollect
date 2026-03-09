@@ -20,6 +20,7 @@ import '../../features/transactions/bond_viewer_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/chat/chat_screen.dart';
+import '../../features/chat/chat_inbox_screen.dart';
 import '../../features/analytics/analytics_screen.dart';
 import '../../features/wallet/wallet_screen.dart';
 import '../../features/territory/territory_screen.dart';
@@ -190,6 +191,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/analytics',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AnalyticsScreen(),
+      ),
+      GoRoute(
+        path: '/chat-inbox',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ChatInboxScreen(),
       ),
       GoRoute(
         path: '/chat/:roomId',

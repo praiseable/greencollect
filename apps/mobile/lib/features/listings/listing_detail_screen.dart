@@ -1,21 +1,70 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
+import '../../core/providers/listings.provider.dart';
 
-class ListingDetailScreen extends ConsumerWidget {
+class ListingDetailScreen extends ConsumerStatefulWidget {
   final String listingId;
   const ListingDetailScreen({super.key, required this.listingId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final listing = MockData.listings.firstWhere(
-      (l) => l.id == listingId,
-      orElse: () => MockData.listings.first,
+  ConsumerState<ListingDetailScreen> createState() => _ListingDetailScreenState();
+}
+
+class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
+  void _goBack() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
+  Widget _listingImage(String urlOrPath) {
+    final isUrl = urlOrPath.startsWith('http');
+    return isUrl
+        ? Image.network(
+            urlOrPath,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: Colors.grey[200],
+              child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
+            ),
+          )
+        : Image.file(
+            File(urlOrPath),
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: Colors.grey[200],
+              child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
+            ),
+          );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final posted = ref.watch(userPostedListingsProvider);
+    final allListings = [...posted, ...MockData.listings, ...MockData.islamabadListings];
+    final listing = allListings.firstWhere(
+      (l) => l.id == widget.listingId,
+      orElse: () => allListings.first,
     );
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBack();
+      },
+      child: Scaffold(
       body: CustomScrollView(
         slivers: [
           // Image header with explicit back button
@@ -26,29 +75,17 @@ class ListingDetailScreen extends ConsumerWidget {
               icon: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.35),
+                  color: Colors.black.withOpacity(0.5),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
               ),
-              onPressed: () {
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                } else {
-                  context.go('/home');
-                }
-              },
+              onPressed: _goBack,
+              tooltip: 'Back',
             ),
             flexibleSpace: FlexibleSpaceBar(
               background: listing.images.isNotEmpty
-                  ? Image.network(
-                      listing.images.first,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
-                      ),
-                    )
+                  ? _listingImage(listing.images.first)
                   : Container(
                       color: Colors.grey[200],
                       child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
@@ -59,7 +96,19 @@ class ListingDetailScreen extends ConsumerWidget {
                 icon: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.home, color: Colors.white, size: 20),
+                ),
+                onPressed: () => context.go('/home'),
+                tooltip: 'Home',
+              ),
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.favorite_border, color: Colors.white, size: 20),
@@ -74,7 +123,7 @@ class ListingDetailScreen extends ConsumerWidget {
                 icon: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withOpacity(0.5),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.share, color: Colors.white, size: 20),
@@ -257,18 +306,27 @@ class ListingDetailScreen extends ConsumerWidget {
                       children: [
                         IconButton(
                           icon: Icon(Icons.call, color: Colors.green[700]),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Calling ${listing.sellerPhone}...')),
-                            );
+                          onPressed: () async {
+                            final phone = listing.sellerPhone.replaceAll(RegExp(r'[^\d]'), '');
+                            final uri = Uri.parse('tel:+92$phone');
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri);
+                            } else {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Could not make call to ${listing.sellerPhone}')),
+                                );
+                              }
+                            }
                           },
                         ),
                         IconButton(
                           icon: Icon(Icons.message, color: Colors.blue[700]),
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Opening chat...')),
-                            );
+                            // Generate roomId from seller phone (normalized)
+                            final phoneDigits = listing.sellerPhone.replaceAll(RegExp(r'[^\d]'), '');
+                            final roomId = 'chat_$phoneDigits';
+                            context.push('/chat/$roomId');
                           },
                         ),
                       ],
@@ -300,10 +358,18 @@ class ListingDetailScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Calling ${listing.sellerPhone}...')),
-                  );
+                onPressed: () async {
+                  final phone = listing.sellerPhone.replaceAll(RegExp(r'[^\d]'), '');
+                  final uri = Uri.parse('tel:+92$phone');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri);
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not make call to ${listing.sellerPhone}')),
+                      );
+                    }
+                  }
                 },
                 icon: const Icon(Icons.call),
                 label: const Text('Call'),
@@ -359,6 +425,7 @@ class ListingDetailScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

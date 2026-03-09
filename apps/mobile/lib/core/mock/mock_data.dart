@@ -617,6 +617,47 @@ class MockData {
     '+923002220004': '990004',
   };
 
+  /// Normalize phone digits for lookup (roomId gives digits like "3001234567" or "3219876543").
+  static String? _normalizePhoneKey(String digits) {
+    final d = digits.replaceAll(RegExp(r'[^\d]'), '');
+    if (d.isEmpty) return null;
+    final candidates = <String>[
+      d,
+      if (d.length == 9) '0$d',
+      if (d.length == 10 && !d.startsWith('0')) '0$d',
+      if (d.length == 10 && d.startsWith('0')) d,
+      if (d.length == 11 && d.startsWith('92')) d.substring(2),
+    ];
+    for (final key in candidates) {
+      if (key.isNotEmpty && phoneToRole.containsKey(key)) return key;
+    }
+    return null;
+  }
+
+  /// Display name for the user with this phone (chat "other party" and inbox).
+  static String getDisplayNameForPhoneDigits(String phoneDigits) {
+    final key = _normalizePhoneKey(phoneDigits);
+    if (key == null) return _formatPhoneFallback(phoneDigits);
+    final role = phoneToRole[key];
+    if (role == null || !users.containsKey(role)) return _formatPhoneFallback(phoneDigits);
+    return users[role]!.name;
+  }
+
+  static String _formatPhoneFallback(String digits) {
+    final d = digits.replaceAll(RegExp(r'[^\d]'), '');
+    if (d.length >= 10) return '0${d.substring(0, 3)}-${d.substring(3)}';
+    return d.isEmpty ? 'Unknown' : d;
+  }
+
+  /// User id for this phone (for sendMessage toUserId).
+  static String? getUserIdForPhoneDigits(String phoneDigits) {
+    final key = _normalizePhoneKey(phoneDigits);
+    if (key == null) return null;
+    final role = phoneToRole[key];
+    if (role == null || !users.containsKey(role)) return null;
+    return users[role]!.id;
+  }
+
   // ── GEO-FENCE: user → allowed areas ─────────────────────
   // Each user can ONLY see listings whose `area` or `city` is in their allowed set.
   // Customers/Wholesale see everything; dealers see only their zone; franchise sees city.

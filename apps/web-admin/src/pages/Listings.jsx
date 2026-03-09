@@ -28,8 +28,9 @@ export default function Listings() {
       if (statusFilter !== 'ALL') params.status = statusFilter;
       if (catFilter) params.categoryId = catFilter;
       const res = await getAdminListings(params);
-      setListings(res.data?.listings || res.data || []);
-      setTotal(res.data?.total || 0);
+      const list = res.data?.data ?? res.data?.listings ?? res.data ?? [];
+      setListings(Array.isArray(list) ? list : []);
+      setTotal(res.data?.total ?? 0);
     } catch { toast.error('Failed to load listings'); }
     finally { setLoading(false); }
   };

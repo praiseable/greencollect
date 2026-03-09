@@ -53,8 +53,11 @@ export const getProductType = (id) => api.get(`/product-types/${id}`);
 export const createProductType = (data) => api.post('/product-types', data);
 export const createAttribute = (typeId, data) => api.post(`/product-types/${typeId}/attributes`, data);
 
-// Listings
+// Listings (same as mobile app: browse + create + detail)
 export const getListings = (params) => api.get('/listings', { params });
+export const getListing = (id) => api.get(`/listings/${id}`);
+export const createListing = (data) => api.post('/listings', data);
+export const postListingImages = (id, formData) => api.post(`/listings/${id}/images`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const getAdminListings = (params) => api.get('/admin/all-listings', { params });
 export const updateListingStatus = (id, data) => api.put(`/admin/listings/${id}/status`, data);
 
@@ -68,7 +71,7 @@ export const getTranslations = (langId) => api.get(`/translations/${langId}`);
 export const saveTranslation = (data) => api.post('/translations', data);
 export const bulkImportTranslations = (data) => api.post('/translations/bulk-import', data);
 
-// Geo-Zones
+// Geo-Zones (same as mobile app for listing location)
 export const getGeoZones = (params) => api.get('/geo-zones', { params });
 export const getCities = () => api.get('/geo-zones/cities');
 
@@ -78,10 +81,23 @@ export const getUnits = (params) => api.get('/units', { params });
 // Subscriptions
 export const getPlans = () => api.get('/subscriptions/plans');
 
-// Notifications
+// Notifications (same as mobile app)
 export const getNotifications = (params) => api.get('/notifications', { params });
 export const markNotificationRead = (id) => api.put(`/notifications/${id}/read`);
 export const markAllRead = () => api.put('/notifications/read-all');
+
+// Chat (same as mobile app: inbox + conversation)
+export const getChatConversations = () => api.get('/chat/conversations');
+export const getChatMessages = (userId, params) => api.get(`/chat/${userId}`, { params });
+export const sendChatMessage = (userId, body) => api.post(`/chat/${userId}`, body);
+
+// Transactions (same as mobile app: list + detail + negotiate)
+export const getTransactions = (params) => api.get('/transactions', { params });
+export const getTransaction = (id) => api.get(`/transactions/${id}`);
+export const getTransactionBond = (id) => api.get(`/transactions/${id}/bond`);
+export const acceptTransaction = (id) => api.put(`/transactions/${id}/accept`);
+export const rejectTransaction = (id, data) => api.put(`/transactions/${id}/reject`, data);
+export const finalizeTransaction = (id, data) => api.put(`/transactions/${id}/finalize`, data);
 
 // Analytics
 export const getAnalyticsOverview = () => api.get('/analytics/overview');
