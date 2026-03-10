@@ -141,7 +141,9 @@ router.post('/login', [
   }
 });
 
-// POST /auth/otp/send — Send OTP to Pakistan phone
+const otpStore = require('../utils/otpStore');
+
+// POST /auth/otp/send — Send OTP to Pakistan phone (spec: suspended 403, lockout 423, cooldown 429)
 router.post('/otp/send', [
   body('phone').matches(/^(\+92|0)?3[0-9]{9}$/).withMessage('Invalid Pakistan phone number (+92 format)'),
   body('purpose').optional().isIn(['LOGIN', 'REGISTER', 'RESET_PASSWORD']),
@@ -152,6 +154,22 @@ router.post('/otp/send', [
 
     const { phone, purpose = 'LOGIN' } = req.body;
     const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
+
+    // Suspended/banned user gets 403 immediately (spec 2.4)
+    const existingUser = await prisma.user.findUnique({ where: { phone: normalizedPhone } });
+    if (existingUser && ['SUSPENDED', 'REJECTED'].includes(existingUser.accountStatus)) {
+      return res.status(403).json({ error: { message: 'Account is suspended or rejected', code: 'ACCOUNT_SUSPENDED' } });
+    }
+
+    const lockedUntil = otpStore.getLockout(normalizedPhone);
+    if (lockedUntil) {
+      return res.status(423).json({ error: { code: 'OTP_LOCKED', lockedUntil: lockedUntil.toISOString() } });
+    }
+
+    const cooldownSec = otpStore.getCooldown(normalizedPhone);
+    if (cooldownSec !== null) {
+      return res.status(429).json({ error: { message: 'Please wait before requesting another OTP', code: 'OTP_COOLDOWN', cooldownSeconds: cooldownSec } });
+    }
 
     // Generate 6-digit OTP
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -166,41 +184,69 @@ router.post('/otp/send', [
       },
     });
 
-    // TODO: Send via Twilio in production
-    console.log(`OTP for ${normalizedPhone}: ${code}`);
+    otpStore.setCooldown(normalizedPhone);
 
-    res.json({ message: 'OTP sent successfully', phone: normalizedPhone });
+    // TODO: Send via Twilio in production
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`OTP for ${normalizedPhone}: ${code}`);
+    }
+
+    res.json({ success: true, message: 'OTP sent', expiresIn: 300, cooldownSeconds: otpStore.OTP_RESEND_COOLDOWN_SECONDS });
   } catch (err) {
     console.error('OTP send error:', err);
     res.status(500).json({ error: { message: 'Failed to send OTP', code: 'OTP_FAILED' } });
   }
 });
 
-// POST /auth/otp/verify
-router.post('/otp/verify', [
+// OTP verify (spec: lockout 423, wrong code -> attemptsLeft). Accepts both code and otp for mobile.
+const otpVerifyValidators = [
   body('phone').matches(/^(\+92|0)?3[0-9]{9}$/),
-  body('code').isLength({ min: 6, max: 6 }),
-], async (req, res) => {
+  body('code').optional().isLength({ min: 6, max: 6 }),
+  body('otp').optional().isLength({ min: 6, max: 6 }),
+];
+async function otpVerifyHandler(req, res) {
   try {
-    const { phone, code } = req.body;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { phone, code: codeBody, otp: otpBody } = req.body;
+    const code = codeBody || otpBody;
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ error: { message: 'Code must be 6 digits', code: 'VALIDATION_ERROR' } });
+    }
     const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
+
+    const lockedUntil = otpStore.getLockout(normalizedPhone);
+    if (lockedUntil) {
+      return res.status(423).json({ error: { code: 'OTP_LOCKED', lockedUntil: lockedUntil.toISOString() } });
+    }
 
     const otp = await prisma.oTP.findFirst({
       where: {
         phone: normalizedPhone,
-        code,
         isUsed: false,
         expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!otp) return res.status(400).json({ error: { message: 'Invalid or expired OTP', code: 'OTP_INVALID' } });
+    if (!otp) {
+      return res.status(400).json({ error: { message: 'Invalid or expired OTP', code: 'OTP_INVALID', attemptsLeft: otpStore.getAttemptsLeft(normalizedPhone) } });
+    }
 
-    // Mark OTP as used
+    if (otp.code !== code) {
+      const n = otpStore.recordFailedAttempt(normalizedPhone);
+      const attemptsLeft = otpStore.getAttemptsLeft(normalizedPhone);
+      if (n >= otpStore.OTP_MAX_ATTEMPTS) {
+        const lockedUntil = otpStore.getLockout(normalizedPhone);
+        return res.status(423).json({ error: { message: 'Too many failed attempts. Account locked.', code: 'OTP_LOCKED', lockedUntil: lockedUntil ? lockedUntil.toISOString() : null } });
+      }
+      return res.status(400).json({ error: { message: `Incorrect OTP (${attemptsLeft} attempts left)`, code: 'OTP_INVALID', attemptsLeft } });
+    }
+
     await prisma.oTP.update({ where: { id: otp.id }, data: { isUsed: true } });
+    otpStore.clearAttempts(normalizedPhone);
 
-    // Find or create user
     let user = await prisma.user.findUnique({ where: { phone: normalizedPhone } });
     if (!user) {
       user = await prisma.user.create({
@@ -222,12 +268,21 @@ router.post('/otp/verify', [
       data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
     });
 
-    res.json({ user: { id: user.id, phone: user.phone, firstName: user.firstName, role: user.role }, ...tokens });
+    const userPayload = { id: user.id, phone: user.phone, firstName: user.firstName, lastName: user.lastName, role: user.role };
+    res.json({
+      success: true,
+      user: userPayload,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
   } catch (err) {
     console.error('OTP verify error:', err);
     res.status(500).json({ error: { message: 'OTP verification failed', code: 'INTERNAL_ERROR' } });
   }
-});
+}
+
+router.post('/otp/verify', otpVerifyValidators, otpVerifyHandler);
+router.post('/verify-otp', otpVerifyValidators, otpVerifyHandler); // mobile app alias
 
 // POST /auth/refresh-token
 router.post('/refresh-token', async (req, res) => {
@@ -250,6 +305,52 @@ router.post('/refresh-token', async (req, res) => {
     res.json(tokens);
   } catch (err) {
     res.status(401).json({ error: { message: 'Invalid refresh token' } });
+  }
+});
+
+// POST /auth/admin-login — spec 2.4 (portal only: email + password, role admin|super_admin)
+router.post('/admin-login', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { email, password } = req.body;
+    const user = await prisma.user.findFirst({
+      where: {
+        email: email || undefined,
+        role: { in: ['ADMIN', 'SUPER_ADMIN'] },
+      },
+    });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+    }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ error: { message: 'Account is deactivated', code: 'ACCOUNT_INACTIVE' } });
+    }
+
+    const tokens = generateTokens(user.id, user.role);
+    await prisma.refreshToken.create({
+      data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+    });
+
+    const userPayload = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+    };
+    res.json({ success: true, user: userPayload, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+  } catch (err) {
+    console.error('Admin login error:', err);
+    res.status(500).json({ error: { message: 'Login failed', code: 'INTERNAL_ERROR' } });
   }
 });
 

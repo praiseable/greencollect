@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
+const { success, error, paginated } = require('../utils/apiResponse');
 const { addFormattedPrice } = require('../services/currency.service');
 const { buildGeoFenceWhere, canUserViewListing } = require('../services/geoFencing.service');
 const { notifyZoneDealersOnNewListing } = require('../services/escalation.service');
@@ -104,6 +105,142 @@ router.get('/', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('List listings error:', err);
     res.status(500).json({ error: { message: 'Failed to fetch listings' } });
+  }
+});
+
+// GET /listings/favorites — Own favourited listings (spec 2.7)
+router.get('/favorites', authenticate, async (req, res) => {
+  try {
+    const lang = req.lang || 'en';
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [favs, total] = await Promise.all([
+      prisma.listingFavorite.findMany({
+        where: { userId: req.user.id },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit),
+        include: {
+          listing: {
+            include: {
+              category: { include: { translations: { where: { languageId: lang } } } },
+              productType: { include: { translations: { where: { languageId: lang } } } },
+              unit: { include: { translations: { where: { languageId: lang } } } },
+              seller: { select: { id: true, firstName: true, lastName: true, displayName: true, city: true } },
+              images: { orderBy: { sortOrder: 'asc' }, take: 3 },
+            },
+          },
+        },
+      }),
+      prisma.listingFavorite.count({ where: { userId: req.user.id } }),
+    ]);
+    const listings = favs.map(f => {
+      const l = f.listing;
+      return {
+        ...l,
+        pricePaisa: l.pricePaisa.toString(),
+        priceFormatted: `₨ ${Number(l.pricePaisa).toLocaleString('en-PK')}`,
+        categoryName: l.category?.translations?.[0]?.name || l.category?.slug,
+        productTypeName: l.productType?.translations?.[0]?.name || l.productType?.slug,
+      };
+    });
+    const totalPages = Math.ceil(total / parseInt(limit));
+    res.json(paginated(listings, { page: parseInt(page), limit: parseInt(limit), total, totalPages }));
+  } catch (err) {
+    console.error('List favorites error:', err);
+    res.status(500).json(error('Failed to fetch favorites', 'INTERNAL_ERROR'));
+  }
+});
+
+// POST /listings/:id/favorite — Toggle favourite (spec 2.7)
+router.post('/:id/favorite', authenticate, async (req, res) => {
+  try {
+    const listing = await prisma.listing.findUnique({ where: { id: req.params.id } });
+    if (!listing) return res.status(404).json(error('Listing not found', 'NOT_FOUND'));
+    const existing = await prisma.listingFavorite.findUnique({
+      where: { userId_listingId: { userId: req.user.id, listingId: req.params.id } },
+    });
+    if (existing) {
+      await prisma.listingFavorite.delete({ where: { id: existing.id } });
+      return res.json(success({ favorited: false }));
+    }
+    await prisma.listingFavorite.create({
+      data: { userId: req.user.id, listingId: req.params.id },
+    });
+    return res.json(success({ favorited: true }));
+  } catch (err) {
+    console.error('Toggle favorite error:', err);
+    res.status(500).json(error('Failed to update favorite', 'INTERNAL_ERROR'));
+  }
+});
+
+// POST /listings/:id/report — Report listing (spec 2.7); auto-flag at 5 reports
+router.post('/:id/report', authenticate, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
+      return res.status(400).json(error('Reason is required (min 5 characters)', 'VALIDATION_ERROR'));
+    }
+    const listing = await prisma.listing.findUnique({ where: { id: req.params.id } });
+    if (!listing) return res.status(404).json(error('Listing not found', 'NOT_FOUND'));
+    const existing = await prisma.listingReport.findUnique({
+      where: { listingId_reporterId: { listingId: req.params.id, reporterId: req.user.id } },
+    });
+    if (existing) return res.status(409).json(error('You have already reported this listing', 'ALREADY_REPORTED'));
+    await prisma.listingReport.create({
+      data: { listingId: req.params.id, reporterId: req.user.id, reason: reason.trim() },
+    });
+    const reportCount = await prisma.listingReport.count({ where: { listingId: req.params.id } });
+    if (reportCount >= 5) {
+      await prisma.listing.update({
+        where: { id: req.params.id },
+        data: { isFlagged: true, flagCount: reportCount },
+      });
+      const io = req.app.get('io');
+      if (io) {
+        const admins = await prisma.user.findMany({ where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] } }, select: { id: true } });
+        admins.forEach(({ id: userId }) => io.to(`user-${userId}`).emit('notification', { type: 'LISTING_FLAGGED', listingId: req.params.id, title: 'Listing flagged', body: `Listing has received ${reportCount} reports.` }));
+      }
+    }
+    return res.json(success({ reported: true }));
+  } catch (err) {
+    console.error('Report listing error:', err);
+    res.status(500).json(error('Failed to submit report', 'INTERNAL_ERROR'));
+  }
+});
+
+// GET /listings/my — Own listings (all statuses) — spec 2.7
+router.get('/my', authenticate, async (req, res) => {
+  try {
+    const lang = req.lang || 'en';
+    const { page = 1, limit = 20, status } = req.query;
+    const where = { sellerId: req.user.id };
+    if (status) where.status = status;
+    const [listings, total] = await Promise.all([
+      prisma.listing.findMany({
+        where,
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        take: parseInt(limit),
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          category: { include: { translations: { where: { languageId: lang } } } },
+          productType: { include: { translations: { where: { languageId: lang } } } },
+          unit: { include: { translations: { where: { languageId: lang } } } },
+          images: { orderBy: { sortOrder: 'asc' }, take: 3 },
+        },
+      }),
+      prisma.listing.count({ where }),
+    ]);
+    const data = listings.map(l => ({
+      ...l,
+      pricePaisa: l.pricePaisa.toString(),
+      priceFormatted: `₨ ${Number(l.pricePaisa).toLocaleString('en-PK')}`,
+    }));
+    const totalPages = Math.ceil(total / parseInt(limit));
+    res.json(paginated(data, { page: parseInt(page), limit: parseInt(limit), total, totalPages }));
+  } catch (err) {
+    console.error('List my listings error:', err);
+    res.status(500).json(error('Failed to fetch your listings', 'INTERNAL_ERROR'));
   }
 });
 
@@ -322,7 +459,35 @@ router.put('/:id', authenticate, async (req, res) => {
   }
 });
 
-// DELETE /listings/:id — Close listing
+// PATCH /listings/:id/deactivate — spec 2.7 (owner or admin)
+router.patch('/:id/deactivate', authenticate, async (req, res) => {
+  try {
+    const listing = await prisma.listing.findUnique({ where: { id: req.params.id } });
+    if (!listing) return res.status(404).json({ error: { message: 'Listing not found' } });
+    if (listing.sellerId !== req.user.id && !['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(req.user.role)) {
+      return res.status(403).json({ error: { message: 'Not authorized' } });
+    }
+    await prisma.listing.update({ where: { id: req.params.id }, data: { status: 'CLOSED' } });
+    res.json(success({ status: 'CLOSED' }));
+  } catch (err) {
+    res.status(500).json(error('Failed to deactivate listing', 'INTERNAL_ERROR'));
+  }
+});
+
+// PATCH /listings/:id/reactivate — spec 2.7 (owner only)
+router.patch('/:id/reactivate', authenticate, async (req, res) => {
+  try {
+    const listing = await prisma.listing.findUnique({ where: { id: req.params.id } });
+    if (!listing) return res.status(404).json({ error: { message: 'Listing not found' } });
+    if (listing.sellerId !== req.user.id) return res.status(403).json({ error: { message: 'Not authorized' } });
+    await prisma.listing.update({ where: { id: req.params.id }, data: { status: 'ACTIVE' } });
+    res.json(success({ status: 'ACTIVE' }));
+  } catch (err) {
+    res.status(500).json(error('Failed to reactivate listing', 'INTERNAL_ERROR'));
+  }
+});
+
+// DELETE /listings/:id — Soft close / delete (owner or admin)
 router.delete('/:id', authenticate, async (req, res) => {
   try {
     const listing = await prisma.listing.findUnique({ where: { id: req.params.id } });
@@ -332,9 +497,9 @@ router.delete('/:id', authenticate, async (req, res) => {
     }
 
     await prisma.listing.update({ where: { id: req.params.id }, data: { status: 'CLOSED' } });
-    res.json({ message: 'Listing closed' });
+    res.json(success({ message: 'Listing closed' }));
   } catch (err) {
-    res.status(500).json({ error: { message: 'Failed to close listing' } });
+    res.status(500).json(error('Failed to close listing', 'INTERNAL_ERROR'));
   }
 });
 

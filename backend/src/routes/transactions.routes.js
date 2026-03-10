@@ -85,6 +85,8 @@ router.post('/', authenticate, async (req, res) => {
       data: {
         listingId,
         buyerId: req.user.id,
+        sellerId: listing.sellerId,
+        amountPaisa: BigInt(offeredPricePaisa),
         offeredPricePaisa: BigInt(offeredPricePaisa),
         quantity: quantity || listing.quantity,
         unitId: listing.unitId,
@@ -103,7 +105,7 @@ router.post('/', authenticate, async (req, res) => {
         body: `An offer of ₨${Number(offeredPricePaisa) / 100} was made on your listing "${listing.title}"`,
         data: { listingId, transactionId: transaction.id },
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.status(201).json({ ...transaction, offeredPricePaisa: transaction.offeredPricePaisa.toString() });
   } catch (err) {
@@ -199,7 +201,7 @@ router.put('/:id/finalize', authenticate, async (req, res) => {
     await prisma.listing.update({
       where: { id: existing.listingId },
       data: { status: 'SOLD' },
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.json({ transaction, bond });
   } catch (err) {

@@ -411,7 +411,9 @@ model User {
   depositPaidAt          DateTime?  // When the deposit was paid
   depositAmount          Int        @default(0)   // Actual amount deposited
 
-  listings      Listing[]  @relation("SellerListings")
+  listings           Listing[]         @relation("SellerListings")
+  listingFavorites   ListingFavorite[]
+  listingReports     ListingReport[]   @relation("ListingReporter")
   transactions  Transaction[] @relation("BuyerTransactions")
   sellerTransactions Transaction[] @relation("SellerTransactions")
   notifications Notification[]
@@ -552,7 +554,11 @@ model Listing {
   images          ListingImage[]
   viewCount       Int                     @default(0)
   interestedCount Int                     @default(0)
+  isFlagged       Boolean                 @default(false)
+  flagCount       Int                     @default(0)
   escalationHistory EscalationLog[]
+  favorites       ListingFavorite[]
+  reports         ListingReport[]
   transactions    Transaction[]
   collections     Collection[]
   expiresAt       DateTime?
@@ -567,6 +573,33 @@ model ListingImage {
   url       String
   sortOrder Int     @default(0)
   createdAt DateTime @default(now())
+}
+
+model ListingFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([userId])
+  @@index([listingId])
+}
+
+model ListingReport {
+  id        String   @id @default(uuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User     @relation("ListingReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason    String
+  status    String   @default("pending") // pending|reviewed|dismissed
+  createdAt DateTime @default(now())
+
+  @@unique([listingId, reporterId])
+  @@index([listingId])
 }
 
 enum ListingStatus {
@@ -647,24 +680,30 @@ model EscalationLog {
 // ═══════════════════════════════════════════════════════════
 
 model Transaction {
-  id            String            @id @default(uuid())
-  listingId     String
-  listing       Listing           @relation(fields: [listingId], references: [id])
-  buyerId       String
-  buyer         User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  sellerId      String
-  seller        User              @relation("SellerTransactions", fields: [sellerId], references: [id])
-  amountPaisa   BigInt
-  currencyId    String
-  currency      Currency          @relation(fields: [currencyId], references: [id])
-  quantity      Decimal           @db.Decimal(12, 3)
-  status        TransactionStatus @default(OFFER_MADE)
-  bond          Bond?
-  paymentId     String?
-  payment       Payment?          @relation(fields: [paymentId], references: [id])
-  notes         String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                String            @id @default(uuid())
+  listingId         String
+  listing           Listing           @relation(fields: [listingId], references: [id])
+  buyerId           String
+  buyer             User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId          String
+  seller            User              @relation("SellerTransactions", fields: [sellerId], references: [id])
+  amountPaisa       BigInt            // legacy / agreed amount
+  offeredPricePaisa BigInt?           // initial offer (paisa)
+  counterPricePaisa BigInt?           // counter offer (paisa)
+  finalPricePaisa   BigInt?           // agreed on accept
+  totalPaisa        BigInt?           // finalPrice * quantity
+  unitId            String?
+  currencyId        String
+  currency          Currency          @relation(fields: [currencyId], references: [id])
+  quantity          Decimal           @db.Decimal(12, 3)
+  status            TransactionStatus @default(OFFER_MADE)
+  message           String?          // offer/counter message
+  bond              Bond?
+  paymentId         String?
+  payment           Payment?          @relation(fields: [paymentId], references: [id])
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 }
 
 model Bond {
@@ -680,8 +719,12 @@ model Bond {
 
 enum TransactionStatus {
   OFFER_MADE
+  OFFERED        // alias for offer created (used by routes)
+  NEGOTIATING    // counter offered
   OFFER_ACCEPTED
+  ACCEPTED       // alias (used by routes)
   OFFER_REJECTED
+  REJECTED       // alias (used by routes)
   BOND_CREATED
   PAYMENT_PENDING
   PAYMENT_COMPLETED

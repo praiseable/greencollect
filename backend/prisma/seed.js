@@ -296,6 +296,18 @@ async function main() {
     subscription_grace_days: '2', price_suggestion_enabled: 'true',
     catalog_version_hash: 'v1',
   };
+  // App version for force-update (Kabariya spec): minVersion, latestVersion, forceUpdate
+  const appVersionPayload = JSON.stringify({ minVersion: '1.0.0', latestVersion: '1.0.0', forceUpdate: false });
+  await prisma.platformConfig.upsert({
+    where: { key: 'app_version_android' },
+    update: { value: appVersionPayload },
+    create: { id: 'app_version_android', key: 'app_version_android', value: appVersionPayload, label: 'App version (Android)' },
+  });
+  await prisma.platformConfig.upsert({
+    where: { key: 'app_version_ios' },
+    update: { value: appVersionPayload },
+    create: { id: 'app_version_ios', key: 'app_version_ios', value: appVersionPayload, label: 'App version (iOS)' },
+  });
   for (const [key, value] of Object.entries(configs)) {
     await prisma.platformConfig.upsert({
       where: { key },

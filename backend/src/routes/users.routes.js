@@ -3,6 +3,27 @@ const prisma = require('../services/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 
+// GET /users/me — Own profile (spec 2.5; must be before /:id)
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: {
+        geoZone: true,
+        subscription: { include: { plan: true } },
+        wallet: true,
+      },
+    });
+    if (!user) return res.status(404).json({ error: { message: 'User not found' } });
+    const out = { ...user };
+    if (user.wallet) out.walletBalance = Number(user.wallet.balancePaisa);
+    res.json(out);
+  } catch (err) {
+    console.error('GET /users/me error:', err);
+    res.status(500).json({ error: { message: 'Failed to fetch profile' } });
+  }
+});
+
 // GET /users — List users (admin)
 router.get('/', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
   try {

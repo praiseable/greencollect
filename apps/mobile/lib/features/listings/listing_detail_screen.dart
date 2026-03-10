@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/mock/mock_data.dart';
 import '../../core/models/listing.model.dart';
 import '../../core/providers/listings.provider.dart';
+import '../../services/api_service.dart';
 
 class ListingDetailScreen extends ConsumerStatefulWidget {
   final String listingId;
@@ -16,6 +17,9 @@ class ListingDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
+  bool _isFavorited = false;
+  bool _loadingFavorite = false;
+
   void _goBack() {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
@@ -111,13 +115,43 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                     color: Colors.black.withOpacity(0.5),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.favorite_border, color: Colors.white, size: 20),
+                  child: _loadingFavorite
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(
+                          _isFavorited ? Icons.favorite : Icons.favorite_border,
+                          color: _isFavorited ? Colors.red : Colors.white,
+                          size: 20,
+                        ),
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Added to favorites')),
-                  );
-                },
+                onPressed: _loadingFavorite
+                    ? null
+                    : () async {
+                        setState(() => _loadingFavorite = true);
+                        try {
+                          final favorited = await ApiService().toggleListingFavorite(widget.listingId);
+                          if (mounted) {
+                            setState(() {
+                              _isFavorited = favorited;
+                              _loadingFavorite = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text(favorited ? 'Added to favorites' : 'Removed from favorites')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() => _loadingFavorite = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString().replaceFirst('ApiException: ', ''))),
+                            );
+                          }
+                        }
+                      },
               ),
               IconButton(
                 icon: Container(

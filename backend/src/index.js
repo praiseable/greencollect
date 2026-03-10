@@ -67,9 +67,12 @@ app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/collections', require('./routes/collections.routes'));
 app.use('/api/kyc', require('./routes/kyc.routes'));
 
-// ── Mobile-specific routes (v1 prefix for backward compat) ──
+// ── Mobile-specific routes (v1 prefix — spec /api/v1) ──
 app.use('/v1/auth', require('./routes/auth.routes'));
+app.use('/v1/users', require('./routes/users.routes'));
 app.use('/v1/listings', require('./routes/listings.routes'));
+app.use('/v1/transactions', require('./routes/transactions.routes'));
+app.use('/v1/chat', require('./routes/chat.routes'));
 app.use('/v1/categories', require('./routes/categories.routes'));
 app.use('/v1/units', require('./routes/units.routes'));
 app.use('/v1/geo-zones', require('./routes/geoZones.routes'));
@@ -77,16 +80,27 @@ app.use('/v1/notifications', require('./routes/notifications.routes'));
 app.use('/v1/territories', require('./routes/territories.routes'));
 app.use('/v1/collections', require('./routes/collections.routes'));
 app.use('/v1/kyc', require('./routes/kyc.routes'));
+app.use('/v1/payments', require('./routes/payments.routes'));
+app.use('/v1/subscriptions', require('./routes/subscriptions.routes'));
 
-// Health check
-app.get('/health', (req, res) => {
+// Config (app version for force-update) — before auth
+app.use('/api/config', require('./routes/config.routes'));
+app.use('/v1/config', require('./routes/config.routes'));
+
+// Health check (spec: status, uptime, timestamp, db)
+const startTime = Date.now();
+const prisma = require('./services/prisma');
+app.get('/health', async (req, res) => {
+  let dbStatus = 'error';
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = 'connected';
+  } catch (_) {}
   res.json({
     status: 'ok',
-    service: 'geo-franchise-marketplace-api',
-    version: '2.0.0',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
     timestamp: new Date().toISOString(),
-    country: 'PK',
-    currency: 'PKR',
+    db: dbStatus,
   });
 });
 

@@ -91,6 +91,33 @@ class ApiService {
 
     throw ApiException(errorMessage, response.statusCode);
   }
+
+  /// App version config for force-update (Kabariya spec). platform: 'android' | 'ios'
+  Future<Map<String, dynamic>> getAppVersion(String platform) async {
+    final res = await get('config/app-version?platform=$platform');
+    if (res is Map && res['success'] == true && res['data'] != null) {
+      return Map<String, dynamic>.from(res['data'] as Map);
+    }
+    return {'minVersion': '1.0.0', 'latestVersion': '1.0.0', 'forceUpdate': false};
+  }
+
+  /// List user's favourited listings (paginated).
+  Future<Map<String, dynamic>> getListingsFavorites({int page = 1, int limit = 20}) async {
+    final res = await get('listings/favorites?page=$page&limit=$limit');
+    if (res is Map && res['success'] == true) {
+      return Map<String, dynamic>.from(res as Map);
+    }
+    return {'data': [], 'meta': {}};
+  }
+
+  /// Toggle favourite for a listing. Returns { favorited: true | false }.
+  Future<bool> toggleListingFavorite(String listingId) async {
+    final res = await post('listings/$listingId/favorite');
+    if (res is Map && res['success'] == true && res['data'] != null) {
+      return (res['data'] as Map)['favorited'] == true;
+    }
+    return false;
+  }
 }
 
 class ApiException implements Exception {

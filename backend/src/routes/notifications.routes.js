@@ -2,6 +2,18 @@ const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate } = require('../middleware/auth');
 
+// GET /notifications/unread-count — spec 2.9
+router.get('/unread-count', authenticate, async (req, res) => {
+  try {
+    const count = await prisma.notification.count({
+      where: { userId: req.user.id, isRead: false },
+    });
+    res.json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ error: { message: 'Failed to get unread count' } });
+  }
+});
+
 // GET /notifications — User's notifications
 router.get('/', authenticate, async (req, res) => {
   try {
