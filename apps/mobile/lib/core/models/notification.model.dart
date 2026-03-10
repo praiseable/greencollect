@@ -42,6 +42,30 @@ class NotificationModel {
     this.data = const {},
   });
 
+  /// Parse from API JSON (e.g. GET /v1/notifications)
+  factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>?;
+    final dataStr = <String, String>{};
+    if (data != null) {
+      for (final e in data.entries) {
+        if (e.value != null) dataStr[e.key.toString()] = e.value.toString();
+      }
+    }
+    return NotificationModel(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      titleUr: json['titleUr'] as String? ?? '',
+      body: json['body'] as String? ?? '',
+      bodyUr: json['bodyUr'] as String? ?? '',
+      type: json['type'] as String? ?? NotificationType.system,
+      isRead: (json['isRead'] as bool?) ?? false,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : DateTime.now(),
+      data: dataStr,
+    );
+  }
+
   /// Copy with read status toggled
   NotificationModel copyWith({bool? isRead}) {
     return NotificationModel(

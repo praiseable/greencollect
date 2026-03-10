@@ -19,6 +19,17 @@ class StorageService {
     return await _secureStorage.read(key: ApiConfig.tokenKey);
   }
 
+  /// Alias for getToken() — used by ApiService in fixes
+  Future<String?> getAccessToken() async => getToken();
+
+  /// Aliases for fix auth/chat providers
+  Future<void> saveAccessToken(String token) async => setToken(token);
+  Future<void> saveRefreshToken(String token) async => setRefreshToken(token);
+  Future<void> saveUser(Map<String, dynamic>? user) async {
+    if (user != null) await setUser(user);
+  }
+  Future<void> clearAll() async => clearAuth();
+
   Future<void> setRefreshToken(String token) async {
     await _secureStorage.write(key: ApiConfig.refreshTokenKey, value: token);
   }

@@ -1,367 +1,335 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../core/mock/mock_data.dart';
-import '../../core/models/listing.model.dart';
-import '../../core/models/category.model.dart';
-import '../../core/providers/auth.provider.dart';
+import 'package:provider/provider.dart';
 import '../../core/providers/listings.provider.dart';
-import '../../core/config/app_variant.dart';
+import '../../services/api_service.dart';
+import '../../widgets/listing_card.dart';
+import 'listing_detail_screen.dart';
 
-class ListingsScreen extends ConsumerStatefulWidget {
+// ✅ FIX: Removed MockData. All data now comes from ListingsProvider → real API.
+
+class ListingsScreen extends StatefulWidget {
   const ListingsScreen({super.key});
 
   @override
-  ConsumerState<ListingsScreen> createState() => _ListingsScreenState();
+  State<ListingsScreen> createState() => _ListingsScreenState();
 }
 
-class _ListingsScreenState extends ConsumerState<ListingsScreen> {
-  String? _selectedCategory;
-  String _searchQuery = '';
-  String _sortBy = 'latest'; // latest, price_low, price_high, quantity
-  String _visibilityFilter = 'all'; // all, local, neighbor, city, wholesale
-  final _searchController = TextEditingController();
+class _ListingsScreenState extends State<ListingsScreen> {
+  final ApiService _api = ApiService();
 
-  List<ListingModel> _getFilteredListings(String? userId, List<ListingModel> posted) {
-    // Pro: geo-fenced mock + all user-posted. Customer: see all.
-    final mockListings = AppVariant.enforceGeoFencing
-        ? MockData.listingsForUser(userId)
-        : [...MockData.listings, ...MockData.islamabadListings];
-    final allListings = [...posted, ...mockListings];
-    var listings = allListings.where((l) {
-      final matchesCategory = _selectedCategory == null || l.categoryId == _selectedCategory;
-      final matchesSearch = _searchQuery.isEmpty ||
-          l.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          l.description.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesVisibility = _visibilityFilter == 'all' ||
-          l.visibilityLevel.name.toLowerCase() == _visibilityFilter;
-      return matchesCategory && matchesSearch && matchesVisibility;
-    }).toList();
+  List<Map<String, dynamic>> _categories = [];
+  List<String> _cities = [];
+  String? _selectedCategoryId;
+  String? _selectedCity;
+  String _sortBy = 'latest';
+  final TextEditingController _searchCtrl = TextEditingController();
 
-    // Sort
-    switch (_sortBy) {
-      case 'price_low':
-        listings.sort((a, b) => a.pricePkr.compareTo(b.pricePkr));
-        break;
-      case 'price_high':
-        listings.sort((a, b) => b.pricePkr.compareTo(a.pricePkr));
-        break;
-      case 'quantity':
-        listings.sort((a, b) => b.quantity.compareTo(a.quantity));
-        break;
-      case 'latest':
-      default:
-        listings.sort((a, b) => a.daysAgo.compareTo(b.daysAgo));
-        break;
+  @override
+  void initState() {
+    super.initState();
+    _loadFilters();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ListingsProvider>().fetchListings(refresh: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFilters() async {
+    try {
+      final catRes  = await _api.get('categories');
+      final cityRes = await _api.get('geo-zones/cities');
+
+      final cats  = (catRes['categories']  ?? catRes['data']  ?? catRes)  as List<dynamic>;
+      final cities = (cityRes['cities']    ?? cityRes['data'] ?? cityRes) as List<dynamic>;
+
+      setState(() {
+        _categories = cats.cast<Map<String, dynamic>>();
+        _cities     = cities.map((c) => c.toString()).toList();
+      });
+    } catch (e) {
+      debugPrint('_loadFilters error: $e');
     }
-    return listings;
+  }
+
+  void _applyFilters() {
+    context.read<ListingsProvider>().fetchListings(
+      refresh:    true,
+      categoryId: _selectedCategoryId,
+      city:       _selectedCity,
+      search:     _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim(),
+      sort:       _sortBy,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authProvider);
-    final posted = ref.watch(userPostedListingsProvider);
-    final listings = _getFilteredListings(user?.id, posted);
-    final categories = MockData.categories;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Browse Listings'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: InputDecoration(
-                hintText: 'Search: copper, iron, plastics...',
-                filled: true,
-                fillColor: Colors.white,
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-              ),
-            ),
+        title: const Text('Listings'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_list),
+            onPressed: _showFilterSheet,
           ),
-        ),
+        ],
       ),
       body: Column(
         children: [
-          // Category chips
-          SizedBox(
-            height: 52,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              itemCount: categories.length + 1,
-              itemBuilder: (_, i) {
-                if (i == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: const Text('All'),
-                      selected: _selectedCategory == null,
-                      onSelected: (_) => setState(() => _selectedCategory = null),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: TextField(
+              controller: _searchCtrl,
+              onSubmitted: (_) => _applyFilters(),
+              decoration: InputDecoration(
+                hintText: 'Search listings…',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () { _searchCtrl.clear(); _applyFilters(); },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              ),
+            ),
+          ),
+
+          if (_selectedCategoryId != null || _selectedCity != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  if (_selectedCategoryId != null)
+                    _FilterChip(
+                      label: _categories.firstWhere(
+                        (c) => c['id'] == _selectedCategoryId,
+                        orElse: () => {'name': 'Category'},
+                      )['name'] as String,
+                      onRemove: () {
+                        setState(() => _selectedCategoryId = null);
+                        _applyFilters();
+                      },
+                    ),
+                  if (_selectedCity != null)
+                    _FilterChip(
+                      label: _selectedCity!,
+                      onRemove: () {
+                        setState(() => _selectedCity = null);
+                        _applyFilters();
+                      },
+                    ),
+                ],
+              ),
+            ),
+
+          Expanded(
+            child: Consumer<ListingsProvider>(
+              builder: (ctx, provider, _) {
+                if (provider.loading && provider.listings.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (provider.error != null && provider.listings.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(provider.error!, style: const TextStyle(color: Colors.grey)),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: _applyFilters,
+                          child: const Text('Retry'),
+                        ),
+                      ],
                     ),
                   );
                 }
-                final cat = categories[i - 1];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(cat.nameEn),
-                    selected: _selectedCategory == cat.id,
-                    onSelected: (_) => setState(() =>
-                        _selectedCategory = _selectedCategory == cat.id ? null : cat.id),
+
+                if (provider.listings.isEmpty) {
+                  return const Center(
+                    child: Text('No listings found.', style: TextStyle(color: Colors.grey)),
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: () async => _applyFilters(),
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: provider.listings.length + (provider.hasMore ? 1 : 0),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.72,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemBuilder: (ctx, i) {
+                      if (i >= provider.listings.length) {
+                        provider.fetchListings();
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      }
+                      final listing = provider.listings[i];
+                      return GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ListingDetailScreen(listingId: listing.id),
+                          ),
+                        ),
+                        child: ListingCard(listing: listing),
+                      );
+                    },
                   ),
                 );
               },
             ),
-          ),
-
-          // Sort + Visibility filter row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                Text('${listings.length} listings',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-                const Spacer(),
-                // Sort
-                PopupMenuButton<String>(
-                  onSelected: (v) => setState(() => _sortBy = v),
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'latest', child: Text('Latest')),
-                    const PopupMenuItem(value: 'price_low', child: Text('Price: Low → High')),
-                    const PopupMenuItem(value: 'price_high', child: Text('Price: High → Low')),
-                    const PopupMenuItem(value: 'quantity', child: Text('Quantity')),
-                  ],
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.sort, size: 16, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(_sortLabel(), style: const TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Visibility
-                PopupMenuButton<String>(
-                  onSelected: (v) => setState(() => _visibilityFilter = v),
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'all', child: Text('All Visibility')),
-                    const PopupMenuItem(value: 'local', child: Text('🟢 Local')),
-                    const PopupMenuItem(value: 'neighbor', child: Text('🔵 Neighbor')),
-                    const PopupMenuItem(value: 'city', child: Text('🟡 City')),
-                    const PopupMenuItem(value: 'wholesale', child: Text('🟣 Wholesale')),
-                  ],
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: _visibilityFilter != 'all' ? Colors.green : Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                      color: _visibilityFilter != 'all' ? Colors.green[50] : null,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.visibility, size: 16, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(_visibilityFilter == 'all' ? 'Zone' : _visibilityFilter.toUpperCase(),
-                            style: const TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Listings grid
-          Expanded(
-            child: listings.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.search_off, size: 60, color: Colors.grey[300]),
-                        const SizedBox(height: 12),
-                        const Text('No listings found',
-                            style: TextStyle(fontSize: 16, color: Colors.grey)),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _selectedCategory = null;
-                              _searchQuery = '';
-                            });
-                          },
-                          child: const Text('Clear filters'),
-                        ),
-                      ],
-                    ),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemCount: listings.length,
-                    itemBuilder: (_, i) => _BrowseListingCard(
-                      listing: listings[i],
-                      onTap: () => context.push('/listing/${listings[i].id}'),
-                    ),
-                  ),
           ),
         ],
       ),
     );
   }
 
-  String _sortLabel() {
-    switch (_sortBy) {
-      case 'price_low': return 'Price ↑';
-      case 'price_high': return 'Price ↓';
-      case 'quantity': return 'Qty';
-      default: return 'Latest';
-    }
-  }
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Filter & Sort',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-}
-
-class _BrowseListingCard extends StatelessWidget {
-  final ListingModel listing;
-  final VoidCallback onTap;
-  const _BrowseListingCard({required this.listing, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 3,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(
-                    color: Colors.grey[100],
-                    child: listing.images.isNotEmpty
-                        ? Image.network(listing.images.first, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Center(
-                                child: Icon(Icons.inventory_2, size: 40, color: Colors.grey[300])))
-                        : Center(child: Icon(Icons.inventory_2, size: 40, color: Colors.grey[300])),
-                  ),
-                  // Visibility badge
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _visibilityColor(listing.visibilityLevel).withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        listing.visibilityLevel.name.toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                      ),
+              const Text('Sort by', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: ['latest', 'price_asc', 'price_desc'].map((s) {
+                  final labels = {'latest': 'Latest', 'price_asc': 'Price ↑', 'price_desc': 'Price ↓'};
+                  return ChoiceChip(
+                    label: Text(labels[s]!),
+                    selected: _sortBy == s,
+                    onSelected: (_) => setSheetState(() => _sortBy = s),
+                    selectedColor: Colors.green,
+                    labelStyle: TextStyle(
+                      color: _sortBy == s ? Colors.white : Colors.black87,
                     ),
-                  ),
-                ],
+                  );
+                }).toList(),
               ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(listing.title,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text('₨ ${listing.pricePkr}/${listing.unit}',
-                        style: const TextStyle(
-                            color: Color(0xFF16A34A), fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(height: 2),
-                    Text('${listing.quantity} ${listing.unit} • ${listing.city}',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const Spacer(),
-                    Row(
-                      children: [
-                        Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
-                        const SizedBox(width: 4),
-                        Text('${listing.daysAgo}d ago',
-                            style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                        const Spacer(),
-                        Icon(Icons.people_outline, size: 12, color: Colors.grey[400]),
-                        const SizedBox(width: 4),
-                        Text('${listing.interestedCount}',
-                            style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                      ],
-                    ),
-                  ],
+              const SizedBox(height: 16),
+
+              const Text('Category', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedCategoryId,
+                hint: const Text('All categories'),
+                onChanged: (v) => setSheetState(() => _selectedCategoryId = v),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All categories')),
+                  ..._categories.map((c) => DropdownMenuItem(
+                    value: c['id'] as String,
+                    child: Text(c['name'] as String? ?? ''),
+                  )),
+                ],
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+
+              const Text('City', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedCity,
+                hint: const Text('All cities'),
+                onChanged: (v) => setSheetState(() => _selectedCity = v),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All cities')),
+                  ..._cities.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                ],
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    setState(() {});
+                    _applyFilters();
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Apply Filters'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Color _visibilityColor(VisibilityLevel level) {
-    switch (level) {
-      case VisibilityLevel.local:
-        return const Color(0xFF16A34A);
-      case VisibilityLevel.neighbor:
-        return const Color(0xFF2563EB);
-      case VisibilityLevel.city:
-        return const Color(0xFF8B5CF6);
-      case VisibilityLevel.province:
-        return const Color(0xFFF59E0B);
-      case VisibilityLevel.national:
-        return const Color(0xFFEF4444);
-      case VisibilityLevel.wholesale:
-        return const Color(0xFF7C3AED);
-      case VisibilityLevel.public:
-        return const Color(0xFF6B7280);
-    }
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onRemove;
+  const _FilterChip({required this.label, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        border: Border.all(color: Colors.green.shade200),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(color: Colors.green.shade700, fontSize: 12)),
+          const SizedBox(width: 4),
+          GestureDetector(onTap: onRemove,
+            child: Icon(Icons.close, size: 14, color: Colors.green.shade700)),
+        ],
+      ),
+    );
   }
 }

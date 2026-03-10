@@ -1,199 +1,253 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiPlus, FiPackage, FiDollarSign, FiEye, FiEdit, FiTrash2, FiClock } from 'react-icons/fi';
-import { toast } from 'react-toastify';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 
 export default function Dashboard() {
-  const user = useAuthStore((s) => s.user);
+  const { user } = useAuthStore();
   const [listings, setListings] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [stats, setStats] = useState({ totalListings: 0, totalViews: 0, totalEarnings: 0, pendingOrders: 0 });
+  // ✅ FIX: Was /orders/my which doesn't exist — backend has /transactions
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('listings');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchData();
+    const fetchDashboard = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // ✅ FIX: /listings/my — correct backend endpoint
+        const [listingsRes, txRes] = await Promise.allSettled([
+          api.get('/listings/my'),
+          api.get('/transactions'),
+        ]);
+
+        if (listingsRes.status === 'fulfilled') {
+          const d = listingsRes.value.data;
+          setListings(Array.isArray(d) ? d : d?.listings || d?.data || []);
+        }
+        if (txRes.status === 'fulfilled') {
+          const d = txRes.value.data;
+          setTransactions(Array.isArray(d) ? d : d?.transactions || d?.data || []);
+        }
+      } catch (err) {
+        setError('Failed to load dashboard data.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboard();
   }, []);
 
-  const fetchData = async () => {
+  const handleDelete = async (listingId) => {
+    if (!window.confirm('Delete this listing?')) return;
     try {
-      const [listingsRes, ordersRes] = await Promise.all([
-        api.get('/listings/my').catch(() => ({ data: [] })),
-        api.get('/orders/my').catch(() => ({ data: [] })),
-      ]);
-
-      const myListings = listingsRes.data?.data || listingsRes.data || [];
-      const myOrders = ordersRes.data?.data || ordersRes.data || [];
-      setListings(myListings);
-      setOrders(myOrders);
-
-      setStats({
-        totalListings: myListings.length,
-        totalViews: myListings.reduce((sum, l) => sum + (l.viewCount || 0), 0),
-        totalEarnings: myOrders.filter((o) => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.totalAmount || 0), 0),
-        pendingOrders: myOrders.filter((o) => o.status === 'PENDING').length,
-      });
+      await api.delete(`/listings/${listingId}`);
+      setListings((prev) => prev.filter((l) => l.id !== listingId));
     } catch (err) {
-      console.error(err);
+      alert(err.response?.data?.error?.message || 'Failed to delete listing.');
     }
-    setLoading(false);
   };
 
-  const deleteListing = async (id) => {
-    if (!confirm('Delete this listing?')) return;
+  const handleDeactivate = async (listingId, isActive) => {
     try {
-      await api.delete(`/listings/${id}`);
-      toast.success('Listing deleted');
-      setListings(listings.filter((l) => l.id !== id));
-    } catch {
-      toast.error('Failed to delete');
+      const endpoint = isActive
+        ? `/listings/${listingId}/deactivate`
+        : `/listings/${listingId}/reactivate`;
+      await api.patch(endpoint);
+      setListings((prev) =>
+        prev.map((l) =>
+          l.id === listingId ? { ...l, status: isActive ? 'inactive' : 'active' } : l
+        )
+      );
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to update listing.');
     }
   };
 
-  const statCards = [
-    { label: 'My Listings', value: stats.totalListings, icon: <FiPackage />, color: 'text-blue-600 bg-blue-50' },
-    { label: 'Total Views', value: stats.totalViews, icon: <FiEye />, color: 'text-green-600 bg-green-50' },
-    { label: 'Earnings (₨)', value: `₨ ${stats.totalEarnings.toLocaleString()}`, icon: <FiDollarSign />, color: 'text-yellow-600 bg-yellow-50' },
-    { label: 'Pending Orders', value: stats.pendingOrders, icon: <FiClock />, color: 'text-purple-600 bg-purple-50' },
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
+    <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Welcome back, {user?.firstName}! Manage your listings and orders.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome, {user?.firstName || user?.displayName || 'User'}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">{user?.email || user?.phone}</p>
         </div>
-        <Link to="/create-listing" className="btn-primary flex items-center gap-2">
-          <FiPlus size={16} /> New Listing
+        <Link
+          to="/create-listing"
+          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium"
+        >
+          + New Listing
         </Link>
       </div>
 
-      {/* Stats Grid */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-6">
+          {error}
+        </div>
+      )}
+
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {statCards.map((s) => (
-          <div key={s.label} className="card p-4">
-            <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg mb-3 ${s.color}`}>
-              {s.icon}
-            </div>
-            <div className="text-2xl font-bold text-gray-900">{s.value}</div>
-            <div className="text-xs text-gray-500 mt-1">{s.label}</div>
+        <StatCard label="My Listings" value={listings.length} color="green" />
+        <StatCard
+          label="Active"
+          value={listings.filter((l) => l.status === 'active').length}
+          color="blue"
+        />
+        <StatCard label="Transactions" value={transactions.length} color="purple" />
+        <StatCard
+          label="Completed Deals"
+          value={transactions.filter((t) => t.status === 'completed' || t.status === 'finalized').length}
+          color="orange"
+        />
+      </div>
+
+      {/* My Listings */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">My Listings</h2>
+        {listings.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+            <p className="text-gray-500 mb-3">No listings yet</p>
+            <Link to="/create-listing" className="text-green-600 font-medium hover:underline">
+              Create your first listing →
+            </Link>
           </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg mb-6 max-w-xs">
-        {['listings', 'orders'].map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 text-sm font-medium rounded-md capitalize transition-colors
-              ${activeTab === tab ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* Listings Tab */}
-      {activeTab === 'listings' && (
-        <div>
-          {loading ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="card p-4 animate-pulse flex gap-4">
-                  <div className="w-20 h-20 bg-gray-200 rounded-lg" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-1/2" />
-                    <div className="h-3 bg-gray-200 rounded w-1/4" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : listings.length > 0 ? (
-            <div className="space-y-3">
-              {listings.map((listing) => (
-                <div key={listing.id} className="card p-4 flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                    {listing.images?.[0]?.url ? (
-                      <img src={listing.images[0].url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-2xl">📦</div>
-                    )}
-                  </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {listings.map((listing) => (
+              <div key={listing.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <Link to={`/listings/${listing.id}`} className="font-medium text-gray-900 hover:text-primary-600 truncate block">
-                      {listing.title}
-                    </Link>
-                    <div className="text-sm text-gray-500 mt-1">
-                      ₨ {Number(listing.pricePaisa || 0).toLocaleString()} · {listing.quantity} {listing.unitName || 'units'} · {listing.viewCount || 0} views
-                    </div>
+                    <h3 className="font-medium text-gray-900 truncate">{listing.title}</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {listing.category?.name || '—'} · {listing.cityName || listing.city || '—'}
+                    </p>
+                    <p className="text-green-600 font-semibold mt-1">
+                      {listing.priceFormatted ||
+                        (listing.pricePaisa
+                          ? `PKR ${(listing.pricePaisa / 100).toLocaleString()}`
+                          : '—')}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium
-                      ${listing.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
-                        listing.status === 'SOLD' ? 'bg-gray-100 text-gray-600' :
-                        'bg-yellow-100 text-yellow-700'}`}>
-                      {listing.status || 'ACTIVE'}
-                    </span>
-                  </div>
-                  <div className="flex gap-1">
-                    <Link to={`/edit-listing/${listing.id}`} className="p-2 text-gray-400 hover:text-blue-600">
-                      <FiEdit size={16} />
-                    </Link>
-                    <button onClick={() => deleteListing(listing.id)} className="p-2 text-gray-400 hover:text-red-600">
-                      <FiTrash2 size={16} />
-                    </button>
-                  </div>
+                  <span
+                    className={`ml-2 text-xs px-2 py-0.5 rounded-full font-medium ${
+                      listing.status === 'active'
+                        ? 'bg-green-100 text-green-700'
+                        : listing.status === 'sold'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {listing.status}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-4xl mb-3">📦</p>
-              <p className="font-medium">No listings yet</p>
-              <Link to="/create-listing" className="btn-primary mt-4 inline-block">Create Your First Listing</Link>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Orders Tab */}
-      {activeTab === 'orders' && (
-        <div>
-          {orders.length > 0 ? (
-            <div className="space-y-3">
-              {orders.map((order) => (
-                <div key={order.id} className="card p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-gray-900">Order #{order.id?.slice(-8)}</div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {order.listing?.title || 'N/A'} · ₨ {Number(order.totalAmount || 0).toLocaleString()}
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium
-                      ${order.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                        order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                        order.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-                        'bg-blue-100 text-blue-700'}`}>
-                      {order.status}
-                    </span>
-                  </div>
+                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                  <Link
+                    to={`/listings/${listing.id}`}
+                    className="flex-1 text-center text-sm text-blue-600 hover:underline"
+                  >
+                    View
+                  </Link>
+                  <button
+                    onClick={() => handleDeactivate(listing.id, listing.status === 'active')}
+                    className="flex-1 text-center text-sm text-yellow-600 hover:underline"
+                  >
+                    {listing.status === 'active' ? 'Deactivate' : 'Reactivate'}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(listing.id)}
+                    className="flex-1 text-center text-sm text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-4xl mb-3">🧾</p>
-              <p className="font-medium">No orders yet</p>
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Recent Transactions */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Recent Transactions</h2>
+        {transactions.length === 0 ? (
+          <p className="text-gray-500 text-sm">No transactions yet.</p>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600 text-left">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Listing</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Amount</th>
+                  <th className="px-4 py-3 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {transactions.slice(0, 10).map((tx) => (
+                  <tr key={tx.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900 truncate max-w-[150px]">
+                      {tx.listing?.title || tx.listingId?.slice(0, 8) + '…'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {tx.sellerId === user?.id ? 'Seller' : 'Buyer'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          tx.status === 'completed' || tx.status === 'finalized'
+                            ? 'bg-green-100 text-green-700'
+                            : tx.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {tx.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {tx.agreedPrice
+                        ? `PKR ${(tx.agreedPrice / 100).toLocaleString()}`
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {new Date(tx.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }) {
+  const colors = {
+    green: 'bg-green-50 text-green-700',
+    blue: 'bg-blue-50 text-blue-700',
+    purple: 'bg-purple-50 text-purple-700',
+    orange: 'bg-orange-50 text-orange-700',
+  };
+  return (
+    <div className={`rounded-xl p-4 ${colors[color]}`}>
+      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-sm mt-0.5 opacity-80">{label}</p>
     </div>
   );
 }

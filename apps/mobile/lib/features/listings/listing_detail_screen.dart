@@ -1,492 +1,347 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../core/mock/mock_data.dart';
-import '../../core/models/listing.model.dart';
-import '../../core/providers/listings.provider.dart';
 import '../../services/api_service.dart';
+import '../../core/providers/auth.provider.dart';
+import 'package:provider/provider.dart';
 
-class ListingDetailScreen extends ConsumerStatefulWidget {
+// ✅ FIX: Removed MockData. Now fetches listing from real API: GET /v1/listings/:id
+
+class ListingDetailScreen extends StatefulWidget {
   final String listingId;
   const ListingDetailScreen({super.key, required this.listingId});
 
   @override
-  ConsumerState<ListingDetailScreen> createState() => _ListingDetailScreenState();
+  State<ListingDetailScreen> createState() => _ListingDetailScreenState();
 }
 
-class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
-  bool _isFavorited = false;
-  bool _loadingFavorite = false;
+class _ListingDetailScreenState extends State<ListingDetailScreen> {
+  final ApiService _api = ApiService();
 
-  void _goBack() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else {
-      context.go('/home');
-    }
-  }
-
-  Widget _listingImage(String urlOrPath) {
-    final isUrl = urlOrPath.startsWith('http');
-    return isUrl
-        ? Image.network(
-            urlOrPath,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey[200],
-              child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
-            ),
-          )
-        : Image.file(
-            File(urlOrPath),
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey[200],
-              child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
-            ),
-          );
-  }
+  Map<String, dynamic>? _listing;
+  bool _loading = true;
+  String? _error;
+  bool _isFavorite = false;
 
   @override
   void initState() {
     super.initState();
+    _fetchListing();
+  }
+
+  Future<void> _fetchListing() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final response = await _api.get('listings/${widget.listingId}');
+      setState(() {
+        _listing = (response['listing'] ?? response) as Map<String, dynamic>;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error   = e.toString().contains('Exception:')
+            ? e.toString().split('Exception:').last.trim()
+            : 'Failed to load listing.';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    try {
+      await _api.post('listings/${widget.listingId}/favorite', {});
+      setState(() => _isFavorite = !_isFavorite);
+    } catch (e) {
+      debugPrint('toggleFavorite error: $e');
+    }
+  }
+
+  Future<void> _startTransaction() async {
+    final user = context.read<AuthProvider>().user;
+    if (user == null) {
+      Navigator.pushNamed(context, '/login');
+      return;
+    }
+    try {
+      await _api.post('transactions', {'listingId': widget.listingId});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Interest sent! Chat with the seller.'),
+              backgroundColor: Colors.green),
+        );
+        Navigator.pushNamed(context, '/transactions');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().split('Exception:').last.trim()),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final posted = ref.watch(userPostedListingsProvider);
-    final allListings = [...posted, ...MockData.listings, ...MockData.islamabadListings];
-    final listing = allListings.firstWhere(
-      (l) => l.id == widget.listingId,
-      orElse: () => allListings.first,
-    );
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 12),
+              ElevatedButton(onPressed: _fetchListing, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _goBack();
-      },
-      child: Scaffold(
+    final listing  = _listing!;
+    final images   = (listing['images'] as List<dynamic>?) ?? [];
+    final category = listing['category'] as Map<String, dynamic>?;
+    final seller   = listing['seller']   as Map<String, dynamic>?;
+    final unit     = listing['unit']     as Map<String, dynamic>?;
+
+    final priceDisplay = listing['priceFormatted'] as String? ??
+        (listing['pricePaisa'] != null
+            ? 'PKR ${((listing['pricePaisa'] as int) / 100).toStringAsFixed(0)}'
+            : '—');
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       body: CustomScrollView(
         slivers: [
-          // Image header with explicit back button
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: 260,
             pinned: true,
-            leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
-              ),
-              onPressed: _goBack,
-              tooltip: 'Back',
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: listing.images.isNotEmpty
-                  ? _listingImage(listing.images.first)
-                  : Container(
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.inventory_2, size: 80, color: Colors.grey),
-                    ),
-            ),
+            backgroundColor: Colors.white,
             actions: [
               IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.home, color: Colors.white, size: 20),
+                icon: Icon(
+                  _isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: _isFavorite ? Colors.red : Colors.white,
                 ),
-                onPressed: () => context.go('/home'),
-                tooltip: 'Home',
-              ),
-              IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: _loadingFavorite
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Icon(
-                          _isFavorited ? Icons.favorite : Icons.favorite_border,
-                          color: _isFavorited ? Colors.red : Colors.white,
-                          size: 20,
-                        ),
-                ),
-                onPressed: _loadingFavorite
-                    ? null
-                    : () async {
-                        setState(() => _loadingFavorite = true);
-                        try {
-                          final favorited = await ApiService().toggleListingFavorite(widget.listingId);
-                          if (mounted) {
-                            setState(() {
-                              _isFavorited = favorited;
-                              _loadingFavorite = false;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(favorited ? 'Added to favorites' : 'Removed from favorites')),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            setState(() => _loadingFavorite = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString().replaceFirst('ApiException: ', ''))),
-                            );
-                          }
-                        }
-                      },
-              ),
-              IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.share, color: Colors.white, size: 20),
-                ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Share link copied!')),
-                  );
-                },
+                onPressed: _toggleFavorite,
               ),
             ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: images.isEmpty
+                  ? Container(
+                      color: Colors.grey.shade200,
+                      child: const Icon(Icons.image_not_supported,
+                          size: 64, color: Colors.grey),
+                    )
+                  : PageView.builder(
+                      itemCount: images.length,
+                      itemBuilder: (ctx, i) {
+                        final url = images[i]['url'] ?? images[i]['imageUrl'] ?? '';
+                        return Image.network(
+                          url.toString(),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: Colors.grey.shade200,
+                            child: const Icon(Icons.broken_image,
+                                size: 48, color: Colors.grey),
+                          ),
+                        );
+                      },
+                    ),
+            ),
           ),
 
           SliverToBoxAdapter(
-            child: Padding(
+            child: Container(
+              color: Colors.white,
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Category badge
-                  Chip(
-                    label: Text(listing.categoryName,
-                        style: const TextStyle(fontSize: 12)),
-                    backgroundColor: Colors.green[50],
-                    side: BorderSide.none,
-                    padding: EdgeInsets.zero,
+                  Row(
+                    children: [
+                      Text(priceDisplay,
+                          style: const TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: listing['status'] == 'active'
+                              ? Colors.green.shade50
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          (listing['status'] as String? ?? 'active').toUpperCase(),
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: listing['status'] == 'active'
+                                  ? Colors.green.shade700
+                                  : Colors.grey),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
+                  Text(listing['title'] as String? ?? '',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
 
-                  // Title
-                  Text(listing.title,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  if (listing.titleUrdu.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      if (category != null)
+                        _Tag(label: category['name'] as String? ?? '', color: Colors.blue),
+                      if (listing['quantity'] != null)
+                        _Tag(
+                          label: '${listing['quantity']} ${unit?['symbol'] ?? ''}',
+                          color: Colors.orange,
+                        ),
+                      if (listing['cityName'] != null || listing['city'] != null)
+                        _Tag(
+                          label: '📍 ${listing['cityName'] ?? listing['city']}',
+                          color: Colors.purple,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (listing['description'] != null &&
+                      (listing['description'] as String).isNotEmpty) ...[
+                    const Text('Description',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                     const SizedBox(height: 4),
-                    Text(listing.titleUrdu,
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                    Text(listing['description'] as String,
+                        style: const TextStyle(color: Colors.black54, height: 1.5)),
                   ],
-
-                  const SizedBox(height: 16),
-
-                  // Price box
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Text('Rs. ${listing.pricePkr}',
-                            style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green[800])),
-                        const SizedBox(width: 4),
-                        Text('/ ${listing.unit}',
-                            style: TextStyle(color: Colors.grey[600])),
-                        const Spacer(),
-                        Chip(
-                          label: const Text('Negotiable', style: TextStyle(fontSize: 11)),
-                          backgroundColor: Colors.orange[50],
-                          side: BorderSide.none,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Info tiles
-                  Row(
-                    children: [
-                      _infoTile(Icons.scale, 'Quantity',
-                          '${listing.quantity} ${listing.unit}'),
-                      _infoTile(Icons.category, 'Category', listing.categoryName),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _infoTile(Icons.location_on, 'Location',
-                          '${listing.area ?? listing.city}, ${listing.city}'),
-                      _infoTile(Icons.access_time, 'Posted',
-                          '${listing.daysAgo} day(s) ago'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _infoTile(Icons.visibility, 'Visibility',
-                          listing.visibilityLevel.name.toUpperCase()),
-                      _infoTile(Icons.people, 'Interested',
-                          '${listing.interestedCount} buyers'),
-                    ],
-                  ),
-
-                  // Description
-                  const SizedBox(height: 20),
-                  const Text('Description',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Text(listing.description,
-                      style: TextStyle(color: Colors.grey[700], height: 1.5)),
-                  if (listing.descUrdu != null) ...[
-                    const SizedBox(height: 8),
-                    Text(listing.descUrdu!,
-                        style: TextStyle(color: Colors.grey[600], height: 1.5),
-                        textDirection: TextDirection.rtl),
-                  ],
-
-                  // Location placeholder
-                  const SizedBox(height: 24),
-                  const Text('Pickup Location',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 180,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Stack(
-                      children: [
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.map, size: 48, color: Colors.grey[400]),
-                              const SizedBox(height: 8),
-                              Text('${listing.area ?? listing.city}, ${listing.city}',
-                                  style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey[700])),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${listing.latitude.toStringAsFixed(4)}N, ${listing.longitude.toStringAsFixed(4)}E',
-                                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 8,
-                          right: 8,
-                          child: SizedBox(
-                            width: 140,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Opening Google Maps...')),
-                                );
-                              },
-                              icon: const Icon(Icons.directions, size: 16),
-                              label: const Text('Directions', style: TextStyle(fontSize: 12)),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Seller info
-                  const SizedBox(height: 20),
-                  const Text('Seller',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.green[100],
-                      child: Text(listing.sellerName[0],
-                          style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.bold)),
-                    ),
-                    title: Text(listing.sellerName),
-                    subtitle: Text(listing.sellerPhone),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.call, color: Colors.green[700]),
-                          onPressed: () async {
-                            final phone = listing.sellerPhone.replaceAll(RegExp(r'[^\d]'), '');
-                            final uri = Uri.parse('tel:+92$phone');
-                            if (await canLaunchUrl(uri)) {
-                              await launchUrl(uri);
-                            } else {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Could not make call to ${listing.sellerPhone}')),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.message, color: Colors.blue[700]),
-                          onPressed: () {
-                            // Generate roomId from seller phone (normalized)
-                            final phoneDigits = listing.sellerPhone.replaceAll(RegExp(r'[^\d]'), '');
-                            final roomId = 'chat_$phoneDigits';
-                            context.push('/chat/$roomId');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 100),
                 ],
               ),
             ),
           ),
-        ],
-      ),
 
-      // Bottom action bar
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final phone = listing.sellerPhone.replaceAll(RegExp(r'[^\d]'), '');
-                  final uri = Uri.parse('tel:+92$phone');
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri);
-                  } else {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Could not make call to ${listing.sellerPhone}')),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.call),
-                label: const Text('Call'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('Make an Offer'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('Current price: Rs. ${listing.pricePkr}/${listing.unit}'),
-                          const SizedBox(height: 16),
-                          TextField(
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Your offer (Rs. per unit)',
-                              prefixText: 'Rs. ',
-                            ),
+          if (seller != null)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.only(top: 8),
+                color: Colors.white,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Seller',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Colors.green.shade100,
+                          child: Text(
+                            ((seller['firstName'] ?? seller['displayName'] ?? 'S')
+                                as String)
+                                .characters.first.toUpperCase(),
+                            style: TextStyle(color: Colors.green.shade700,
+                                fontWeight: FontWeight.bold),
                           ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
                         ),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Offer sent to seller!'),
-                                backgroundColor: Colors.green,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${seller['firstName'] ?? ''} ${seller['lastName'] ?? ''}'.trim().isEmpty
+                                    ? seller['displayName'] as String? ?? 'Seller'
+                                    : '${seller['firstName']} ${seller['lastName']}',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
                               ),
-                            );
-                          },
-                          child: const Text('Send Offer'),
+                              if (seller['avgRating'] != null)
+                                Row(children: [
+                                  const Icon(Icons.star, size: 14, color: Colors.amber),
+                                  Text(' ${seller['avgRating']}',
+                                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                ]),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  );
-                },
-                icon: const Icon(Icons.handshake),
-                label: const Text('Make Offer'),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ],
       ),
+
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    if (seller?['id'] != null) {
+                      Navigator.pushNamed(context, '/chat/${seller!['id']}');
+                    }
+                  },
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: const Text('Chat'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: Colors.green),
+                    foregroundColor: Colors.green,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: listing['status'] == 'active' ? _startTransaction : null,
+                  icon: const Icon(Icons.handshake_outlined),
+                  label: const Text('Make Offer'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
 
-  Widget _infoTile(IconData icon, String label, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, size: 14, color: Colors.grey),
-              const SizedBox(width: 4),
-              Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-            ]),
-            const SizedBox(height: 4),
-            Text(value,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          ],
-        ),
+class _Tag extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Tag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
       ),
+      child: Text(label, style: TextStyle(color: color, fontSize: 12,
+          fontWeight: FontWeight.w500)),
     );
   }
 }

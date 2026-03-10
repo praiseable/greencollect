@@ -1,308 +1,232 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../core/providers/auth.provider.dart';
-import '../../core/mock/mock_data.dart';
-import '../../core/models/listing.model.dart';
-import '../../core/config/app_variant.dart';
+import '../../services/api_service.dart';
 
-class ProfileScreen extends ConsumerWidget {
+// ✅ FIX: Removed MockData.listings. My listings from GET /v1/listings/my (real API).
+
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    final myListings = MockData.listings.take(3).toList();
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final ApiService _api = ApiService();
+  List<Map<String, dynamic>> _myListings = [];
+  bool _listingsLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfileData();
+  }
+
+  Future<void> _fetchProfileData() async {
+    try {
+      final results = await Future.wait([
+        _api.get('listings/my'),
+        _api.get('auth/me'),
+      ]);
+
+      final raw = (results[0]['listings'] ?? results[0]['data'] ?? results[0]) as List<dynamic>;
+
+      if (mounted) {
+        setState(() {
+          _myListings = raw.cast<Map<String, dynamic>>().take(3).toList();
+          _listingsLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _listingsLoading = false);
+      debugPrint('fetchProfileData error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         title: const Text('Profile'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        // logout() notifies authChangeNotifier → GoRouter
-                        // re-evaluates redirect → sends user to /auth/login
-                        ref.read(authProvider.notifier).logout();
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      child: const Text('Logout'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await context.read<AuthProvider>().fetchProfile();
+          await _fetchProfileData();
+        },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            // Profile card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Colors.green[100],
-                      child: Text(
-                        user?.name.isNotEmpty == true ? user!.name[0] : 'U',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green[800],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(user?.name ?? 'User',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    if (user?.nameUrdu.isNotEmpty == true)
-                      Text(user!.nameUrdu, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-                    const SizedBox(height: 8),
-                    Chip(
-                      label: Text(
-                        _roleLabel(user?.role),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      backgroundColor: _roleColor(user?.role).withOpacity(0.1),
-                    ),
-                    const SizedBox(height: 12),
-                    _infoRow(Icons.phone, user?.phone ?? 'N/A'),
-                    _infoRow(Icons.email, user?.email ?? 'N/A'),
-                    _infoRow(Icons.location_on, '${user?.city ?? "N/A"}, Pakistan'),
-                    _infoRow(Icons.verified_user,
-                        'KYC: ${user?.kycStatus.name.toUpperCase() ?? "PENDING"}'),
-                    if (user?.subscriptionStatus != null)
-                      _infoRow(Icons.card_membership,
-                          'Subscription: ${user!.subscriptionStatus!.name.toUpperCase()} (${user.subscriptionDaysLeft ?? 0} days left)'),
-                  ],
-                ),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
               ),
+              child: Column(children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.green.shade100,
+                  child: Text(
+                    user != null && user.name.isNotEmpty
+                        ? user.name[0].toUpperCase()
+                        : 'U',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  user?.name ?? 'User',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                if (user?.phone != null && (user!.phone).isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(user.phone, style: const TextStyle(color: Colors.grey)),
+                ],
+                if (user?.email != null && (user!.email).isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(user.email, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    user?.role.name.toUpperCase().replaceAll('_', ' ') ?? 'CUSTOMER',
+                    style: TextStyle(color: Colors.green.shade700,
+                        fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                ),
+              ]),
             ),
             const SizedBox(height: 16),
 
-            // Quick stats
-            Row(
-              children: [
-                _statCard('Listings', '${myListings.length}', Icons.inventory_2, Colors.green),
-                const SizedBox(width: 12),
-                _statCard('Views', '156', Icons.visibility, Colors.blue),
-                const SizedBox(width: 12),
-                _statCard('Offers', '8', Icons.handshake, Colors.orange),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // My Listings
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('My Listings',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                TextButton.icon(
-                  onPressed: () => context.go('/create'),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New'),
-                ),
-              ],
-            ),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('My Listings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/my-listings'),
+                child: const Text('View all', style: TextStyle(color: Colors.green)),
+              ),
+            ]),
             const SizedBox(height: 8),
 
-            ...myListings.map((listing) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+            if (_listingsLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_myListings.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200, style: BorderStyle.solid),
+                ),
+                child: const Center(
+                  child: Text('No listings yet', style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              ..._myListings.map((listing) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  title: Text(listing['title'] as String? ?? '',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(
+                    listing['priceFormatted'] as String? ??
+                        (listing['pricePaisa'] != null
+                            ? 'PKR ${((listing['pricePaisa'] as int) / 100).toStringAsFixed(0)}'
+                            : '—'),
+                    style: const TextStyle(color: Colors.green),
                   ),
-                  child: const Icon(Icons.inventory_2, color: Colors.grey),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: listing['status'] == 'active'
+                          ? Colors.green.shade50 : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      listing['status'] as String? ?? '',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: listing['status'] == 'active' ? Colors.green : Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  onTap: () => Navigator.pushNamed(
+                      context, '/listings/${listing['id']}'),
                 ),
-                title: Text(listing.title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('₨ ${listing.pricePkr}/${listing.unit} · ${listing.interestedCount} interested'),
-                trailing: Chip(
-                  label: Text(listing.status.name.toUpperCase(),
-                      style: const TextStyle(fontSize: 10)),
-                  backgroundColor: listing.status == ListingStatus.active
-                      ? Colors.green[50]
-                      : Colors.grey[100],
-                  side: BorderSide.none,
-                  padding: EdgeInsets.zero,
-                ),
-                onTap: () => context.push('/listing/${listing.id}'),
-              ),
-            )),
-
+              )),
             const SizedBox(height: 16),
 
-            // Menu items
-            Card(
-              child: Column(
-                children: [
-                  _menuItem(Icons.edit, 'Edit Profile / پروفائل ترمیم', () {
-                    context.push('/edit-profile');
-                  }),
-                  // ── Pro-only features ──
-                  if (AppVariant.showWallet) ...[
-                    const Divider(height: 1),
-                    _menuItem(Icons.account_balance_wallet, 'Wallet / والیٹ', () {
-                      context.push('/wallet');
-                    }),
-                  ],
-                  if (AppVariant.showTerritoryScreen) ...[
-                    const Divider(height: 1),
-                    _menuItem(Icons.map, 'My Territory / میرا علاقہ', () {
-                      context.push('/territory');
-                    }),
-                  ],
-                  if (AppVariant.isPro) ...[
-                    const Divider(height: 1),
-                    _menuItem(Icons.local_shipping, 'Collections / مجموعے', () {
-                      context.push('/collections');
-                    }),
-                    const Divider(height: 1),
-                    _menuItem(Icons.star, 'My Rating / میری درجہ بندی', () {
-                      context.push('/my-rating');
-                    }),
-                  ],
-                  const Divider(height: 1),
-                  _menuItem(Icons.receipt_long, 'Transactions / لین دین', () {
-                    context.push('/transactions');
-                  }),
-                  if (AppVariant.showSubscription) ...[
-                    const Divider(height: 1),
-                    _menuItem(Icons.card_membership, 'Subscription / سبسکرپشن', () {
-                      context.push('/subscription');
-                    }),
-                  ],
-                  if (AppVariant.showAnalytics) ...[
-                    const Divider(height: 1),
-                    _menuItem(Icons.bar_chart, 'Analytics / تجزیات', () {
-                      context.push('/analytics');
-                    }),
-                  ],
-                  const Divider(height: 1),
-                  _menuItem(Icons.chat, 'Chat / چیٹ', () {
-                    context.push('/chat-inbox');
-                  }),
-                  const Divider(height: 1),
-                  _menuItem(Icons.settings, 'Settings / ترتیبات', () {
-                    context.push('/settings');
-                  }),
-                  const Divider(height: 1),
-                  _menuItem(Icons.help_outline, 'Help & Support', () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('support@kabariya.pk')),
-                    );
-                  }),
-                ],
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: Column(children: [
+                _ActionTile(Icons.wallet_outlined, 'Wallet',
+                    () => Navigator.pushNamed(context, '/wallet')),
+                const Divider(height: 1, indent: 56),
+                _ActionTile(Icons.receipt_long_outlined, 'Transactions',
+                    () => Navigator.pushNamed(context, '/transactions')),
+                const Divider(height: 1, indent: 56),
+                _ActionTile(Icons.notifications_outlined, 'Notifications',
+                    () => Navigator.pushNamed(context, '/notifications')),
+                const Divider(height: 1, indent: 56),
+                _ActionTile(Icons.card_membership_outlined, 'Subscription',
+                    () => Navigator.pushNamed(context, '/subscription')),
+                const Divider(height: 1, indent: 56),
+                _ActionTile(Icons.logout, 'Logout', () async {
+                  await context.read<AuthProvider>().logout();
+                  if (context.mounted) Navigator.pushReplacementNamed(context, '/login');
+                }, color: Colors.red),
+              ]),
             ),
-
-            const SizedBox(height: 100),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _infoRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 16, color: Colors.grey),
-          const SizedBox(width: 6),
-          Text(text, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-        ],
-      ),
-    );
-  }
+class _ActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  const _ActionTile(this.icon, this.label, this.onTap, {this.color});
 
-  Widget _statCard(String label, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(value,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              Text(label,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _menuItem(IconData icon, String label, VoidCallback onTap) {
+  @override
+  Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: const Color(0xFF16A34A)),
-      title: Text(label),
+      leading: Icon(icon, color: color ?? Colors.grey.shade700),
+      title: Text(label, style: TextStyle(color: color)),
       trailing: const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
     );
-  }
-
-  String _roleLabel(dynamic role) {
-    if (role == null) return 'Customer';
-    switch (role.toString()) {
-      case 'UserRole.customer':
-        return '👤 Customer';
-      case 'UserRole.localDealer':
-        return '🏪 Local Dealer';
-      case 'UserRole.cityFranchise':
-        return '🏢 City Franchise';
-      case 'UserRole.wholesale':
-        return '🏭 Wholesale';
-      default:
-        return 'Customer';
-    }
-  }
-
-  Color _roleColor(dynamic role) {
-    if (role == null) return Colors.grey;
-    switch (role.toString()) {
-      case 'UserRole.customer':
-        return Colors.grey;
-      case 'UserRole.localDealer':
-        return Colors.blue;
-      case 'UserRole.cityFranchise':
-        return Colors.purple;
-      case 'UserRole.wholesale':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
   }
 }

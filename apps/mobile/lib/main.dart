@@ -1,11 +1,14 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/config/app_variant.dart';
 import 'core/providers/chat.provider.dart';
+import 'core/providers/auth.provider.dart';
+import 'core/providers/listings.provider.dart';
 import 'services/chat_db_service.dart';
 
 void main() async {
@@ -27,7 +30,18 @@ void main() async {
       fallbackLocale: Locale('en'),
       startLocale: Locale('en'),
       child: ProviderScope(
-        child: MarketplaceApp(),
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) {
+              final p = AuthProvider();
+              p.init();
+              return p;
+            }),
+            ChangeNotifierProvider(create: (_) => ListingsProvider()),
+            ChangeNotifierProvider(create: (_) => ChatProvider()),
+          ],
+          child: MarketplaceApp(),
+        ),
       ),
     ),
   );

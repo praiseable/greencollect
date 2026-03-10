@@ -12,6 +12,7 @@ const useAuthStore = create((set, get) => ({
     try {
       const { data } = await api.post('/auth/login', credentials);
       localStorage.setItem('token', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));
       set({ user: data.user, token: data.accessToken, loading: false });
       return data;
@@ -27,6 +28,7 @@ const useAuthStore = create((set, get) => ({
     try {
       const { data } = await api.post('/auth/register', userData);
       localStorage.setItem('token', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));
       set({ user: data.user, token: data.accessToken, loading: false });
       return data;
@@ -38,8 +40,9 @@ const useAuthStore = create((set, get) => ({
   },
 
   logout: () => {
-    api.post('/auth/logout').catch(() => {});
+    api.post('/auth/logout').catch(() => { });
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     set({ user: null, token: null });
   },

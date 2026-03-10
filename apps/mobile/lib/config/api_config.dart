@@ -1,7 +1,25 @@
+// ✅ Single source of truth for all backend URLs in the mobile app.
+//    Both ApiService and ChatProvider read from here.
+
 class ApiConfig {
-  // Base URL — change this for production
-  static const String baseUrl = 'https://gc.directconnect.services/v1';
-  static const String devBaseUrl = 'http://10.0.2.2:4000/v1'; // Android emulator
+  ApiConfig._();
+
+  // Production backend — all API calls go here
+  static const String baseUrl    = 'https://gc.directconnect.services/v1';
+
+  // Socket.io connects to the root (no /v1 prefix)
+  // ✅ FIX: Added socketUrl — was missing, so ChatProvider couldn't connect
+  static const String socketUrl  = 'https://gc.directconnect.services';
+
+  // Android emulator → host machine local backend (dev only)
+  static const String devBaseUrl = 'http://10.0.2.2:4000/v1';
+  static const String devSocketUrl = 'http://10.0.2.2:4000';
+
+  // Toggle to true during local development on emulator
+  static const bool useDev = false;
+
+  static String get effectiveBaseUrl   => useDev ? devBaseUrl   : baseUrl;
+  static String get effectiveSocketUrl => useDev ? devSocketUrl : socketUrl;
 
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 15);

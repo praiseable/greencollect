@@ -1,115 +1,211 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
+import '../../services/storage_service.dart';
 import '../models/user.model.dart';
-import '../mock/mock_service.dart';
 
-/// Storage key for persisted user session
-const _kSessionKey = 'persisted_user_session';
+enum AuthStatus { idle, loading, authenticated, unauthenticated, error }
 
-/// Listenable that GoRouter can watch to re-evaluate redirects
-/// when auth state changes.
-class AuthChangeNotifier extends ChangeNotifier {
-  void notify() => notifyListeners();
-}
+class AuthProvider extends ChangeNotifier {
+  final ApiService     _api     = ApiService();
+  final StorageService _storage = StorageService();
 
-final authChangeNotifierProvider = Provider<AuthChangeNotifier>((ref) {
-  return AuthChangeNotifier();
-});
+  AuthStatus _status = AuthStatus.idle;
+  UserModel? _user;
+  String?    _error;
 
-final authProvider = StateNotifierProvider<AuthNotifier, UserModel?>((ref) {
-  return AuthNotifier(ref);
-});
+  AuthStatus get status        => _status;
+  UserModel? get user          => _user;
+  String?    get error         => _error;
+  bool get isAuthenticated     => _status == AuthStatus.authenticated;
 
-class AuthNotifier extends StateNotifier<UserModel?> {
-  final Ref _ref;
-  AuthNotifier(this._ref) : super(null);
-  final _mockService = MockService();
-  String? _pendingPhone;
-  String? _pendingRole;
+  // ── Initialise — restore saved session ──────────────────────────────────
+  Future<void> init() async {
+    final token = await _storage.getAccessToken();
+    if (token == null || token.isEmpty) {
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
+      return;
+    }
 
-  String? get pendingPhone => _pendingPhone;
-
-  /// Try to restore a previously persisted session from SharedPreferences.
-  /// Returns true if a valid session was restored.
-  Future<bool> tryRestoreSession() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionJson = prefs.getString(_kSessionKey);
-      if (sessionJson == null || sessionJson.isEmpty) return false;
-
-      final json = jsonDecode(sessionJson) as Map<String, dynamic>;
-      final user = UserModel.fromJson(json);
-
-      // For mock mode: also resolve full user data from MockData so
-      // verification/listings etc. are populated
-      final fullUser = await _mockService.loginById(user.id);
-      state = fullUser ?? user;
-
-      _ref.read(authChangeNotifierProvider).notify();
-      return true;
+      // Try using saved token first
+      final response = await _api.get('auth/me');
+      _user   = UserModel.fromJson(response['user'] ?? response);
+      _status = AuthStatus.authenticated;
     } catch (e) {
-      debugPrint('Session restore failed: $e');
+      // Token expired or invalid — try refresh before giving up
+      final refreshed = await _tryRefresh();
+      if (!refreshed) {
+        await _storage.clearAll();
+        _status = AuthStatus.unauthenticated;
+      }
+    }
+    notifyListeners();
+  }
+
+  // ── Token refresh ────────────────────────────────────────────────────────
+  Future<bool> _tryRefresh() async {
+    try {
+      final refreshToken = await _storage.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) return false;
+
+      final response = await _api.post('auth/refresh-token', {
+        'refreshToken': refreshToken,
+      });
+
+      final newAccessToken  = response['accessToken']  as String?;
+      final newRefreshToken = response['refreshToken'] as String?;
+
+      if (newAccessToken == null) return false;
+
+      await _storage.saveAccessToken(newAccessToken);
+      if (newRefreshToken != null) await _storage.saveRefreshToken(newRefreshToken);
+
+      final profileRes = await _api.get('auth/me');
+      _user   = UserModel.fromJson(profileRes['user'] ?? profileRes);
+      _status = AuthStatus.authenticated;
+      if (_user != null) await _storage.setUser(_user!.toJson());
+      return true;
+    } catch (_) {
       return false;
     }
   }
 
-  /// Persist the current user session to local storage
-  Future<void> _persistSession(UserModel user) async {
+  // ── Send OTP ─────────────────────────────────────────────────────────────
+  Future<bool> sendOtp(String phone) async {
+    _status = AuthStatus.loading;
+    _error  = null;
+    notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kSessionKey, jsonEncode(user.toJson()));
-    } catch (e) {
-      debugPrint('Session persist failed: $e');
-    }
-  }
-
-  /// Clear persisted session from local storage
-  Future<void> _clearSession() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kSessionKey);
-    } catch (e) {
-      debugPrint('Session clear failed: $e');
-    }
-  }
-
-  /// Step 1: Send OTP — does NOT log in yet
-  Future<bool> sendOtp(String phone, String role) async {
-    _pendingPhone = phone;
-    _pendingRole = role;
-    // Simulate OTP being sent
-    await Future.delayed(const Duration(milliseconds: 500));
-    return true;
-  }
-
-  /// Step 2: Verify OTP — actually logs in and persists session
-  Future<bool> verifyOtp(String otp) async {
-    final otpValid =
-        await _mockService.verifyOtp(otp, phone: _pendingPhone);
-    if (otpValid && _pendingPhone != null) {
-      final user =
-          await _mockService.login(_pendingPhone!, _pendingRole ?? 'customer');
-      state = user;
-      _pendingPhone = null;
-      _pendingRole = null;
-
-      // Persist session so user stays logged in across app restarts
-      await _persistSession(user);
-
-      _ref.read(authChangeNotifierProvider).notify();
+      await _api.post('auth/otp/send', { 'phone': phone });
+      _status = AuthStatus.idle;
+      notifyListeners();
       return true;
+    } catch (e) {
+      _error  = _parseError(e, 'Failed to send OTP');
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
     }
-    return false;
   }
 
-  /// Explicit logout — clears state AND persisted session
-  void logout() {
-    state = null;
-    _pendingPhone = null;
-    _pendingRole = null;
-    _clearSession();
-    _ref.read(authChangeNotifierProvider).notify();
+  // ── Verify OTP ───────────────────────────────────────────────────────────
+  Future<bool> verifyOtp(String phone, String otp) async {
+    _status = AuthStatus.loading;
+    _error  = null;
+    notifyListeners();
+    try {
+      final response = await _api.post('auth/otp/verify', {
+        'phone': phone,
+        'otp':   otp,
+      });
+
+      final accessToken  = response['accessToken']  as String?;
+      final refreshToken = response['refreshToken'] as String?;
+      final userData     = response['user'];
+
+      if (accessToken == null) {
+        _error  = 'No token received from server';
+        _status = AuthStatus.error;
+        notifyListeners();
+        return false;
+      }
+
+      await _storage.saveAccessToken(accessToken);
+      if (refreshToken != null) await _storage.saveRefreshToken(refreshToken);
+
+      _user = userData != null ? UserModel.fromJson(userData) : null;
+      if (_user != null) await _storage.setUser(_user!.toJson());
+
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error  = _parseError(e, 'OTP verification failed');
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ── Email/password login ─────────────────────────────────────────────────
+  Future<bool> login(String email, String password) async {
+    _status = AuthStatus.loading;
+    _error  = null;
+    notifyListeners();
+    try {
+      final response = await _api.post('auth/login', {
+        'email':    email,
+        'password': password,
+      });
+
+      final accessToken  = response['accessToken']  as String?;
+      final refreshToken = response['refreshToken'] as String?;
+      final userData     = response['user'];
+
+      if (accessToken == null) throw Exception('No token in response');
+
+      await _storage.saveAccessToken(accessToken);
+      if (refreshToken != null) await _storage.saveRefreshToken(refreshToken);
+
+      _user = userData != null ? UserModel.fromJson(userData) : null;
+      if (_user != null) await _storage.setUser(_user!.toJson());
+
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error  = _parseError(e, 'Login failed');
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ── Fetch / refresh user profile ─────────────────────────────────────────
+  Future<void> fetchProfile() async {
+    try {
+      final response = await _api.get('auth/me');
+      _user = UserModel.fromJson(response['user'] ?? response);
+      if (_user != null) await _storage.setUser(_user!.toJson());
+      notifyListeners();
+    } catch (e) {
+      if (e.toString().contains('401') || e.toString().contains('expired')) {
+        await _tryRefresh();
+      }
+      debugPrint('fetchProfile error: $e');
+    }
+  }
+
+  // ── Logout ───────────────────────────────────────────────────────────────
+  Future<void> logout() async {
+    try {
+      await _api.post('auth/logout', {});
+    } catch (_) {}
+    await _storage.clearAll();
+    _user   = null;
+    _status = AuthStatus.unauthenticated;
+    notifyListeners();
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  String _parseError(dynamic e, String fallback) {
+    if (e is Map) {
+      final code = e['error']?['code'] as String?;
+      if (code == 'OTP_LOCKED')   return 'Too many attempts. Please wait 15 minutes.';
+      if (code == 'OTP_COOLDOWN') return 'Please wait 60 seconds before requesting another OTP.';
+      if (code == 'OTP_INVALID')  return 'Incorrect OTP. Please try again.';
+      return e['error']?['message'] ?? e['message'] ?? fallback;
+    }
+    final str = e.toString();
+    if (str.contains('403')) return 'Account suspended. Contact support.';
+    if (str.contains('429')) return 'Too many requests. Please slow down.';
+    return str.contains('Exception:')
+        ? str.split('Exception:').last.trim()
+        : fallback;
   }
 }

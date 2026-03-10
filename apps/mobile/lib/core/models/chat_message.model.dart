@@ -18,6 +18,7 @@ class ChatMessageModel {
   final DateTime createdAt;
   final DateTime? syncedAt;    // When synced to server (null = not yet synced)
   final bool isMe;             // Convenience flag for display
+  final bool isTemp;           // Local-only until confirmed by server (fix chat provider)
 
   const ChatMessageModel({
     required this.id,
@@ -29,12 +30,14 @@ class ChatMessageModel {
     required this.createdAt,
     this.syncedAt,
     this.isMe = false,
+    this.isTemp = false,
   });
 
   ChatMessageModel copyWith({
     MessageStatus? status,
     DateTime? syncedAt,
     bool? isMe,
+    bool? isTemp,
   }) {
     return ChatMessageModel(
       id: id,
@@ -46,6 +49,7 @@ class ChatMessageModel {
       createdAt: createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
       isMe: isMe ?? this.isMe,
+      isTemp: isTemp ?? this.isTemp,
     );
   }
 
@@ -81,6 +85,31 @@ class ChatMessageModel {
           ? DateTime.parse(map['syncedAt'] as String)
           : null,
       isMe: (map['isMe'] as int?) == 1,
+    );
+  }
+
+  /// Create from JSON (API or socket) — currentUserId used to set isMe
+  factory ChatMessageModel.fromJson(
+    Map<String, dynamic> json, {
+    required String currentUserId,
+    String? roomId,
+  }) {
+    final fromId = json['fromUserId'] as String? ?? '';
+    final rId = roomId ?? json['roomId'] as String? ?? '';
+    return ChatMessageModel(
+      id: json['id'] as String? ?? '',
+      roomId: rId,
+      fromUserId: fromId,
+      toUserId: json['toUserId'] as String? ?? '',
+      message: json['message'] as String? ?? json['content'] as String? ?? '',
+      status: MessageStatus.sent,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : DateTime.now(),
+      syncedAt: json['syncedAt'] != null
+          ? DateTime.parse(json['syncedAt'] as String)
+          : DateTime.now(),
+      isMe: fromId == currentUserId,
     );
   }
 

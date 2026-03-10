@@ -1,126 +1,186 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../services/api';
 
-export default function Wallet() {
-  const [balance, setBalance] = useState(0);
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [topUpAmount, setTopUpAmount] = useState('');
-  const [gateway, setGateway] = useState('JAZZCASH');
+const GATEWAYS = ['jazzcash', 'easypaisa'];
 
-  useEffect(() => {
-    fetchWallet();
-  }, []);
+export default function Wallet() {
+  const [wallet, setWallet] = useState(null);
+  const [ledger, setLedger] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [rechargeForm, setRechargeForm] = useState({ amount: '', gateway: 'jazzcash' });
+  const [rechargeLoading, setRechargeLoading] = useState(false);
+  const [rechargeMsg, setRechargeMsg] = useState('');
 
   const fetchWallet = async () => {
     setLoading(true);
+    setError('');
     try {
-      const [payRes] = await Promise.all([
-        api.get('/payments/history'),
+      // ✅ FIX: Was /payments/history — backend has GET /wallet (balance + recent ledger)
+      //         and GET /wallet/ledger (full paginated ledger)
+      const [walletRes, ledgerRes] = await Promise.allSettled([
+        api.get('/wallet'),
+        api.get('/wallet/ledger?page=1&limit=20'),
       ]);
-      setPayments(payRes.data || []);
-      // Derive balance from wallet endpoint or total payments
-    } catch {
-      setPayments([]);
+
+      if (walletRes.status === 'fulfilled') {
+        const d = walletRes.value.data;
+        setWallet(d?.wallet || d);
+      }
+      if (ledgerRes.status === 'fulfilled') {
+        const d = ledgerRes.value.data;
+        setLedger(Array.isArray(d) ? d : d?.ledger || d?.data || []);
+      }
+    } catch (err) {
+      setError('Failed to load wallet data.');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTopUp = async () => {
-    if (!topUpAmount || Number(topUpAmount) <= 0) return;
+  useEffect(() => {
+    fetchWallet();
+  }, []);
+
+  const handleRecharge = async (e) => {
+    e.preventDefault();
+    const amountPaisa = Math.round(parseFloat(rechargeForm.amount) * 100);
+    if (!amountPaisa || amountPaisa < 10000) {
+      setRechargeMsg('Minimum recharge is PKR 100.');
+      return;
+    }
+    setRechargeLoading(true);
+    setRechargeMsg('');
     try {
-      const amountPaisa = Number(topUpAmount) * 100;
-      if (gateway === 'JAZZCASH') {
-        await api.post('/payments/jazzcash/initiate', { amountPaisa, purpose: 'WALLET_TOPUP', phone: '' });
-      } else if (gateway === 'EASYPAISA') {
-        await api.post('/payments/easypaisa/initiate', { amountPaisa, purpose: 'WALLET_TOPUP', msisdn: '' });
+      // ✅ FIX: Backend endpoint is POST /wallet/recharge (not /payments/xxx/initiate)
+      const { data } = await api.post('/wallet/recharge', {
+        amountPaisa,
+        gateway: rechargeForm.gateway,
+      });
+      if (data.paymentUrl) {
+        window.open(data.paymentUrl, '_blank');
+        setRechargeMsg('Payment page opened. Complete payment there.');
       } else {
-        await api.post('/payments/wallet/topup', { amountPaisa });
+        setRechargeMsg('Recharge initiated.');
       }
-      setTopUpAmount('');
-      fetchWallet();
-    } catch {
-      /* handle */
+    } catch (err) {
+      setRechargeMsg(
+        err.response?.data?.error?.message || 'Failed to initiate recharge.'
+      );
+    } finally {
+      setRechargeLoading(false);
     }
   };
 
-  const gatewayLabels = {
-    JAZZCASH: '📱 JazzCash',
-    EASYPAISA: '📱 Easypaisa',
-    WALLET: '💰 Wallet Balance',
-  };
+  const balancePKR = wallet?.balance != null
+    ? (wallet.balance / 100).toLocaleString('en-PK', { minimumFractionDigits: 0 })
+    : '—';
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Wallet</h1>
+    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      <h1 className="text-2xl font-bold text-gray-900">Wallet</h1>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      )}
 
       {/* Balance Card */}
-      <div className="card p-6 bg-gradient-to-r from-primary-600 to-primary-700 text-white mb-8">
+      <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-2xl p-6 text-white">
         <p className="text-sm opacity-80">Available Balance</p>
-        <p className="text-4xl font-bold mt-1">₨ {balance.toLocaleString()}</p>
-        <p className="text-xs opacity-60 mt-2">Currency: PKR</p>
+        <p className="text-4xl font-bold mt-1">PKR {balancePKR}</p>
       </div>
 
-      {/* Top Up */}
-      <div className="card p-6 mb-8">
-        <h2 className="text-lg font-semibold mb-4">Recharge Wallet</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Recharge Form */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-semibold text-gray-800 mb-4">Add Funds</h2>
+        <form onSubmit={handleRecharge} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Amount (PKR)</label>
-            <input type="number" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)}
-              placeholder="1000" className="input-field w-full" min="1" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Amount (PKR)
+            </label>
+            <input
+              type="number"
+              min="100"
+              step="1"
+              placeholder="e.g. 500"
+              value={rechargeForm.amount}
+              onChange={(e) => setRechargeForm({ ...rechargeForm, amount: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-500"
+              required
+            />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Payment Method</label>
-            <select value={gateway} onChange={e => setGateway(e.target.value)} className="input-field w-full">
-              {Object.entries(gatewayLabels).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Payment Method
+            </label>
+            <select
+              value={rechargeForm.gateway}
+              onChange={(e) => setRechargeForm({ ...rechargeForm, gateway: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {GATEWAYS.map((g) => (
+                <option key={g} value={g}>
+                  {g === 'jazzcash' ? 'JazzCash' : 'Easypaisa'}
+                </option>
               ))}
             </select>
           </div>
-          <div className="flex items-end">
-            <button onClick={handleTopUp} className="btn-primary w-full py-2.5 rounded-lg">
-              Top Up
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-2 mt-3">
-          {[500, 1000, 2000, 5000].map(amt => (
-            <button key={amt} onClick={() => setTopUpAmount(String(amt))}
-              className="px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 text-gray-600">
-              ₨ {amt.toLocaleString()}
-            </button>
-          ))}
-        </div>
+          {rechargeMsg && (
+            <p className={`text-sm ${rechargeMsg.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
+              {rechargeMsg}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={rechargeLoading}
+            className="w-full bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 disabled:bg-green-400 font-medium"
+          >
+            {rechargeLoading ? 'Processing…' : 'Proceed to Payment'}
+          </button>
+        </form>
       </div>
 
-      {/* Payment History */}
-      <div className="card p-6">
-        <h2 className="text-lg font-semibold mb-4">Transaction History</h2>
-        {loading ? (
-          <p className="text-gray-400 text-center py-6">Loading...</p>
-        ) : payments.length === 0 ? (
-          <p className="text-gray-400 text-center py-6">No transactions yet</p>
+      {/* Ledger */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-800">Transaction History</h2>
+        </div>
+        {ledger.length === 0 ? (
+          <p className="text-gray-500 text-sm text-center py-8">No transactions yet.</p>
         ) : (
-          <div className="divide-y">
-            {payments.map((p, i) => (
-              <div key={i} className="py-3 flex items-center justify-between">
+          <ul className="divide-y divide-gray-100">
+            {ledger.map((entry) => (
+              <li key={entry.id} className="px-5 py-3 flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-sm text-gray-900">{p.purpose || 'Payment'}</p>
-                  <p className="text-xs text-gray-400">{p.gateway} &middot; {new Date(p.createdAt).toLocaleDateString()}</p>
-                </div>
-                <div className="text-right">
-                  <p className={`font-semibold ${p.purpose === 'WALLET_TOPUP' ? 'text-green-600' : 'text-red-600'}`}>
-                    {p.purpose === 'WALLET_TOPUP' ? '+' : '-'}₨ {(Number(p.amountPaisa) / 100).toLocaleString()}
+                  <p className="text-sm font-medium text-gray-800">
+                    {entry.note || entry.referenceType || 'Transaction'}
                   </p>
-                  <p className={`text-xs ${p.status === 'COMPLETED' ? 'text-green-500' : p.status === 'PENDING' ? 'text-yellow-500' : 'text-gray-400'}`}>
-                    {p.status}
+                  <p className="text-xs text-gray-400">
+                    {new Date(entry.createdAt).toLocaleString()}
                   </p>
                 </div>
-              </div>
+                <span
+                  className={`font-semibold text-sm ${
+                    entry.type === 'credit' ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  {entry.type === 'credit' ? '+' : '-'}PKR{' '}
+                  {(entry.amount / 100).toLocaleString()}
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>

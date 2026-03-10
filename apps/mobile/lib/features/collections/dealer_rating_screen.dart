@@ -1,292 +1,185 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/models/collection.model.dart';
-import '../../core/mock/mock_data.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../services/api_service.dart';
 
-class DealerRatingScreen extends ConsumerWidget {
-  const DealerRatingScreen({super.key});
+// ✅ FIX: Removed MockData.ratingForDealer and MockData.collectionsForDealer.
+//          Ratings from GET /v1/users/:id/rating-summary, collections from GET /v1/collections.
+
+class DealerRatingScreen extends StatefulWidget {
+  final String dealerId;
+  const DealerRatingScreen({super.key, required this.dealerId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    final rating = MockData.ratingForDealer(user?.id);
-    final collections = MockData.collectionsForDealer(user?.id);
+  State<DealerRatingScreen> createState() => _DealerRatingScreenState();
+}
 
-    if (rating == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('My Rating')),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.star_outline, size: 64, color: Colors.grey),
-              SizedBox(height: 16),
-              Text('No rating data yet',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
-              SizedBox(height: 8),
-              Text('Complete collections to build your rating.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
-            ],
-          ),
-        ),
-      );
+class _DealerRatingScreenState extends State<DealerRatingScreen> {
+  final ApiService _api = ApiService();
+  Map<String, dynamic>? _ratingSummary;
+  List<Map<String, dynamic>> _ratings = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final results = await Future.wait([
+        _api.get('users/${widget.dealerId}/rating-summary'),
+        _api.get('users/${widget.dealerId}/ratings', queryParams: {'page': '1', 'limit': '20'}),
+      ]);
+
+      setState(() {
+        _ratingSummary = results[0] as Map<String, dynamic>;
+        final raw = (results[1]['ratings'] ?? results[1]['data'] ?? results[1]) as List<dynamic>;
+        _ratings    = raw.cast<Map<String, dynamic>>();
+        _loading    = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error   = e.toString().split('Exception:').last.trim();
+        _loading = false;
+      });
     }
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Performance')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Overall Score Card ──
-            Card(
-              color: _badgeColor(rating.overallScore).withOpacity(0.08),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    Text(rating.ratingBadge,
-                        style: const TextStyle(fontSize: 24)),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ...List.generate(5, (i) {
-                          final star = i + 1;
-                          if (star <= rating.overallScore.floor()) {
-                            return const Icon(Icons.star,
-                                color: Colors.amber, size: 28);
-                          } else if (star - 0.5 <= rating.overallScore) {
-                            return const Icon(Icons.star_half,
-                                color: Colors.amber, size: 28);
-                          } else {
-                            return Icon(Icons.star_border,
-                                color: Colors.grey[300], size: 28);
-                          }
-                        }),
-                        const SizedBox(width: 8),
-                        Text(
-                          rating.overallScore.toStringAsFixed(1),
-                          style: const TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Period: ${rating.period}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Score Breakdown ──
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Score Breakdown',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    _scoreBar('Response Time', rating.responseScore, Colors.blue),
-                    _scoreBar('Collection Speed', rating.collectionScore,
-                        Colors.orange),
-                    _scoreBar(
-                        'Status Compliance', rating.complianceScore, Colors.purple),
-                    if (rating.customerScore != null)
-                      _scoreBar('Customer Feedback', rating.customerScore!,
-                          Colors.green),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Collection Stats ──
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Collection Statistics',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _statBox('${rating.totalCollections}', 'Total',
-                            Colors.blue),
-                        const SizedBox(width: 8),
-                        _statBox('${rating.onTimeCollections}', 'On Time',
-                            Colors.green),
-                        const SizedBox(width: 8),
-                        _statBox(
-                            '${rating.lateCollections}', 'Late', Colors.orange),
-                        const SizedBox(width: 8),
-                        _statBox('${rating.escalatedCollections}', 'Escalated',
-                            Colors.red),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _metricRow('On-Time Rate',
-                        '${rating.onTimeRate.toStringAsFixed(0)}%'),
-                    _metricRow('Avg Response Time',
-                        '${rating.avgResponseTimeMin.toStringAsFixed(0)} min'),
-                    _metricRow('Avg Collection Time',
-                        '${rating.avgCollectionTimeMin.toStringAsFixed(0)} min'),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Recent Collections ──
-            if (collections.isNotEmpty) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(
+        title: const Text('Dealer Ratings'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.star_border, size: 64, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  ElevatedButton(onPressed: _fetchData, child: const Text('Retry')),
+                ]))
+              : RefreshIndicator(
+                  onRefresh: _fetchData,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      const Text('Recent Collections',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06),
+                              blurRadius: 8, offset: const Offset(0, 2))],
+                        ),
+                        child: Column(children: [
+                          Text(
+                            '${_ratingSummary?['averageStars'] ?? 0}',
+                            style: const TextStyle(fontSize: 48,
+                                fontWeight: FontWeight.bold, color: Colors.amber),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(5, (i) {
+                              final avg = (_ratingSummary?['averageStars'] ?? 0) as num;
+                              return Icon(
+                                i < avg.round() ? Icons.star : Icons.star_border,
+                                color: Colors.amber, size: 24,
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 4),
+                          Text('${_ratingSummary?['totalCount'] ?? 0} reviews',
+                              style: const TextStyle(color: Colors.grey)),
+
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 12),
+                          ...[5, 4, 3, 2, 1].map((star) {
+                            final dist = _ratingSummary?['distribution'] as Map<String, dynamic>?;
+                            final count = (dist?[star.toString()] ?? 0) as num;
+                            final total = (_ratingSummary?['totalCount'] ?? 1) as num;
+                            final ratio = total > 0 ? count / total : 0.0;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(children: [
+                                Text('$star ⭐',
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: ratio.toDouble(),
+                                      minHeight: 8,
+                                      backgroundColor: Colors.grey.shade200,
+                                      valueColor: const AlwaysStoppedAnimation(Colors.amber),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text('$count',
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              ]),
+                            );
+                          }),
+                        ]),
+                      ),
+                      const SizedBox(height: 20),
+
+                      const Text('Reviews',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
-                      ...collections.take(5).map((col) => _recentRow(col)),
+
+                      if (_ratings.isEmpty)
+                        const Center(child: Text('No reviews yet.',
+                            style: TextStyle(color: Colors.grey)))
+                      else
+                        ..._ratings.map((r) => Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade100),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Row(children: List.generate(r['stars'] as int, (_) =>
+                                    const Icon(Icons.star, size: 14, color: Colors.amber))),
+                                const Spacer(),
+                                Text(
+                                  r['createdAt'] != null
+                                      ? DateTime.parse(r['createdAt'] as String)
+                                          .toLocal()
+                                          .toString()
+                                          .substring(0, 10)
+                                      : '',
+                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                              ]),
+                              if (r['comment'] != null &&
+                                  (r['comment'] as String).isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(r['comment'] as String,
+                                    style: const TextStyle(fontSize: 13,
+                                        color: Colors.black87, height: 1.4)),
+                              ],
+                            ],
+                          ),
+                        )),
                     ],
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
     );
-  }
-
-  Widget _scoreBar(String label, double score, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 13)),
-              Text(score.toStringAsFixed(1),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: score / 5.0,
-              backgroundColor: Colors.grey[200],
-              valueColor: AlwaysStoppedAnimation(color),
-              minHeight: 8,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statBox(String value, String label, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            Text(value,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    color: color)),
-            const SizedBox(height: 4),
-            Text(label,
-                style: TextStyle(
-                    color: Colors.grey[600], fontSize: 11),
-                textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _metricRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-          Text(value,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
-  Widget _recentRow(CollectionModel col) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: col.isOverdue ? Colors.red : const Color(0xFF16A34A),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(col.listingTitle,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w500, fontSize: 13)),
-                Text('${col.area}, ${col.city} • ${col.statusLabel}',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 11)),
-              ],
-            ),
-          ),
-          if (col.qualityRating != null)
-            Row(
-              children: [
-                const Icon(Icons.star, size: 14, color: Colors.amber),
-                Text('${col.qualityRating}',
-                    style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Color _badgeColor(double score) {
-    if (score >= 4.5) return Colors.purple;
-    if (score >= 4.0) return Colors.amber;
-    if (score >= 3.0) return Colors.blue;
-    if (score >= 2.0) return Colors.orange;
-    return Colors.red;
   }
 }

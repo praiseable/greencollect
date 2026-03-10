@@ -1,200 +1,167 @@
-/// Inbox listing conversations for the **current user**.
-/// Only rooms where the logged-in user has sent or received a message are shown.
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../core/providers/auth.provider.dart';
-import '../../services/chat_db_service.dart';
-import '../../core/models/chat_message.model.dart';
-import '../../core/mock/mock_data.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/chat.provider.dart';
+import 'chat_screen.dart';
 
-class ChatInboxScreen extends ConsumerStatefulWidget {
+// ✅ FIX: Removed MockData.getDisplayNameForPhoneDigits.
+//          Conversation data (name, avatar, last message) comes from GET /v1/chat/conversations.
+
+class ChatInboxScreen extends StatefulWidget {
   const ChatInboxScreen({super.key});
 
   @override
-  ConsumerState<ChatInboxScreen> createState() => _ChatInboxScreenState();
+  State<ChatInboxScreen> createState() => _ChatInboxScreenState();
 }
 
-class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
-  final ChatDbService _chatDb = ChatDbService();
-  List<String> _roomIds = [];
-  Map<String, ChatMessageModel?> _latestByRoom = {};
-  bool _loading = true;
-  String? _error;
-
+class _ChatInboxScreenState extends State<ChatInboxScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInbox();
-  }
-
-  Future<void> _loadInbox() async {
-    final user = ref.read(authProvider);
-    if (user == null) {
-      setState(() {
-        _loading = false;
-        _error = 'Please log in to see your chats';
-      });
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatProvider>().fetchConversations();
     });
-
-    try {
-      final roomIds = await _chatDb.getRoomIdsForUser(user.id);
-      final latestByRoom = <String, ChatMessageModel?>{};
-      for (final roomId in roomIds) {
-        latestByRoom[roomId] = await _chatDb.getLatestMessage(roomId);
-      }
-      if (mounted) {
-        setState(() {
-          _roomIds = roomIds;
-          _latestByRoom = latestByRoom;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = e.toString();
-        });
-      }
-    }
-  }
-
-  /// Display name for the other party in this room (so each user sees the correct name).
-  String _otherPartyDisplayName(String roomId) {
-    if (roomId.startsWith('chat_')) {
-      final digits = roomId.replaceFirst('chat_', '');
-      return MockData.getDisplayNameForPhoneDigits(digits);
-    }
-    return roomId;
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authProvider);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat Inbox'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _loadInbox,
-          ),
-        ],
+        title: const Text('Messages'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
       ),
-      body: _buildBody(user),
-    );
-  }
+      body: Consumer<ChatProvider>(
+        builder: (ctx, chat, _) {
+          if (chat.loading && chat.conversations.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-  Widget _buildBody(dynamic user) {
-    if (user == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.login, size: 48, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('Log in to see your conversations'),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => context.go('/auth/login'),
-              child: const Text('Log in'),
-            ),
-          ],
-        ),
-      );
-    }
+          if (chat.error != null && chat.conversations.isEmpty) {
+            return Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
+                const SizedBox(height: 12),
+                Text(chat.error!, style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => chat.fetchConversations(),
+                  child: const Text('Retry'),
+                ),
+              ]),
+            );
+          }
 
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+          if (chat.conversations.isEmpty) {
+            return const Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('No conversations yet',
+                    style: TextStyle(fontSize: 16, color: Colors.grey)),
+                SizedBox(height: 8),
+                Text('Browse listings and tap "Chat" to start a conversation',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ]),
+            );
+          }
 
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-              const SizedBox(height: 16),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: _loadInbox,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+          return RefreshIndicator(
+            onRefresh: () => chat.fetchConversations(),
+            child: ListView.separated(
+              itemCount: chat.conversations.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
+              itemBuilder: (ctx, i) {
+                final conv = chat.conversations[i];
 
-    if (_roomIds.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No conversations yet',
-              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Open a listing and tap Message to start a chat.\nIt will appear here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
+                final otherUserId   = conv['userId'] as String? ??
+                                      conv['otherUserId'] as String? ?? '';
+                final otherUserName = conv['name']        as String? ??
+                                      conv['displayName']  as String? ??
+                                      conv['userName']     as String? ?? 'User';
+                final lastMessage   = conv['lastMessage']  as String? ?? '';
+                final updatedAt     = conv['updatedAt']    as String?;
+                final unread        = conv['unreadCount']  as int? ?? 0;
 
-    return RefreshIndicator(
-      onRefresh: _loadInbox,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _roomIds.length,
-        itemBuilder: (context, index) {
-          final roomId = _roomIds[index];
-          final latest = _latestByRoom[roomId];
-          final otherName = _otherPartyDisplayName(roomId);
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.green[100],
-              child: Text(
-                otherName.isNotEmpty ? otherName.substring(0, 1).toUpperCase() : '?',
-                style: TextStyle(color: Colors.green[800]),
-              ),
-            ),
-            title: Text(otherName),
-            subtitle: latest != null
-                ? Text(
-                    latest.message,
+                return ListTile(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(otherUserId: otherUserId),
+                    ),
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.shade100,
+                    radius: 26,
+                    child: Text(
+                      otherUserName.isNotEmpty
+                          ? otherUserName[0].toUpperCase()
+                          : 'U',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    otherUserName,
+                    style: TextStyle(
+                      fontWeight: unread > 0 ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(
+                    lastMessage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                      fontStyle: latest.isMe ? FontStyle.italic : null,
+                      color: unread > 0 ? Colors.black87 : Colors.grey,
+                      fontWeight: unread > 0 ? FontWeight.w500 : FontWeight.normal,
                     ),
-                  )
-                : null,
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/chat/$roomId'),
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (updatedAt != null)
+                        Text(
+                          _formatDate(updatedAt),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: unread > 0 ? Colors.green : Colors.grey),
+                        ),
+                      if (unread > 0) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: const BoxDecoration(
+                            color: Colors.green, shape: BoxShape.circle),
+                          child: Text('$unread',
+                              style: const TextStyle(color: Colors.white, fontSize: 11)),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
           );
         },
       ),
     );
+  }
+
+  String _formatDate(String isoDate) {
+    try {
+      final dt  = DateTime.parse(isoDate).toLocal();
+      final now = DateTime.now();
+      if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+        return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      }
+      return '${dt.day}/${dt.month}';
+    } catch (_) {
+      return '';
+    }
   }
 }

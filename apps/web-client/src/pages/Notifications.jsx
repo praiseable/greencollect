@@ -1,106 +1,123 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { FiBell, FiPackage, FiMessageCircle, FiCheck, FiCheckCircle } from 'react-icons/fi';
 import api from '../services/api';
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/notifications');
+      const list = Array.isArray(data) ? data : data?.notifications || data?.data || [];
+      setNotifications(list);
+    } catch (err) {
+      setError('Failed to load notifications.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    api.get('/notifications')
-      .then((res) => setNotifications(res.data?.data || res.data || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    fetchNotifications();
   }, []);
 
-  const markAsRead = async (id) => {
+  const markRead = async (id) => {
     try {
-      await api.put(`/notifications/${id}/read`);
-      setNotifications(notifications.map((n) =>
-        n.id === id ? { ...n, isRead: true } : n
-      ));
-    } catch {}
+      // ✅ FIX: Was PUT — backend uses PATCH /notifications/:id/read
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      );
+    } catch (err) {
+      console.error('Failed to mark notification read:', err);
+    }
   };
 
   const markAllRead = async () => {
     try {
-      await api.put('/notifications/read-all');
-      setNotifications(notifications.map((n) => ({ ...n, isRead: true })));
-    } catch {}
-  };
-
-  const getIcon = (type) => {
-    switch (type) {
-      case 'NEW_LISTING': return <FiPackage className="text-blue-500" />;
-      case 'NEW_MESSAGE': return <FiMessageCircle className="text-green-500" />;
-      case 'ORDER_UPDATE': return <FiCheckCircle className="text-purple-500" />;
-      default: return <FiBell className="text-gray-500" />;
+      // ✅ FIX: Was PUT — backend uses PATCH /notifications/read-all
+      await api.patch('/notifications/read-all');
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (err) {
+      console.error('Failed to mark all read:', err);
     }
   };
 
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-          <p className="text-sm text-gray-500 mt-1">Stay updated on new listings, messages and orders</p>
-        </div>
-        {notifications.some((n) => !n.isRead) && (
-          <button onClick={markAllRead} className="btn-secondary text-sm flex items-center gap-1">
-            <FiCheck size={14} /> Mark all read
+        <h1 className="text-2xl font-bold text-gray-900">
+          Notifications
+          {unreadCount > 0 && (
+            <span className="ml-2 text-sm bg-red-500 text-white rounded-full px-2 py-0.5">
+              {unreadCount}
+            </span>
+          )}
+        </h1>
+        {unreadCount > 0 && (
+          <button
+            onClick={markAllRead}
+            className="text-sm text-green-600 hover:underline font-medium"
+          >
+            Mark all read
           </button>
         )}
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="card p-4 animate-pulse flex gap-4">
-              <div className="w-10 h-10 bg-gray-200 rounded-full" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-3/4" />
-                <div className="h-3 bg-gray-200 rounded w-1/2" />
-              </div>
-            </div>
-          ))}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4">
+          {error}
         </div>
-      ) : notifications.length > 0 ? (
-        <div className="space-y-2">
-          {notifications.map((n) => (
-            <div key={n.id}
-              className={`card p-4 flex items-start gap-3 cursor-pointer hover:bg-gray-50 transition-colors
-                ${!n.isRead ? 'border-l-4 border-l-primary-500 bg-primary-50/30' : ''}`}
-              onClick={() => markAsRead(n.id)}>
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                {getIcon(n.type)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                  {n.title}
-                </p>
-                <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>
-                {n.listingId && (
-                  <Link to={`/listings/${n.listingId}`} className="text-primary-600 text-xs font-medium hover:underline mt-1 inline-block"
-                    onClick={(e) => e.stopPropagation()}>
-                    View Listing →
-                  </Link>
-                )}
-                <div className="text-xs text-gray-400 mt-1">
-                  {new Date(n.createdAt).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })}
-                </div>
-              </div>
-              {!n.isRead && (
-                <div className="w-2.5 h-2.5 bg-primary-500 rounded-full flex-shrink-0 mt-2" />
-              )}
-            </div>
-          ))}
+      )}
+
+      {notifications.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-4xl mb-2">🔔</p>
+          <p>No notifications yet</p>
         </div>
       ) : (
-        <div className="text-center py-16 text-gray-500">
-          <FiBell size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="font-medium">No notifications yet</p>
-          <p className="text-sm mt-1">You'll be notified when new listings match your interests</p>
+        <div className="space-y-2">
+          {notifications.map((n) => (
+            <div
+              key={n.id}
+              onClick={() => !n.isRead && markRead(n.id)}
+              className={`p-4 rounded-xl border cursor-pointer transition-colors ${
+                n.isRead
+                  ? 'bg-white border-gray-100 text-gray-500'
+                  : 'bg-green-50 border-green-200 text-gray-900'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                    n.isRead ? 'bg-gray-300' : 'bg-green-500'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium ${n.isRead ? 'font-normal' : 'font-semibold'}`}>
+                    {n.title}
+                  </p>
+                  <p className="text-sm mt-0.5 line-clamp-2">{n.body || n.message}</p>
+                  <p className="text-xs mt-1 opacity-60">
+                    {new Date(n.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
