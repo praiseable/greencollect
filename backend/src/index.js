@@ -74,6 +74,7 @@ app.use('/v1/listings', require('./routes/listings.routes'));
 app.use('/v1/transactions', require('./routes/transactions.routes'));
 app.use('/v1/chat', require('./routes/chat.routes'));
 app.use('/v1/categories', require('./routes/categories.routes'));
+app.use('/v1/product-types', require('./routes/productTypes.routes'));
 app.use('/v1/units', require('./routes/units.routes'));
 app.use('/v1/geo-zones', require('./routes/geoZones.routes'));
 app.use('/v1/notifications', require('./routes/notifications.routes'));

@@ -72,9 +72,9 @@ class ListingModel {
     List<String> imgList = [];
     final imgs = json['images'];
     if (imgs is List) {
-      imgList = imgs.map((e) => e.toString()).toList();
+      imgList = imgs.map((e) => e is Map ? (e['url'] ?? e['path'] ?? '').toString() : e.toString()).where((s) => s.isNotEmpty).toList();
     } else if (json['imageUrls'] is List) {
-      imgList = (json['imageUrls'] as List).map((e) => e.toString()).toList();
+      imgList = (json['imageUrls'] as List).map((e) => e is Map ? (e['url'] ?? e['path'] ?? '').toString() : e.toString()).where((s) => s.isNotEmpty).toList();
     }
     return ListingModel(
       id: json['id']?.toString() ?? '',
@@ -82,10 +82,8 @@ class ListingModel {
       titleUrdu: json['titleUrdu'] as String? ?? json['titleUr'] as String? ?? '',
       description: json['description'] as String? ?? '',
       descUrdu: json['descUrdu'] as String? ?? json['descUr'] as String?,
-      pricePkr: (json['pricePkr'] ?? json['price'] ?? 0) is int
-          ? (json['pricePkr'] ?? json['price'] ?? 0) as int
-          : ((json['pricePkr'] ?? json['price'] ?? 0) as num).toInt(),
-      unit: json['unit'] as String? ?? 'kg',
+      pricePkr: _parsePricePkr(json),
+      unit: _parseUnit(json),
       quantity: (json['quantity'] ?? 1) is double
           ? (json['quantity'] ?? 1) as double
           : ((json['quantity'] ?? 1) as num).toDouble(),
@@ -95,7 +93,7 @@ class ListingModel {
       sellerName: json['sellerName'] as String? ?? json['seller']?['name'] as String? ?? '',
       sellerPhone: json['sellerPhone'] as String? ?? json['seller']?['phone'] as String? ?? '',
       sellerId: json['sellerId']?.toString() ?? json['seller']?['id']?.toString(),
-      city: json['city'] as String? ?? '',
+      city: json['cityName'] as String? ?? json['geoZone']?['name'] as String? ?? json['city'] as String? ?? '',
       area: json['area'] as String?,
       latitude: (json['latitude'] ?? 0) is double
           ? (json['latitude'] ?? 0) as double
@@ -113,6 +111,24 @@ class ListingModel {
           ? (json['interestedCount'] ?? 0) as int
           : ((json['interestedCount'] ?? 0) as num).toInt(),
     );
+  }
+
+  static int _parsePricePkr(Map<String, dynamic> json) {
+    final pricePaisa = json['pricePaisa'];
+    if (pricePaisa != null) {
+      final n = pricePaisa is int ? pricePaisa : int.tryParse(pricePaisa.toString());
+      if (n != null) return (n / 100).round();
+    }
+    final p = json['pricePkr'] ?? json['price'] ?? 0;
+    if (p is int) return p;
+    return ((p as num).toDouble()).round();
+  }
+
+  static String _parseUnit(Map<String, dynamic> json) {
+    final u = json['unit'];
+    if (u is Map) return u['slug'] as String? ?? u['abbreviation'] as String? ?? json['unitName'] as String? ?? 'kg';
+    if (u is String) return u;
+    return json['unitName'] as String? ?? 'kg';
   }
 
   static ListingStatus _parseStatus(dynamic v) {

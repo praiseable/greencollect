@@ -31,6 +31,8 @@ services:
       - "4000:4000"
     environment:
       NODE_ENV: production
+      # Set to "true" to accept test OTPs 123456/111111 and return OTP in API (for staging/testing). Remove or set to "false" for real production.
+      ALLOW_TEST_OTP: "true"
       PORT: 4000
       DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
       REDIS_URL: redis://:GC_Redis_Pass_2026!@redis:6379

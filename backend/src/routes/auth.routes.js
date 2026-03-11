@@ -186,14 +186,15 @@ router.post('/otp/send', [
 
     otpStore.setCooldown(normalizedPhone);
 
-    // TODO: Send via Twilio in production
-    if (process.env.NODE_ENV !== 'production') {
+    // Log OTP in dev or when ALLOW_TEST_OTP (so you can check server logs or DB)
+    const allowTestOtp = process.env.ALLOW_TEST_OTP === 'true' || process.env.ALLOW_TEST_OTP === '1';
+    if (process.env.NODE_ENV !== 'production' || allowTestOtp) {
       console.log(`[OTP] ${normalizedPhone} → ${code}`);
     }
 
     const payload = { success: true, message: 'OTP sent', expiresIn: 300, cooldownSeconds: otpStore.OTP_RESEND_COOLDOWN_SECONDS };
-    if (process.env.NODE_ENV !== 'production') {
-      payload.otp = code; // dev only: return OTP in response so you can see it in network tab / logs
+    if (process.env.NODE_ENV !== 'production' || allowTestOtp) {
+      payload.otp = code; // return OTP when dev or ALLOW_TEST_OTP (e.g. staging) so app can show it
     }
     res.json(payload);
   } catch (err) {
@@ -220,8 +221,9 @@ async function otpVerifyHandler(req, res) {
     }
     const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
 
-    // Dev/test: clear lockout when using test OTP so testing is not blocked
-    const isDevBypass = process.env.NODE_ENV !== 'production' && (code === '123456' || code === '111111');
+    // Dev/test: accept 123456 or 111111 when not in production, or when ALLOW_TEST_OTP is set (e.g. staging)
+    const allowTestOtp = process.env.ALLOW_TEST_OTP === 'true' || process.env.ALLOW_TEST_OTP === '1';
+    const isDevBypass = (process.env.NODE_ENV !== 'production' || allowTestOtp) && (code === '123456' || code === '111111');
     if (isDevBypass) otpStore.clearLockout(normalizedPhone);
 
     const lockedUntil = otpStore.getLockout(normalizedPhone);

@@ -59,4 +59,62 @@
 1. **Phone format:** Use `03001234567` or `3001234567` (no spaces). App normalizes automatically.
 2. **Backend up:** Open `https://gc.directconnect.services/v1/...` (or your health endpoint) in a browser or Postman.
 3. **Error on screen:** After timeout or failure, the red error text under the button shows the backend message (e.g. "Invalid Pakistan phone number") or "Request timed out. Check your connection."
-4. **OTP in dev:** Backend logs OTP to console when not in production: `OTP for +923001234567: 123456`.
+4. **OTP in dev:** Backend logs OTP to console when not in production: `[OTP] +923001234567 → 123456`.
+
+---
+
+## 5. How to check which OTP was sent
+
+### Option A: Backend server logs
+
+The backend prints the OTP when:
+
+- `NODE_ENV !== 'production'` (e.g. local `npm run dev`), or  
+- `ALLOW_TEST_OTP=true` is set (e.g. on staging).
+
+Look for a line like:
+
+```text
+[OTP] +923001234567 → 847291
+```
+
+- **Local:** In the terminal where you ran `npm run dev` (or `node src/index.js`).
+- **Docker/production:**  
+  `docker compose -f docker-compose.prod.yml logs -f backend`  
+  (or your backend container name). New OTPs appear when someone requests one.
+
+### Option B: Database table
+
+OTPs are stored in the **`OTP`** table (Prisma model `OTP`).
+
+**Columns:** `id`, `phone`, `code`, `purpose`, `expiresAt`, `isUsed`, `createdAt`
+
+**Recent OTPs (PostgreSQL):**
+
+```bash
+# From host (replace with your DB container/service name and credentials)
+docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect -c \
+  "SELECT phone, code, purpose, \"expiresAt\", \"isUsed\", \"createdAt\" FROM \"OTP\" ORDER BY \"createdAt\" DESC LIMIT 20;"
+```
+
+**By phone:**
+
+```sql
+SELECT phone, code, "expiresAt", "isUsed", "createdAt"
+FROM "OTP"
+WHERE phone = '+923001234567'
+ORDER BY "createdAt" DESC
+LIMIT 5;
+```
+
+- **code** = the 6-digit OTP that was sent.  
+- **expiresAt** = when it stops working (e.g. 5 minutes after creation).  
+- **isUsed** = true after a successful verify.
+
+**Prisma Studio (GUI):**
+
+```bash
+cd backend && npx prisma studio
+```
+
+Open the **OTP** model to browse and filter by `phone` or `createdAt`.

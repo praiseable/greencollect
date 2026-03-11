@@ -46,9 +46,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         }
       });
     } else if (mounted) {
+      final auth = ref.read(authChangeNotifierProvider);
+      final message = auth.error ?? 'Invalid OTP. For testing use 123456 or 111111';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid OTP. For testing use 123456 or 111111'),
+        SnackBar(
+          content: Text(message),
           backgroundColor: Colors.red,
         ),
       );
@@ -169,7 +171,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 color: Colors.blue[50],
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Column(
+                  child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
@@ -178,7 +180,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
                       const SizedBox(width: 8),
                       Text(
-                        'OTP by account:',
+                        'OTP by account (dev/test only):',
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -188,15 +190,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '03001234567 → 111111\n'
-                    '03219876543 → 222222\n'
-                    '03335551234 → 333333\n'
-                    '03451112233 → 444444\n'
-                    '── Islamabad ──\n'
-                    '03001110001 (BaraKahu) → 550001\n'
-                    '03001110002 (G-6) → 660002\n'
-                    '03001110003 (G-8) → 770003\n'
-                    '03001110004 (ISB Fran) → 880004',
+                    'Use the code above if shown, or from SMS.\n'
+                    'For dev/test only: 03001234567 → 111111 (or 123456).',
                     style: TextStyle(fontSize: 11, color: Colors.blue[600]),
                     textAlign: TextAlign.center,
                   ),

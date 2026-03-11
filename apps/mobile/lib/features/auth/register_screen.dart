@@ -56,14 +56,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     // Simulate registration delay
     await Future.delayed(const Duration(seconds: 1));
 
-    final success = await ref.read(authChangeNotifierProvider).sendOtp(
+    final result = await ref.read(authChangeNotifierProvider).sendOtp(
       _phoneCtrl.text,
     );
 
     setState(() => _isLoading = false);
 
+    final success = result != null && (result['success'] == true);
+    final devOtp = result != null ? result['otp'] as String? : null;
     if (success && mounted) {
-      context.go('/auth/otp?phone=${Uri.encodeComponent(_phoneCtrl.text)}');
+      final phoneParam = Uri.encodeComponent(_phoneCtrl.text);
+      final otpParam = devOtp != null ? '&dev_otp=${Uri.encodeComponent(devOtp)}' : '';
+      context.go('/auth/otp?phone=$phoneParam$otpParam');
     }
   }
 

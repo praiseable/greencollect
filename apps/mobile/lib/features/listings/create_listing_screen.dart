@@ -63,19 +63,32 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         _api.get('geo-zones/cities'),
       ]);
 
-      final cats   = (results[0]['categories']  ?? results[0]['data'] ?? results[0]) as List<dynamic>;
-      final units  = (results[1]['units']        ?? results[1]['data'] ?? results[1]) as List<dynamic>;
-      final cities = (results[2]['cities']       ?? results[2]['data'] ?? results[2]) as List<dynamic>;
+      final cats   = _asList(results[0], 'categories');
+      final units  = _asList(results[1], 'units');
+      final cities = _asList(results[2], 'cities');
 
       setState(() {
-        _categories = cats.cast<Map<String, dynamic>>();
-        _units      = units.cast<Map<String, dynamic>>();
-        _cities     = cities.map((c) => c.toString()).toList();
+        _categories = cats.map((c) => c is Map<String, dynamic> ? c : <String, dynamic>{}).where((c) => c.isNotEmpty).toList();
+        _units      = units.map((u) => u is Map<String, dynamic> ? u : <String, dynamic>{}).where((u) => u.isNotEmpty).toList();
+        _cities     = cities.map((c) {
+          if (c is Map) return (c['name'] ?? c['id'] ?? c.toString()).toString();
+          return c.toString();
+        }).toList();
         _loading    = false;
       });
     } catch (e) {
       setState(() { _error = 'Failed to load form data. Please retry.'; _loading = false; });
     }
+  }
+
+  /// Backend may return raw array or { data/categories/units/cities: array }.
+  static List<dynamic> _asList(dynamic response, String key) {
+    if (response is List) return response;
+    if (response is Map) {
+      final list = response[key] ?? response['data'] ?? response;
+      if (list is List) return list;
+    }
+    return [];
   }
 
   Future<void> _onCategoryChange(String? categoryId) async {
@@ -234,8 +247,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                     hint: const Text('Select unit'),
                     onChanged: (v) => setState(() => _selectedUnitId = v),
                     items: _units.map((u) => DropdownMenuItem(
-                      value: u['id'] as String,
-                      child: Text('${u['name']} (${u['symbol']})'),
+                      value: u['id'] as String? ?? '',
+                      child: Text('${u['name'] ?? u['slug']} (${u['symbol'] ?? u['abbreviation'] ?? ''})'),
                     )).toList(),
                     decoration: _dropdownDecoration('Unit'),
                   ),
