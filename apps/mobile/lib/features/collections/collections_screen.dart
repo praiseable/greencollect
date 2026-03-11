@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/api_service.dart';
 import 'collection_detail_screen.dart';
 
-// ✅ FIX: Removed MockData.collectionsForDealer. Now calls GET /v1/collections from real backend.
+/// Collections list: GET /v1/collections. Accept job = PATCH status to ACCEPTED.
 
 class CollectionsScreen extends StatefulWidget {
   const CollectionsScreen({super.key});
@@ -18,7 +19,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
   String? _error;
   String? _statusFilter;
 
-  final _statusOptions = ['All', 'assigned', 'accepted', 'en_route', 'arrived', 'collected'];
+  final _statusOptions = ['All', 'ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'COLLECTED', 'DELIVERED_TO_CENTER'];
 
   @override
   void initState() {
@@ -49,26 +50,28 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
 
   Future<void> _acceptJob(String jobId) async {
     try {
-      await _api.patch('collections/$jobId/accept', {});
+      await _api.patch('collections/$jobId/status', {'status': 'ACCEPTED'});
       await _fetchCollections();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job accepted'), backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().split('Exception:').last.trim()),
-            backgroundColor: Colors.red),
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().split('Exception:').last.trim()), backgroundColor: Colors.red),
       );
     }
   }
 
   Color _statusColor(String? s) {
-    switch (s) {
-      case 'assigned':   return Colors.orange;
-      case 'accepted':   return Colors.blue;
-      case 'en_route':   return Colors.indigo;
-      case 'arrived':    return Colors.teal;
-      case 'collected':  return Colors.green;
-      case 'delivered':  return Colors.green.shade800;
-      case 'overdue':    return Colors.red;
-      default:           return Colors.grey;
+    if (s == null) return Colors.grey;
+    final u = s.toUpperCase();
+    switch (u) {
+      case 'ASSIGNED': return Colors.orange;
+      case 'ACCEPTED': return Colors.blue;
+      case 'EN_ROUTE': return Colors.indigo;
+      case 'ARRIVED': return Colors.teal;
+      case 'COLLECTED': return Colors.green;
+      case 'DELIVERED_TO_CENTER': return Colors.green.shade800;
+      case 'CANCELLED': return Colors.red;
+      default: return Colors.grey;
     }
   }
 
@@ -137,24 +140,20 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
                               itemCount: _collections.length,
                               separatorBuilder: (_, __) => const SizedBox(height: 10),
                               itemBuilder: (ctx, i) {
-                                final job     = _collections[i];
-                                final tx      = job['transaction'] as Map<String, dynamic>?;
-                                final listing = tx?['listing']    as Map<String, dynamic>?;
-                                final status  = job['status']     as String? ?? '';
+                                final job = _collections[i];
+                                final listing = job['listing'] as Map<String, dynamic>?;
+                                final status = job['status'] as String? ?? '';
+                                final deadlineAt = job['deadlineAt'];
+                                final isOverdue = deadlineAt != null && DateTime.now().isAfter(DateTime.tryParse(deadlineAt.toString()) ?? DateTime.now()) && !['COLLECTED', 'DELIVERED_TO_CENTER', 'CANCELLED'].contains(status);
 
                                 return GestureDetector(
-                                  onTap: () => Navigator.push(context,
-                                    MaterialPageRoute(builder: (_) =>
-                                        CollectionDetailScreen(collectionId: job['id'] as String))),
+                                  onTap: () => context.push('/collections/${job['id']}'),
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(12),
-                                      border: status == 'overdue'
-                                          ? Border.all(color: Colors.red.shade300)
-                                          : null,
-                                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 6, offset: const Offset(0, 2))],
+                                      border: isOverdue ? Border.all(color: Colors.red.shade300) : null,
+                                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2))],
                                     ),
                                     padding: const EdgeInsets.all(14),
                                     child: Column(
@@ -165,47 +164,37 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                listing?['title'] as String? ?? 'Collection Job',
+                                                listing?['title'] as String? ?? job['listingId']?.toString() ?? 'Collection',
                                                 style: const TextStyle(fontWeight: FontWeight.w600),
-                                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8, vertical: 3),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                               decoration: BoxDecoration(
                                                 color: _statusColor(status).withOpacity(0.1),
                                                 borderRadius: BorderRadius.circular(8),
                                               ),
-                                              child: Text(status.toUpperCase(),
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: _statusColor(status),
-                                                      fontWeight: FontWeight.w600)),
+                                              child: Text(status.replaceAll('_', ' '),
+                                                  style: TextStyle(fontSize: 10, color: _statusColor(status), fontWeight: FontWeight.w600)),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 6),
-                                        if (listing?['cityName'] != null)
-                                          Text('📍 ${listing!['cityName']}',
-                                              style: const TextStyle(
-                                                  color: Colors.grey, fontSize: 13)),
-                                        if (job['slaDeadline'] != null) ...[
+                                        if (job['cityName'] != null || listing?['cityName'] != null)
+                                          Text('📍 ${job['cityName'] ?? listing?['cityName'] ?? ''}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                                        if (deadlineAt != null) ...[
                                           const SizedBox(height: 4),
-                                          Text('⏰ SLA: ${_formatDate(job['slaDeadline'])}',
-                                              style: TextStyle(
-                                                  color: status == 'overdue'
-                                                      ? Colors.red : Colors.orange,
-                                                  fontSize: 12)),
+                                          Text('⏰ Deadline: ${_formatDate(deadlineAt)}', style: TextStyle(color: isOverdue ? Colors.red : Colors.orange, fontSize: 12)),
                                         ],
-                                        if (status == 'assigned') ...[
+                                        if (status == 'ASSIGNED') ...[
                                           const SizedBox(height: 10),
                                           SizedBox(
                                             width: double.infinity,
                                             child: ElevatedButton(
                                               onPressed: () => _acceptJob(job['id'] as String),
-                                              style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.green),
+                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                                               child: const Text('Accept Job'),
                                             ),
                                           ),

@@ -1,8 +1,6 @@
 // ✅ Single source of truth for all backend URLs in the mobile app.
 //    Both ApiService and ChatProvider read from here.
 
-import 'package:flutter/foundation.dart';
-
 class ApiConfig {
   ApiConfig._();
 
@@ -12,12 +10,12 @@ class ApiConfig {
   // Socket.io connects to the root (no /v1 prefix)
   static const String socketUrl  = 'https://gc.directconnect.services';
 
-  // Android emulator → host machine local backend (run backend locally when testing on AVD)
+  // Android emulator → host machine local backend (only when useDev is true)
   static const String devBaseUrl = 'http://10.0.2.2:4000/v1';
   static const String devSocketUrl = 'http://10.0.2.2:4000';
 
-  // In debug mode use local backend so 111111 / 123456 work; release always uses production
-  static bool get useDev => kDebugMode;
+  // Use production by default. Set to true only when running backend locally (e.g. AVD + npm run dev) for OTP 111111 testing.
+  static const bool useDev = false;
 
   static String get effectiveBaseUrl   => useDev ? devBaseUrl   : baseUrl;
   static String get effectiveSocketUrl => useDev ? devSocketUrl : socketUrl;

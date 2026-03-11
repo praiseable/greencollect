@@ -103,6 +103,101 @@ class CollectionModel {
     required this.address,
   });
 
+  /// Parse from API (GET /v1/collections/:id). Status: ASSIGNED, ACCEPTED, EN_ROUTE, ARRIVED, COLLECTED, DELIVERED_TO_CENTER, CANCELLED.
+  factory CollectionModel.fromJson(Map<String, dynamic> json) {
+    final listing = json['listing'] as Map<String, dynamic>?;
+    final collector = json['collector'] as Map<String, dynamic>?;
+    final dealerName = collector != null
+        ? '${collector['firstName'] ?? ''} ${collector['lastName'] ?? ''}'.trim()
+        : '';
+    final photoUrls = json['photoUrls'];
+    List<String> photos = [];
+    if (photoUrls is List) {
+      photos = photoUrls.map((e) => e.toString()).toList();
+    }
+    return CollectionModel(
+      id: json['id']?.toString() ?? '',
+      listingId: json['listingId']?.toString() ?? '',
+      listingTitle: listing?['title'] as String? ?? json['listingTitle'] as String? ?? '',
+      dealerId: json['dealerId']?.toString() ?? '',
+      dealerName: dealerName.isNotEmpty ? dealerName : (json['dealerName'] as String? ?? ''),
+      customerId: json['customerId']?.toString() ?? '',
+      customerName: json['customerName'] as String? ?? '',
+      categoryName: (listing?['category'] is Map ? (listing!['category'] as Map)['name'] : null) as String? ?? json['categoryName'] as String? ?? '',
+      categoryId: json['categoryId']?.toString() ?? '',
+      status: _statusFromString(json['status']?.toString()),
+      assignedAt: _parseDate(json['assignedAt']) ?? DateTime.now(),
+      acceptedAt: _parseDate(json['acceptedAt']),
+      enRouteAt: _parseDate(json['enRouteAt']),
+      arrivedAt: _parseDate(json['arrivedAt']),
+      collectedAt: _parseDate(json['collectedAt']),
+      deliveredAt: _parseDate(json['deliveredAt']),
+      deadlineAt: _parseDate(json['deadlineAt']) ?? DateTime.now().add(const Duration(hours: 24)),
+      listingLat: (json['listingLat'] ?? listing?['latitude'] ?? 0) is double ? (json['listingLat'] ?? listing?['latitude'] ?? 0) as double : ((json['listingLat'] ?? listing?['latitude'] ?? 0) as num).toDouble(),
+      listingLng: (json['listingLng'] ?? listing?['longitude'] ?? 0) is double ? (json['listingLng'] ?? listing?['longitude'] ?? 0) as double : ((json['listingLng'] ?? listing?['longitude'] ?? 0) as num).toDouble(),
+      dealerArriveLat: _toDouble(json['dealerArriveLat']),
+      dealerArriveLng: _toDouble(json['dealerArriveLng']),
+      dealerCollectLat: _toDouble(json['dealerCollectLat']),
+      dealerCollectLng: _toDouble(json['dealerCollectLng']),
+      gpsVerified: json['gpsVerified'] == true,
+      confirmedWeightKg: _toDouble(json['confirmedWeightKg']),
+      photoUrls: photos,
+      qualityRating: json['qualityRating'] is int ? json['qualityRating'] as int? : (json['qualityRating'] != null ? int.tryParse(json['qualityRating'].toString()) : null),
+      notes: json['notes'] as String?,
+      responseTimeMin: json['responseTimeMin'] is int ? json['responseTimeMin'] as int? : null,
+      collectionTimeMin: json['collectionTimeMin'] is int ? json['collectionTimeMin'] as int? : null,
+      totalTimeMin: json['totalTimeMin'] is int ? json['totalTimeMin'] as int? : null,
+      carbonOffsetKg: _toDouble(json['carbonOffsetKg']),
+      city: json['cityName'] as String? ?? listing?['geoZone']?['name'] as String? ?? '',
+      area: json['geoZoneId']?.toString() ?? '',
+      address: listing?['address'] as String? ?? '',
+    );
+  }
+
+  static DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
+
+  static double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  static CollectionStatus _statusFromString(String? s) {
+    if (s == null) return CollectionStatus.assigned;
+    switch (s.toUpperCase()) {
+      case 'ACCEPTED': return CollectionStatus.accepted;
+      case 'EN_ROUTE': return CollectionStatus.enRoute;
+      case 'ARRIVED': return CollectionStatus.arrived;
+      case 'COLLECTED': return CollectionStatus.collected;
+      case 'DELIVERED_TO_CENTER': return CollectionStatus.deliveredToCenter;
+      case 'CANCELLED': return CollectionStatus.cancelled;
+      case 'ESCALATED': return CollectionStatus.escalated;
+      case 'EXPIRED': return CollectionStatus.expired;
+      default: return CollectionStatus.assigned;
+    }
+  }
+
+  /// Backend expects: ASSIGNED, ACCEPTED, EN_ROUTE, ARRIVED, COLLECTED, DELIVERED_TO_CENTER, CANCELLED.
+  String get statusApiValue {
+    switch (status) {
+      case CollectionStatus.assigned: return 'ASSIGNED';
+      case CollectionStatus.accepted: return 'ACCEPTED';
+      case CollectionStatus.enRoute: return 'EN_ROUTE';
+      case CollectionStatus.arrived: return 'ARRIVED';
+      case CollectionStatus.collected: return 'COLLECTED';
+      case CollectionStatus.deliveredToCenter: return 'DELIVERED_TO_CENTER';
+      case CollectionStatus.cancelled: return 'CANCELLED';
+      case CollectionStatus.escalated: return 'ESCALATED';
+      case CollectionStatus.expired: return 'EXPIRED';
+    }
+  }
+
   /// Whether this collection is overdue (past deadline without completion)
   bool get isOverdue =>
       DateTime.now().isAfter(deadlineAt) &&

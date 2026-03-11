@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
     const { dealerId, status, listingId, page = 1, limit = 20 } = req.query;
     const where = {};
 
-    if (dealerId) where.collectorId = dealerId;
+    if (dealerId) where.dealerId = dealerId;
     if (status) where.status = status;
     if (listingId) where.listingId = listingId;
 
@@ -74,9 +74,6 @@ router.get('/', async (req, res) => {
         include: {
           listing: {
             select: { id: true, title: true, cityName: true, visibilityLevel: true },
-          },
-          collector: {
-            select: { id: true, firstName: true, lastName: true, phone: true },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -107,13 +104,6 @@ router.get('/:id', async (req, res) => {
             geoZone: true,
           },
         },
-        collector: {
-          select: {
-            id: true, firstName: true, lastName: true,
-            phone: true, email: true,
-          },
-        },
-        carbonCredit: true,
         dealerRatings: true,
       },
     });
@@ -122,7 +112,14 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Collection not found' });
     }
 
-    res.json(collection);
+    let collector = null;
+    try {
+      collector = await prisma.user.findUnique({
+        where: { id: collection.dealerId },
+        select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+      });
+    } catch (_) {}
+    res.json({ ...collection, collector });
   } catch (err) {
     console.error('Error fetching collection:', err);
     res.status(500).json({ error: 'Failed to fetch collection' });
@@ -136,36 +133,44 @@ router.post(
   '/',
   [
     body('listingId').isUUID(),
-    body('collectorId').isUUID(),
+    body('collectorId').optional().isUUID(),
+    body('dealerId').optional().isUUID(),
     body('collectionDate').isISO8601(),
-    body('collectedQuantity').isDecimal(),
+    body('collectedQuantity').optional().isDecimal(),
+    body('collectedWeight').optional().isDecimal(),
   ],
   validate,
   async (req, res) => {
     try {
-      const { listingId, collectorId, collectionDate, collectedQuantity } = req.body;
+      const dealerId = req.body.dealerId || req.body.collectorId;
+      if (!dealerId) return res.status(400).json({ error: 'dealerId or collectorId required' });
+      const { listingId, collectionDate, collectedQuantity, collectedWeight } = req.body;
 
-      // Verify listing exists and is active
-      const listing = await prisma.listing.findUnique({ where: { id: listingId } });
+      const listing = await prisma.listing.findUnique({ where: { id: listingId }, include: { geoZone: true } });
       if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
-      // Verify collector exists and is a dealer/franchise
-      const collector = await prisma.user.findUnique({ where: { id: collectorId } });
+      const collector = await prisma.user.findUnique({ where: { id: dealerId } });
       if (!collector || !['DEALER', 'FRANCHISE_OWNER', 'WHOLESALE_BUYER'].includes(collector.role)) {
         return res.status(400).json({ error: 'Invalid collector role' });
       }
 
+      const deadlineAt = new Date(collectionDate || Date.now());
+      deadlineAt.setHours(deadlineAt.getHours() + 24);
       const collection = await prisma.collection.create({
         data: {
           listingId,
-          collectorId,
-          collectionDate: new Date(collectionDate),
-          status: 'PENDING',
-          collectedQuantity,
+          dealerId,
+          customerId: listing.sellerId,
+          status: 'ASSIGNED',
+          listingLat: listing.latitude ?? 0,
+          listingLng: listing.longitude ?? 0,
+          categoryId: listing.categoryId,
+          deadlineAt,
+          cityName: listing.cityName ?? listing.geoZone?.name ?? null,
+          geoZoneId: listing.geoZoneId ?? undefined,
         },
         include: {
           listing: { select: { title: true } },
-          collector: { select: { firstName: true, lastName: true } },
         },
       });
 
@@ -197,17 +202,24 @@ router.post(
 // ═══════════════════════════════════════════════════════════
 // PATCH /api/collections/:id/status — Update collection status
 // ═══════════════════════════════════════════════════════════
+const COLLECTION_STATUS_VALUES = [
+  'ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'COLLECTED',
+  'DELIVERED_TO_CENTER', 'CANCELLED', 'ESCALATED', 'EXPIRED',
+  // Legacy aliases for mobile
+  'PENDING', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED',
+];
+
 router.patch(
   '/:id/status',
   [
     param('id').isUUID(),
-    body('status').isIn(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'VERIFIED']),
+    body('status').isIn(COLLECTION_STATUS_VALUES),
     body('notes').optional().isString(),
   ],
   validate,
   async (req, res) => {
     try {
-      const { status, notes } = req.body;
+      let { status, notes } = req.body;
       const collection = await prisma.collection.findUnique({
         where: { id: req.params.id },
         include: { listing: true },
@@ -215,38 +227,30 @@ router.patch(
 
       if (!collection) return res.status(404).json({ error: 'Collection not found' });
 
+      // Map legacy status to schema enum
+      const statusMap = {
+        PENDING: 'ASSIGNED',
+        IN_PROGRESS: 'EN_ROUTE',
+        COMPLETED: 'COLLECTED',
+        VERIFIED: 'DELIVERED_TO_CENTER',
+      };
+      if (statusMap[status]) status = statusMap[status];
+
+      const now = new Date();
       const updateData = { status };
-      if (notes) updateData.adminNotes = notes;
+      if (notes) updateData.notes = notes;
 
-      // Update listing status based on collection status
-      let listingStatus = null;
-      switch (status) {
-        case 'IN_PROGRESS':
-          listingStatus = 'COLLECTION_IN_PROGRESS';
-          break;
-        case 'COMPLETED':
-          listingStatus = 'COLLECTION_COMPLETED';
-          break;
-        case 'VERIFIED':
-          updateData.verifiedByAdmin = true;
-          listingStatus = 'COLLECTION_COMPLETED';
-          // Calculate carbon credits
-          if (collection.collectedWeight || collection.collectedQuantity) {
-            const weight = parseFloat(collection.collectedWeight || collection.collectedQuantity);
-            const categoryName = collection.listing?.categoryName || 'Metals';
-            const carbonKg = calculateCarbonOffset(categoryName, weight);
-            const creditValue = carbonKg * 2.5; // PKR per kg CO2
+      if (status === 'ACCEPTED') updateData.acceptedAt = now;
+      else if (status === 'EN_ROUTE') updateData.enRouteAt = now;
+      else if (status === 'ARRIVED') updateData.arrivedAt = now;
+      else if (status === 'COLLECTED') updateData.collectedAt = now;
+      else if (status === 'DELIVERED_TO_CENTER') updateData.deliveredAt = now;
+      else if (status === 'CANCELLED') updateData.cancelledAt = now;
 
-            await prisma.carbonCredit.create({
-              data: {
-                listingId: collection.listingId,
-                collectionId: collection.id,
-                carbonAmountKg: carbonKg,
-                creditValue: creditValue,
-              },
-            });
-          }
-          break;
+      if (status === 'DELIVERED_TO_CENTER' && (collection.collectedWeight ?? collection.collectedQuantity)) {
+        const weight = parseFloat(collection.collectedWeight || collection.collectedQuantity);
+        const categoryName = collection.listing?.category?.name || collection.listing?.categoryName || 'Metals';
+        updateData.carbonOffsetKg = calculateCarbonOffset(categoryName, weight);
       }
 
       const updated = await prisma.collection.update({
@@ -254,6 +258,9 @@ router.patch(
         data: updateData,
       });
 
+      let listingStatus = null;
+      if (status === 'EN_ROUTE') listingStatus = 'COLLECTION_IN_PROGRESS';
+      else if (['COLLECTED', 'DELIVERED_TO_CENTER'].includes(status)) listingStatus = 'COLLECTION_COMPLETED';
       if (listingStatus) {
         await prisma.listing.update({
           where: { id: collection.listingId },
@@ -290,17 +297,22 @@ router.post(
 
       if (!collection) return res.status(404).json({ error: 'Collection not found' });
 
-      const listingLat = parseFloat(collection.listing.latitude || 0);
-      const listingLng = parseFloat(collection.listing.longitude || 0);
+      const listingLat = parseFloat(collection.listingLat || collection.listing?.latitude || 0);
+      const listingLng = parseFloat(collection.listingLng || collection.listing?.longitude || 0);
 
       const gpsCheck = isWithinRange(latitude, longitude, listingLat, listingLng, 500);
 
+      const updateData = {
+        dealerArriveLat: latitude,
+        dealerArriveLng: longitude,
+        gpsVerified: gpsCheck.withinRange,
+      };
+      if (gpsCheck.withinRange) updateData.arrivedAt = new Date();
+      if (gpsCheck.withinRange) updateData.status = 'ARRIVED';
+
       const updated = await prisma.collection.update({
         where: { id: req.params.id },
-        data: {
-          collectorLatitude: latitude,
-          collectorLongitude: longitude,
-        },
+        data: updateData,
       });
 
       res.json({
@@ -333,7 +345,7 @@ router.patch(
         where: { id: req.params.id },
         data: {
           collectedWeight: parseFloat(req.body.collectedWeight),
-          adminNotes: req.body.notes || undefined,
+          notes: req.body.notes || undefined,
         },
       });
       res.json(updated);
@@ -366,26 +378,31 @@ router.post(
 
       if (!collection) return res.status(404).json({ error: 'Collection not found' });
 
-      const updateField = raterType === 'seller'
-        ? { ratingGivenBySeller: rating }
-        : { ratingGivenByCollector: rating };
-
       await prisma.collection.update({
         where: { id: req.params.id },
-        data: updateField,
+        data: { qualityRating: rating, notes: comment || collection.notes || undefined },
       });
 
-      // Create DealerRating record
-      const dealerRating = await prisma.dealerRating.create({
-        data: {
-          dealerId: collection.collectorId,
-          raterId: raterType === 'seller' ? collection.listing.sellerId : collection.collectorId,
-          listingId: collection.listingId,
-          collectionId: collection.id,
-          rating,
-          comment,
-        },
-      });
+      const period = new Date().toISOString().slice(0, 7);
+      let dealerRating = null;
+      try {
+        dealerRating = await prisma.dealerRating.create({
+          data: {
+            dealerId: collection.dealerId,
+            collectionId: collection.id,
+            customerId: raterType === 'seller' ? collection.customerId : null,
+            responseScore: rating,
+            collectionScore: rating,
+            complianceScore: rating,
+            customerScore: rating,
+            overallScore: rating,
+            customerFeedback: comment || null,
+            period,
+          },
+        });
+      } catch (e) {
+        console.warn('DealerRating create skipped:', e.message);
+      }
 
       res.json({ message: 'Rating submitted', dealerRating });
     } catch (err) {
@@ -410,9 +427,9 @@ router.get('/dealer/:dealerId/rating', async (req, res) => {
 
     // Get collection stats
     const [total, completed, cancelled] = await Promise.all([
-      prisma.collection.count({ where: { collectorId: dealerId } }),
-      prisma.collection.count({ where: { collectorId: dealerId, status: 'COMPLETED' } }),
-      prisma.collection.count({ where: { collectorId: dealerId, status: 'CANCELLED' } }),
+      prisma.collection.count({ where: { dealerId } }),
+      prisma.collection.count({ where: { dealerId, status: 'COLLECTED' } }),
+      prisma.collection.count({ where: { dealerId, status: 'CANCELLED' } }),
     ]);
 
     const avgRating = ratings.length > 0
