@@ -72,32 +72,48 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ── Send OTP ─────────────────────────────────────────────────────────────
-  Future<bool> sendOtp(String phone) async {
+  /// Returns { success: true, otp?: string } on success (otp only when backend sends it in dev).
+  /// Returns null on failure; _error is set.
+  Future<Map<String, dynamic>?> sendOtp(String phone) async {
+    final normalized = AuthProvider.normalizePhone(phone);
+    debugPrint('[Auth] sendOtp: raw=$phone normalized=$normalized');
+    if (normalized.length < 10) {
+      debugPrint('[Auth] sendOtp: rejected (length < 10)');
+      _error = 'Enter a valid Pakistan phone (e.g. 03001234567)';
+      _status = AuthStatus.error;
+      notifyListeners();
+      return null;
+    }
     _status = AuthStatus.loading;
     _error  = null;
     notifyListeners();
     try {
-      await _api.post('auth/otp/send', { 'phone': phone });
+      final response = await _api.post('auth/otp/send', { 'phone': normalized }) as Map<String, dynamic>?;
+      final otp = response != null ? response['otp'] as String? : null;
+      if (otp != null) debugPrint('[Auth] Dev OTP: $otp');
       _status = AuthStatus.idle;
       notifyListeners();
-      return true;
+      return { 'success': true, if (otp != null) 'otp': otp };
     } catch (e) {
+      debugPrint('[Auth] sendOtp: error $e');
       _error  = _parseError(e, 'Failed to send OTP');
       _status = AuthStatus.error;
       notifyListeners();
-      return false;
+      return null;
     }
   }
 
   // ── Verify OTP ───────────────────────────────────────────────────────────
   Future<bool> verifyOtp(String phone, String otp) async {
+    final normalized = AuthProvider.normalizePhone(phone);
+    debugPrint('[Auth] verifyOtp: phone=$normalized otp=${otp.trim()}');
     _status = AuthStatus.loading;
     _error  = null;
     notifyListeners();
     try {
       final response = await _api.post('auth/otp/verify', {
-        'phone': phone,
-        'otp':   otp,
+        'phone': normalized,
+        'otp':   otp.trim(),
       });
 
       final accessToken  = response['accessToken']  as String?;
@@ -105,12 +121,14 @@ class AuthProvider extends ChangeNotifier {
       final userData     = response['user'];
 
       if (accessToken == null) {
+        debugPrint('[Auth] verifyOtp: no accessToken in response');
         _error  = 'No token received from server';
         _status = AuthStatus.error;
         notifyListeners();
         return false;
       }
 
+      debugPrint('[Auth] verifyOtp: success user=${userData != null ? userData['id'] : null}');
       await _storage.saveAccessToken(accessToken);
       if (refreshToken != null) await _storage.saveRefreshToken(refreshToken);
 
@@ -121,6 +139,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('[Auth] verifyOtp: error $e');
       _error  = _parseError(e, 'OTP verification failed');
       _status = AuthStatus.error;
       notifyListeners();
@@ -194,6 +213,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   String _parseError(dynamic e, String fallback) {
+    if (e is ApiException) return e.message;
     if (e is Map) {
       final code = e['error']?['code'] as String?;
       if (code == 'OTP_LOCKED')   return 'Too many attempts. Please wait 15 minutes.';
@@ -206,6 +226,18 @@ class AuthProvider extends ChangeNotifier {
     if (str.contains('429')) return 'Too many requests. Please slow down.';
     return str.contains('Exception:')
         ? str.split('Exception:').last.trim()
-        : fallback;
+        : (str.isNotEmpty && str.length < 200 ? str : fallback);
+  }
+
+  /// Normalize phone for backend: strip spaces/dashes. Backend expects (+92|0)?3[0-9]{9}
+  static String normalizePhone(String input) {
+    String s = input.replaceAll(RegExp(r'[\s\-]'), '');
+    String digits = s.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 10) return digits;
+    String ten = digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+    if (!ten.startsWith('3')) return digits;
+    if (s.trimLeft().startsWith('+92') || digits.length > 10) return '+92$ten';
+    if (digits.startsWith('0')) return '0$ten';
+    return ten;
   }
 }

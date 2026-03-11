@@ -49,6 +49,11 @@ function clearAttempts(phone) {
   attempts.delete(phone);
 }
 
+function clearLockout(phone) {
+  lockout.delete(phone);
+  attempts.delete(phone);
+}
+
 function getAttemptsLeft(phone) {
   const n = attempts.get(phone) || 0;
   return Math.max(0, OTP_MAX_ATTEMPTS - n);
@@ -60,6 +65,7 @@ module.exports = {
   setCooldown,
   recordFailedAttempt,
   clearAttempts,
+  clearLockout,
   getAttemptsLeft,
   OTP_RESEND_COOLDOWN_SECONDS,
   OTP_MAX_ATTEMPTS,

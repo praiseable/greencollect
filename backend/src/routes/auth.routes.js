@@ -188,10 +188,14 @@ router.post('/otp/send', [
 
     // TODO: Send via Twilio in production
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`OTP for ${normalizedPhone}: ${code}`);
+      console.log(`[OTP] ${normalizedPhone} → ${code}`);
     }
 
-    res.json({ success: true, message: 'OTP sent', expiresIn: 300, cooldownSeconds: otpStore.OTP_RESEND_COOLDOWN_SECONDS });
+    const payload = { success: true, message: 'OTP sent', expiresIn: 300, cooldownSeconds: otpStore.OTP_RESEND_COOLDOWN_SECONDS };
+    if (process.env.NODE_ENV !== 'production') {
+      payload.otp = code; // dev only: return OTP in response so you can see it in network tab / logs
+    }
+    res.json(payload);
   } catch (err) {
     console.error('OTP send error:', err);
     res.status(500).json({ error: { message: 'Failed to send OTP', code: 'OTP_FAILED' } });
@@ -216,9 +220,43 @@ async function otpVerifyHandler(req, res) {
     }
     const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
 
+    // Dev/test: clear lockout when using test OTP so testing is not blocked
+    const isDevBypass = process.env.NODE_ENV !== 'production' && (code === '123456' || code === '111111');
+    if (isDevBypass) otpStore.clearLockout(normalizedPhone);
+
     const lockedUntil = otpStore.getLockout(normalizedPhone);
     if (lockedUntil) {
       return res.status(423).json({ error: { code: 'OTP_LOCKED', lockedUntil: lockedUntil.toISOString() } });
+    }
+
+    // Dev/test bypass: accept 123456 or 111111 when not in production (no SMS in dev)
+    if (isDevBypass) {
+      let user = await prisma.user.findUnique({ where: { phone: normalizedPhone } });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            phone: normalizedPhone,
+            firstName: 'User',
+            lastName: normalizedPhone.slice(-4),
+            role: 'CUSTOMER',
+            isVerified: true,
+            countryId: 'PK',
+            currencyId: 'PKR',
+            languageId: 'en',
+          },
+        });
+      }
+      const tokens = generateTokens(user.id, user.role);
+      await prisma.refreshToken.create({
+        data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+      });
+      const userPayload = { id: user.id, phone: user.phone, firstName: user.firstName, lastName: user.lastName, role: user.role };
+      return res.json({
+        success: true,
+        user: userPayload,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
     }
 
     const otp = await prisma.oTP.findFirst({

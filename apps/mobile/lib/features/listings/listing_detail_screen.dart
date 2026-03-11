@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/api_service.dart';
-import '../../core/providers/auth.provider.dart';
-import 'package:provider/provider.dart';
+import '../../core/providers/app_providers.dart';
 
 // ✅ FIX: Removed MockData. Now fetches listing from real API: GET /v1/listings/:id
 
-class ListingDetailScreen extends StatefulWidget {
+class ListingDetailScreen extends ConsumerStatefulWidget {
   final String listingId;
   const ListingDetailScreen({super.key, required this.listingId});
 
   @override
-  State<ListingDetailScreen> createState() => _ListingDetailScreenState();
+  ConsumerState<ListingDetailScreen> createState() => _ListingDetailScreenState();
 }
 
-class _ListingDetailScreenState extends State<ListingDetailScreen> {
+class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
   final ApiService _api = ApiService();
 
   Map<String, dynamic>? _listing;
@@ -55,7 +55,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   Future<void> _startTransaction() async {
-    final user = context.read<AuthProvider>().user;
+    final user = ref.read(authChangeNotifierProvider).user;
     if (user == null) {
       Navigator.pushNamed(context, '/login');
       return;

@@ -29,7 +29,7 @@ import '../../features/collections/collection_detail_screen.dart';
 import '../../features/collections/dealer_rating_screen.dart';
 import '../../features/shell/shell_screen.dart';
 import '../../features/paywall/balance_gate_screen.dart';
-import '../providers/auth.provider.dart';
+import '../providers/app_providers.dart';
 import '../config/app_variant.dart';
 import '../models/user.model.dart';
 
@@ -96,7 +96,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth/otp',
         builder: (context, state) {
           final phone = state.uri.queryParameters['phone'] ?? '+92 300-1234567';
-          return OtpScreen(phone: phone);
+          final devOtp = state.uri.queryParameters['dev_otp'];
+          return OtpScreen(phone: phone, devOtp: devOtp);
         },
       ),
       GoRoute(
@@ -201,8 +202,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/chat/:roomId',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final roomId = state.pathParameters['roomId'] ?? '';
-          return ChatScreen(roomId: roomId);
+          final otherUserId = state.pathParameters['roomId'] ?? '';
+          return ChatScreen(otherUserId: otherUserId);
         },
       ),
       GoRoute(
@@ -241,7 +242,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/my-rating',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const DealerRatingScreen(),
+        builder: (context, state) {
+          final dealerId = ref.read(authChangeNotifierProvider).user?.id ?? '';
+          return DealerRatingScreen(dealerId: dealerId);
+        },
       ),
     ],
   );

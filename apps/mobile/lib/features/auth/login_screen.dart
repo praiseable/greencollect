@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/config/app_variant.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -42,17 +43,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _sendOtp() async {
     if (_phoneController.text.isEmpty) return;
+    debugPrint('[Login] _sendOtp: phone=${_phoneController.text}');
     setState(() { _isLoading = true; _loginError = null; });
 
-    final success = await ref.read(authProvider.notifier).sendOtp(
-      _phoneController.text,
-      _selectedRole,
-    );
+    // Safety: force stop loading after 10s no matter what
+    Timer? safetyTimer;
+    safetyTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+          _loginError = 'Request timed out. Check your connection and try again.';
+        });
+      }
+      safetyTimer?.cancel();
+    });
 
-    setState(() => _isLoading = false);
+    Map<String, dynamic>? result;
+    String? errorMsg;
+    try {
+      result = await ref.read(authChangeNotifierProvider).sendOtp(
+        _phoneController.text,
+      ).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw TimeoutException('Request timed out'),
+      );
+    } catch (e) {
+      result = null;
+      errorMsg = e.toString().contains('TimeoutException') || e.toString().contains('timed out')
+          ? 'Request timed out. Check your connection and try again.'
+          : 'Failed to send OTP. Try again.';
+    } finally {
+      safetyTimer?.cancel();
+      final success = result != null && result['success'] == true;
+      if (mounted) {
+        final auth = ref.read(authChangeNotifierProvider);
+        setState(() {
+          _isLoading = false;
+          _loginError = success ? null : (errorMsg ?? auth.error ?? 'Failed to send OTP');
+        });
+      }
+    }
 
+    final success = result != null && result['success'] == true;
+    final devOtp = result != null ? result['otp'] as String? : null;
+    debugPrint('[Login] _sendOtp: success=$success devOtp=$devOtp');
     if (success && mounted) {
-      context.go('/auth/otp?phone=${Uri.encodeComponent(_phoneController.text)}');
+      final phoneParam = Uri.encodeComponent(_phoneController.text);
+      final otpParam = devOtp != null ? '&dev_otp=${Uri.encodeComponent(devOtp)}' : '';
+      context.go('/auth/otp?phone=$phoneParam$otpParam');
     }
   }
 
@@ -65,11 +103,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
     setState(() { _isLoading = true; _loginError = null; });
 
-    final error = await ref.read(authProvider.notifier).loginWithEmailPassword(email, password);
+    Timer? safetyTimer;
+    safetyTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+          _loginError = 'Request timed out. Check your connection.';
+        });
+      }
+      safetyTimer?.cancel();
+    });
 
-    setState(() { _isLoading = false; _loginError = error; });
-
-    if (error == null && mounted) context.go('/home');
+    bool ok = false;
+    String? loginErrorMsg;
+    try {
+      ok = await ref.read(authChangeNotifierProvider).login(email, password)
+          .timeout(const Duration(seconds: 8), onTimeout: () => throw TimeoutException('timeout'));
+    } catch (e) {
+      ok = false;
+      loginErrorMsg = e.toString().contains('Timeout') ? 'Request timed out. Check your connection.' : null;
+    } finally {
+      safetyTimer?.cancel();
+      if (mounted) {
+        final auth = ref.read(authChangeNotifierProvider);
+        setState(() {
+          _isLoading = false;
+          _loginError = ok ? null : (loginErrorMsg ?? auth.error ?? 'Login failed');
+        });
+      }
+    }
+    if (ok && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/home');
+      });
+    }
   }
 
   @override

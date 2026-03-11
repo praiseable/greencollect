@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../core/providers/auth.provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 
 // ✅ FIX: Removed MockData.listings. My listings from GET /v1/listings/my (real API).
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final ApiService _api = ApiService();
   List<Map<String, dynamic>> _myListings = [];
   bool _listingsLoading = true;
@@ -46,7 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
+    final user = ref.watch(authChangeNotifierProvider).user;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -64,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await context.read<AuthProvider>().fetchProfile();
+          await ref.read(authChangeNotifierProvider).fetchProfile();
           await _fetchProfileData();
         },
         child: ListView(
@@ -201,7 +201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     () => Navigator.pushNamed(context, '/subscription')),
                 const Divider(height: 1, indent: 56),
                 _ActionTile(Icons.logout, 'Logout', () async {
-                  await context.read<AuthProvider>().logout();
+                  await ref.read(authChangeNotifierProvider).logout();
                   if (context.mounted) Navigator.pushReplacementNamed(context, '/login');
                 }, color: Colors.red),
               ]),

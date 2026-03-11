@@ -1,21 +1,17 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/config/app_variant.dart';
-import 'core/providers/chat.provider.dart';
-import 'core/providers/auth.provider.dart';
-import 'core/providers/listings.provider.dart';
+import 'core/providers/app_providers.dart';
 import 'services/chat_db_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
 
-  // Initialize chat database early to prevent initialization errors
   try {
     await ChatDbService().database;
     debugPrint('[App] Chat database initialized');
@@ -30,18 +26,7 @@ void main() async {
       fallbackLocale: Locale('en'),
       startLocale: Locale('en'),
       child: ProviderScope(
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider(create: (_) {
-              final p = AuthProvider();
-              p.init();
-              return p;
-            }),
-            ChangeNotifierProvider(create: (_) => ListingsProvider()),
-            ChangeNotifierProvider(create: (_) => ChatProvider()),
-          ],
-          child: MarketplaceApp(),
-        ),
+        child: MarketplaceApp(),
       ),
     ),
   );
@@ -60,14 +45,9 @@ class _MarketplaceAppState extends ConsumerState<MarketplaceApp> {
     final router = ref.watch(appRouterProvider);
     final locale = context.locale;
 
-    // Start background chat sync service (only once)
     if (!_syncStarted) {
       _syncStarted = true;
-      try {
-        ref.read(chatSyncServiceProvider).startListening();
-      } catch (e) {
-        debugPrint('[App] Failed to start chat sync service: $e');
-      }
+      ref.read(chatSyncServiceProvider).startListening();
     }
 
     return MaterialApp.router(

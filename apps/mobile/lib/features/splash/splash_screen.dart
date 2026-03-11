@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/config/app_variant.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -38,11 +38,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
-    // Try to restore persisted session first
-    final restored = await ref.read(authProvider.notifier).tryRestoreSession();
+    // Try to restore persisted session (timeout so we don't hang if API is unreachable)
+    final auth = ref.read(authChangeNotifierProvider);
+    await auth.init().timeout(const Duration(seconds: 10)).catchError((_) {});
+    if (!mounted) return;
+    final restored = ref.read(authChangeNotifierProvider).isAuthenticated;
     if (!mounted) return;
 
     if (restored) {

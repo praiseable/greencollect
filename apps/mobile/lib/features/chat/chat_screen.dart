@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/chat.provider.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 
 // ✅ FIX: Removed MockData.getUserIdForPhoneDigits and MockData.getDisplayNameForPhoneDigits.
 //          User names and IDs come from the conversation data returned by the real API.
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String otherUserId;
   const ChatScreen({super.key, required this.otherUserId});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _msgCtrl     = TextEditingController();
   final _scrollCtrl  = ScrollController();
   final ApiService   _api = ApiService();
@@ -27,7 +27,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _loadOtherUser();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().openChat(widget.otherUserId);
+      ref.read(chatProvider).openChat(widget.otherUserId);
     });
   }
 
@@ -63,7 +63,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty) return;
     _msgCtrl.clear();
-    context.read<ChatProvider>().sendMessage(widget.otherUserId, text);
+    ref.read(chatProvider).sendMessage(widget.otherUserId, text);
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(
@@ -77,7 +77,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final myId = context.watch<AuthProvider>().user?.id ?? '';
+    final myId = ref.watch(authChangeNotifierProvider).user?.id ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -89,8 +89,9 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: Consumer<ChatProvider>(
-              builder: (ctx, chat, _) {
+            child: Consumer(
+              builder: (ctx, ref, _) {
+                final chat = ref.watch(chatProvider);
                 final messages = chat.currentMessages;
 
                 if (chat.loading && messages.isEmpty) {

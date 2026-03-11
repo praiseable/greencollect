@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/models/user.model.dart';
 
 /// Full-screen overlay shown when a Pro user has zero balance.
@@ -208,7 +208,7 @@ class BalanceGateScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: () {
-                    ref.read(authProvider.notifier).logout();
+                    ref.read(authChangeNotifierProvider).logout();
                     context.go('/auth/login');
                   },
                   icon: const Icon(Icons.logout, color: Colors.white54, size: 18),

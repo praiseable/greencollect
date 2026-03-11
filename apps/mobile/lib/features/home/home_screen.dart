@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/listings.provider.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 import '../../widgets/listing_card.dart';
 import '../listings/listings_screen.dart';
@@ -11,14 +11,14 @@ import '../listings/create_listing_screen.dart';
 // ✅ FIX: Removed all MockData references.
 //          Categories and listings now come from real API via ListingsProvider.
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ApiService _api = ApiService();
 
   List<Map<String, dynamic>> _categories = [];
@@ -31,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _fetchCategories();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ListingsProvider>().fetchListings(refresh: true);
+      ref.read(listingsProvider).fetchListings(refresh: true);
     });
   }
 
@@ -60,14 +60,14 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedCategoryId = _selectedCategoryId == categoryId ? '' : categoryId;
     });
-    context.read<ListingsProvider>().fetchListings(
+    ref.read(listingsProvider).fetchListings(
       refresh: true,
       categoryId: _selectedCategoryId.isEmpty ? null : _selectedCategoryId,
     );
   }
 
   void _onSearch(String value) {
-    context.read<ListingsProvider>().fetchListings(
+    ref.read(listingsProvider).fetchListings(
       refresh: true,
       search: value.trim().isEmpty ? null : value.trim(),
     );
@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
+    final user = ref.watch(authChangeNotifierProvider).user;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -105,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           await _fetchCategories();
-          await context.read<ListingsProvider>().fetchListings(refresh: true);
+          await ref.read(listingsProvider).fetchListings(refresh: true);
         },
         child: CustomScrollView(
           slivers: [
@@ -183,8 +183,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
-            Consumer<ListingsProvider>(
-              builder: (ctx, provider, _) {
+            Consumer(
+              builder: (ctx, ref, _) {
+                final provider = ref.watch(listingsProvider);
                 if (provider.loading && provider.listings.isEmpty) {
                   return const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator()),

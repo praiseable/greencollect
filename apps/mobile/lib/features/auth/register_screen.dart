@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/config/app_variant.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -56,9 +56,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     // Simulate registration delay
     await Future.delayed(const Duration(seconds: 1));
 
-    final success = await ref.read(authProvider.notifier).sendOtp(
+    final success = await ref.read(authChangeNotifierProvider).sendOtp(
       _phoneCtrl.text,
-      _selectedRole,
     );
 
     setState(() => _isLoading = false);

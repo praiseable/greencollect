@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'storage_service.dart';
@@ -43,12 +44,19 @@ class ApiService {
       if (res.body.isEmpty) return {};
       return jsonDecode(res.body);
     }
-    // Parse error body
+    // Parse error body (support both { error: { message } } and { errors: [ { msg } ] })
     Map<String, dynamic> errorBody = {};
     try { errorBody = jsonDecode(res.body); } catch (_) {}
-    final msg = errorBody['error']?['message'] ??
-                errorBody['message'] ??
-                'Request failed (${res.statusCode})';
+    String msg = errorBody['error']?['message'] ??
+        errorBody['message'] ??
+        'Request failed (${res.statusCode})';
+    final validationErrors = errorBody['errors'] as List?;
+    if (validationErrors != null && validationErrors.isNotEmpty) {
+      final first = validationErrors.first;
+      if (first is Map && first['msg'] != null) {
+        msg = first['msg'] as String;
+      }
+    }
     if (res.statusCode == 401) _storage.clearAuth();
     throw ApiException(msg, res.statusCode);
   }
@@ -64,11 +72,18 @@ class ApiService {
 
   // ── POST ─────────────────────────────────────────────────────────────────
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) async {
+    final uri = _uri(path);
+    if (kDebugMode && path.contains('auth')) {
+      debugPrint('[API] POST $uri body=${body != null ? body.toString().replaceAll(RegExp(r'[\s\n]+'), ' ') : null}');
+    }
     final res = await _client.post(
-      _uri(path),
+      uri,
       headers: await _headers(),
       body: body != null ? jsonEncode(body) : null,
     ).timeout(ApiConfig.receiveTimeout);
+    if (kDebugMode && path.contains('auth')) {
+      debugPrint('[API] POST $path → ${res.statusCode}');
+    }
     return _parse(res);
   }
 

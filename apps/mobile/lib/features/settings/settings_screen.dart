@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:easy_localization/easy_localization.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -192,7 +192,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               Navigator.pop(context);
                               // logout() notifies authChangeNotifier → GoRouter
                               // re-evaluates redirect → sends user to /auth/login
-                              ref.read(authProvider.notifier).logout();
+                              ref.read(authChangeNotifierProvider).logout();
                             },
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                             child: const Text('Sign Out'),

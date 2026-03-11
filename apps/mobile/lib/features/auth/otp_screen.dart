@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
-import '../../core/providers/auth.provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/config/app_variant.dart';
 import '../../core/models/user.model.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String phone;
-  const OtpScreen({super.key, required this.phone});
+  final String? devOtp;
+  const OtpScreen({super.key, required this.phone, this.devOtp});
 
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
@@ -22,30 +23,32 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (_otpController.text.length != 6) return;
     setState(() => _isLoading = true);
 
-    final success = await ref.read(authProvider.notifier).verifyOtp(
+    final success = await ref.read(authChangeNotifierProvider).verifyOtp(
+      widget.phone,
       _otpController.text,
     );
 
     setState(() => _isLoading = false);
 
     if (success && mounted) {
-      // Pro app: If dealer/franchise role, redirect to KYC registration
+      // Defer navigation so router redirect sees updated auth state
       final user = ref.read(authProvider);
-      if (AppVariant.isPro && user != null && user.role != UserRole.customer) {
-        // Check if KYC is already completed
-        if (user.kycStatus == KycStatus.approved) {
-          context.go('/home');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (AppVariant.isPro && user != null && user.role != UserRole.customer) {
+          if (user.kycStatus == KycStatus.approved) {
+            context.go('/home');
+          } else {
+            context.go('/auth/kyc');
+          }
         } else {
-          context.go('/auth/kyc');
+          context.go('/home');
         }
-      } else {
-        // Customer: free registration, go directly to home
-        context.go('/home');
-      }
+      });
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Invalid OTP. Try 123456'),
+          content: Text('Invalid OTP. For testing use 123456 or 111111'),
           backgroundColor: Colors.red,
         ),
       );
@@ -56,11 +59,16 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Verify OTP')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -78,6 +86,33 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600]),
             ),
+            if (widget.devOtp != null && widget.devOtp!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, size: 20, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Text(
+                      'OTP: ${widget.devOtp}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 4,
+                        color: Colors.green.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
             Pinput(
               controller: _otpController,
@@ -170,6 +205,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             ),
           ],
         ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
