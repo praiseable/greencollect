@@ -36,9 +36,10 @@ class ChatProvider extends ChangeNotifier {
     final token = await _storage.getAccessToken();
     if (token == null) return;
 
-    // Read the userId from stored user profile
+    // Read the userId from stored user profile (don't overwrite if already set e.g. by setCurrentUserId)
     final user = await _storage.getUser();
-    _myUserId = user?['id'] as String?;
+    final storedId = user?['id']?.toString();
+    if (storedId != null && storedId.isNotEmpty) _myUserId = storedId;
 
     // ✅ Connect to backend Socket.io server
     _socket = io.io(
@@ -84,6 +85,14 @@ class ChatProvider extends ChangeNotifier {
   Future<void> ensureSocket() async {
     if (_socket != null && _socket!.connected) return;
     await initSocket();
+  }
+
+  /// Set current user id when available from auth (e.g. admin from auth/me); fixes chat when storage user shape differs.
+  void setCurrentUserId(String? userId) {
+    if (userId != null && userId.isNotEmpty && _myUserId != userId) {
+      _myUserId = userId;
+      notifyListeners();
+    }
   }
 
   // ── Fetch conversations list ─────────────────────────────────────────────

@@ -26,12 +26,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.otherUserId.isNotEmpty) {
-      _loadOtherUser();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final myId = ref.read(authChangeNotifierProvider).user?.id;
+      ref.read(chatProvider).setCurrentUserId(myId);
+      if (widget.otherUserId.isNotEmpty) {
+        _loadOtherUser();
         ref.read(chatProvider).openChat(widget.otherUserId);
-      });
-    }
+      }
+    });
   }
 
   @override

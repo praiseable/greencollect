@@ -64,6 +64,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         final allowedPaths = [
           '/profile', '/settings', '/edit-profile', '/balance-gate',
           '/auth/login', '/auth/otp', '/auth/kyc',
+          '/chat', '/chat-inbox',
         ];
         final isAllowedPath = allowedPaths.any(
             (p) => state.matchedLocation.startsWith(p));

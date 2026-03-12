@@ -20,6 +20,8 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final myId = ref.read(authChangeNotifierProvider).user?.id;
+      ref.read(chatProvider).setCurrentUserId(myId);
       ref.read(chatProvider).fetchConversations();
     });
   }

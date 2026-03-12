@@ -123,7 +123,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
     setState(() => _selectedImages.removeAt(index));
   }
 
-  Future<void> _submit() async {
+  Future<void> _onCategoryChange(String? categoryId) async {
     setState(() {
       _selectedCategoryId    = categoryId;
       _selectedProductTypeId = null;
