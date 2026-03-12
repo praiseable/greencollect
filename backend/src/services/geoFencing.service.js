@@ -224,7 +224,9 @@ async function buildGeoFenceWhere(user, options = {}) {
     if (userZone) {
       const userCity = findZoneByType(userZone, 'CITY');
       const userProvince = findZoneByType(userZone, 'PROVINCE');
-      userCountry = findZoneByType(userZone, 'COUNTRY') || userZone.countryId || countryId;
+      const countryZone = findZoneByType(userZone, 'COUNTRY');
+      // Listing.countryId is a string (e.g. "PK"), not an object — never pass a GeoZone here
+      userCountry = (countryZone && countryZone.countryId) ? countryZone.countryId : (userZone.countryId || countryId);
       allowedZoneIds = [userZone.id];
       if (userCity) {
         allowedZoneIds.push(userCity.id);
