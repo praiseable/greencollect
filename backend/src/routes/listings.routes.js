@@ -31,8 +31,9 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const lang = req.lang || 'en';
 
-    // Admins can bypass geo-fencing
-    const isAdmin = req.user && ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(req.user.role);
+    // Admins see all listings (no geo-fencing); normalize role for comparison
+    const role = req.user && req.user.role ? String(req.user.role).toUpperCase() : '';
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(role);
 
     // Build where clause
     const where = {
@@ -102,7 +103,14 @@ router.get('/', optionalAuth, async (req, res) => {
       return item;
     });
 
-    res.json({ data, total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / parseInt(limit)) });
+    res.json({
+      data,
+      listings: data,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit)),
+    });
   } catch (err) {
     console.error('List listings error:', err);
     res.status(500).json({ error: { message: 'Failed to fetch listings' } });
