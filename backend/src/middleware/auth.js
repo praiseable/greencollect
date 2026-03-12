@@ -61,7 +61,7 @@ const authorize = (...roles) => {
   };
 };
 
-// Optional auth - doesn't fail if no token
+// Optional auth - doesn't fail if no token (used by GET /listings so dealers see territory listings)
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -70,7 +70,15 @@ const optionalAuth = async (req, res, next) => {
       const decoded = jwt.verify(token, JWT_SECRET);
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { id: true, role: true, languageId: true, currencyId: true, countryId: true },
+        select: {
+          id: true,
+          role: true,
+          geoZoneId: true,
+          isActive: true,
+          languageId: true,
+          currencyId: true,
+          countryId: true,
+        },
       });
       if (user && user.isActive !== false) req.user = user;
     }

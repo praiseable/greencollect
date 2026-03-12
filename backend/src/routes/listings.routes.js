@@ -40,12 +40,13 @@ router.get('/', optionalAuth, async (req, res) => {
       countryId,
     };
 
-    // Apply geo-fencing only for non-admins
+    // Apply geo-fencing for non-admins (dealers see PUBLIC + their territory; unauthenticated see only PUBLIC)
     if (!isAdmin) {
       const geoFenceWhere = await buildGeoFenceWhere(req.user, { countryId });
-      // Merge geo-fence OR conditions with other filters using AND
       if (geoFenceWhere.OR) {
         where.AND = [{ OR: geoFenceWhere.OR }];
+      } else if (geoFenceWhere.visibilityLevel) {
+        where.visibilityLevel = geoFenceWhere.visibilityLevel;
       }
     }
 
