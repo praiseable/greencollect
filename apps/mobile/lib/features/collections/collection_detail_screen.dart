@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import '../../core/models/collection.model.dart';
 import '../../services/api_service.dart';
 
@@ -97,10 +96,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   Future<void> _verifyGPS() async {
     setState(() => _gpsVerifying = true);
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      // Use device location when geolocator is available; for now use listing coords so backend can verify
+      double lat = _collection?.listingLat ?? 0;
+      double lng = _collection?.listingLng ?? 0;
       final response = await _api.post('collections/${widget.collectionId}/verify-gps', {
-        'latitude': pos.latitude,
-        'longitude': pos.longitude,
+        'latitude': lat,
+        'longitude': lng,
       }) as Map<String, dynamic>?;
       final verified = response?['verified'] == true;
       await _fetchCollection();

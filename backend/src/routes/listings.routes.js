@@ -13,10 +13,12 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../../uploads')),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) cb(null, true);
-  else cb(new Error('Only images allowed'), false);
-}});
+const upload = multer({
+  storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only images allowed'), false);
+  }
+});
 
 // GET /listings — Browse listings (with geo-fencing)
 router.get('/', optionalAuth, async (req, res) => {
@@ -28,16 +30,16 @@ router.get('/', optionalAuth, async (req, res) => {
     } = req.query;
 
     const lang = req.lang || 'en';
-    
+
     // Admins can bypass geo-fencing
     const isAdmin = req.user && ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(req.user.role);
-    
+
     // Build where clause
     const where = {
       status,
       countryId,
     };
-    
+
     // Apply geo-fencing only for non-admins
     if (!isAdmin) {
       const geoFenceWhere = await buildGeoFenceWhere(req.user, { countryId });
@@ -46,7 +48,7 @@ router.get('/', optionalAuth, async (req, res) => {
         where.AND = [{ OR: geoFenceWhere.OR }];
       }
     }
-    
+
     // Add other filters
     if (categoryId) where.categoryId = categoryId;
     if (productTypeId) where.productTypeId = productTypeId;
@@ -54,7 +56,7 @@ router.get('/', optionalAuth, async (req, res) => {
     if (cityName) where.cityName = { contains: cityName, mode: 'insensitive' };
     if (minPrice) where.pricePaisa = { ...where.pricePaisa, gte: BigInt(minPrice) };
     if (maxPrice) where.pricePaisa = { ...where.pricePaisa, lte: BigInt(maxPrice) };
-    
+
     // Search: merge with existing AND conditions
     if (search) {
       const searchOr = {
@@ -63,7 +65,7 @@ router.get('/', optionalAuth, async (req, res) => {
           { description: { contains: search, mode: 'insensitive' } },
         ],
       };
-      
+
       if (where.AND) {
         where.AND.push(searchOr);
       } else {
@@ -317,14 +319,25 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
-    // If no geoZoneId, try user's geoZone or find a default city
+    // Resolve geoZoneId: explicit id > cityName lookup > user's zone > first city
     let resolvedGeoZoneId = geoZoneId;
     let resolvedLat = latitude ? parseFloat(latitude) : null;
     let resolvedLng = longitude ? parseFloat(longitude) : null;
     let resolvedCity = cityName || null;
 
+    if (!resolvedGeoZoneId && cityName && typeof cityName === 'string' && cityName.trim()) {
+      const cityZone = await prisma.geoZone.findFirst({
+        where: { type: 'CITY', countryId: 'PK', isActive: true, name: { equals: cityName.trim(), mode: 'insensitive' } },
+      });
+      if (cityZone) {
+        resolvedGeoZoneId = cityZone.id;
+        resolvedCity = resolvedCity || cityZone.name;
+        resolvedLat = resolvedLat || cityZone.latitude;
+        resolvedLng = resolvedLng || cityZone.longitude;
+      }
+    }
+
     if (!resolvedGeoZoneId) {
-      // Use the user's zone or fall back to first available city
       if (req.user.geoZoneId) {
         resolvedGeoZoneId = req.user.geoZoneId;
       } else {

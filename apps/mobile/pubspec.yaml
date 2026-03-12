@@ -49,9 +49,6 @@ dependencies:
   # Image Picker
   image_picker: ^1.0.7
 
-  # Location (for collection GPS verify)
-  geolocator: ^11.0.0
-
   # Utilities
   uuid: ^4.3.3
   timeago: ^3.6.0

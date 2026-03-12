@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../core/providers/listings.provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 import '../../widgets/listing_card.dart';
-import 'listing_detail_screen.dart';
 
-// ✅ FIX: Removed MockData. All data now comes from ListingsProvider → real API.
-
-class ListingsScreen extends StatefulWidget {
+class ListingsScreen extends ConsumerStatefulWidget {
   const ListingsScreen({super.key});
 
   @override
-  State<ListingsScreen> createState() => _ListingsScreenState();
+  ConsumerState<ListingsScreen> createState() => _ListingsScreenState();
 }
 
-class _ListingsScreenState extends State<ListingsScreen> {
+class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   final ApiService _api = ApiService();
 
   List<Map<String, dynamic>> _categories = [];
@@ -29,7 +27,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
     super.initState();
     _loadFilters();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ListingsProvider>().fetchListings(refresh: true);
+      ref.read(listingsProvider).fetchListings(refresh: true);
     });
   }
 
@@ -41,23 +39,33 @@ class _ListingsScreenState extends State<ListingsScreen> {
 
   Future<void> _loadFilters() async {
     try {
-      final catRes  = await _api.get('categories');
+      final catRes = await _api.get('categories');
       final cityRes = await _api.get('geo-zones/cities');
 
-      final cats  = (catRes['categories']  ?? catRes['data']  ?? catRes)  as List<dynamic>;
-      final cities = (cityRes['cities']    ?? cityRes['data'] ?? cityRes) as List<dynamic>;
+      final cats = _asList(catRes, 'categories');
+      final citiesRaw = _asList(cityRes, 'cities');
+      final cities = citiesRaw.map((c) => c is Map ? (c['name'] ?? c['id'] ?? c.toString()).toString() : c.toString()).toList();
 
       setState(() {
-        _categories = cats.cast<Map<String, dynamic>>();
-        _cities     = cities.map((c) => c.toString()).toList();
+        _categories = cats.map((e) => e is Map<String, dynamic> ? e : <String, dynamic>{}).where((e) => e.isNotEmpty).toList();
+        _cities = cities;
       });
     } catch (e) {
       debugPrint('_loadFilters error: $e');
     }
   }
 
+  static List<dynamic> _asList(dynamic response, String key) {
+    if (response is List) return response;
+    if (response is Map) {
+      final list = response[key] ?? response['data'] ?? response;
+      if (list is List) return list;
+    }
+    return [];
+  }
+
   void _applyFilters() {
-    context.read<ListingsProvider>().fetchListings(
+    ref.read(listingsProvider).fetchListings(
       refresh:    true,
       categoryId: _selectedCategoryId,
       city:       _selectedCity,
@@ -137,8 +145,9 @@ class _ListingsScreenState extends State<ListingsScreen> {
             ),
 
           Expanded(
-            child: Consumer<ListingsProvider>(
-              builder: (ctx, provider, _) {
+            child: Builder(
+              builder: (ctx) {
+                final provider = ref.watch(listingsProvider);
                 if (provider.loading && provider.listings.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -180,7 +189,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     ),
                     itemBuilder: (ctx, i) {
                       if (i >= provider.listings.length) {
-                        provider.fetchListings();
+                        ref.read(listingsProvider).fetchListings();
                         return const Center(
                           child: Padding(
                             padding: EdgeInsets.all(16),
@@ -190,12 +199,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       }
                       final listing = provider.listings[i];
                       return GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ListingDetailScreen(listingId: listing.id),
-                          ),
-                        ),
+                        onTap: () => context.push('/listing/${listing.id}'),
                         child: ListingCard(listing: listing),
                       );
                     },

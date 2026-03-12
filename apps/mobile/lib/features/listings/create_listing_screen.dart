@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 
 // ✅ FIX: Removed MockData.categories.
@@ -120,14 +119,26 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
       final priceRaw = double.tryParse(_priceCtrl.text.trim()) ?? 0;
       final pricePaisa = (priceRaw * 100).round();
 
+      final quantity = double.tryParse(_quantityCtrl.text.trim());
+      if (quantity == null || quantity <= 0) {
+        setState(() => _error = 'Please enter a valid quantity.');
+        setState(() => _submitting = false);
+        return;
+      }
+      if (_selectedUnitId == null) {
+        setState(() => _error = 'Please select a unit.');
+        setState(() => _submitting = false);
+        return;
+      }
+
       final body = {
         'title':       _titleCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
         'categoryId':  _selectedCategoryId,
         if (_selectedProductTypeId != null) 'productTypeId': _selectedProductTypeId,
         'pricePaisa':  pricePaisa,
-        if (_quantityCtrl.text.isNotEmpty) 'quantity': double.tryParse(_quantityCtrl.text.trim()),
-        if (_selectedUnitId != null) 'unitId': _selectedUnitId,
+        'quantity':    quantity,
+        'unitId':      _selectedUnitId,
         if (_selectedCity != null) 'cityName': _selectedCity,
         if (_addressCtrl.text.isNotEmpty) 'address': _addressCtrl.text.trim(),
         if (_contactCtrl.text.isNotEmpty) 'contactNumber': _contactCtrl.text.trim(),
@@ -144,8 +155,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = e.toString().contains('Exception:')
-            ? e.toString().split('Exception:').last.trim()
+        _error = e is ApiException
+            ? (e as ApiException).message
             : 'Failed to create listing.';
       });
     } finally {
@@ -237,20 +248,29 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                             }),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(child: _field(_quantityCtrl, 'Quantity',
-                          keyboardType: TextInputType.number)),
+                      Expanded(
+                        child: _field(_quantityCtrl, 'Quantity *',
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Required';
+                              final n = double.tryParse(v);
+                              if (n == null || n <= 0) return 'Enter a valid quantity';
+                              return null;
+                            }),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: _selectedUnitId,
-                    hint: const Text('Select unit'),
+                    hint: const Text('Select unit *'),
                     onChanged: (v) => setState(() => _selectedUnitId = v),
+                    validator: (v) => v == null ? 'Please select a unit' : null,
                     items: _units.map((u) => DropdownMenuItem(
                       value: u['id'] as String? ?? '',
                       child: Text('${u['name'] ?? u['slug']} (${u['symbol'] ?? u['abbreviation'] ?? ''})'),
                     )).toList(),
-                    decoration: _dropdownDecoration('Unit'),
+                    decoration: _dropdownDecoration('Unit *'),
                   ),
 
                   const SizedBox(height: 20),
