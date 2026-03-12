@@ -64,13 +64,25 @@ class ListingsProvider extends ChangeNotifier {
         raw = d is List ? d : const [];
       }
 
-      final fetched = raw.map((e) => ListingModel.fromJson(e as Map<String, dynamic>)).toList();
+      final fetched = <ListingModel>[];
+      for (final e in raw) {
+        try {
+          if (e is Map<String, dynamic>) {
+            fetched.add(ListingModel.fromJson(e));
+          }
+        } catch (itemError) {
+          if (kDebugMode) debugPrint('[Listings] Skip item: $itemError');
+        }
+      }
 
       _listings = refresh ? fetched : [..._listings, ...fetched];
       _page++;
       _hasMore = fetched.length == 20;
     } catch (e) {
-      _error = _parseError(e, 'Failed to load listings');
+      if (kDebugMode) debugPrint('[Listings] fetchListings error: $e');
+      _error = e is ApiException
+          ? (e as ApiException).displayMessage
+          : _parseError(e, 'Failed to load listings');
     } finally {
       _loading = false;
       notifyListeners();
@@ -170,6 +182,7 @@ class ListingsProvider extends ChangeNotifier {
   }
 
   String _parseError(dynamic e, String fallback) {
+    if (e is ApiException) return e.displayMessage;
     if (e is Map) {
       return e['error']?['message'] ?? e['message'] ?? fallback;
     }
