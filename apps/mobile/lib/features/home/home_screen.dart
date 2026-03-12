@@ -44,10 +44,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _fetchCategories() async {
     try {
       final response = await _api.get('categories');
-      final List<dynamic> raw =
-          (response['categories'] ?? response['data'] ?? response) as List<dynamic>;
+      // Backend may return raw array or { categories/data: array }; List has no string index.
+      final List<dynamic> raw = response is List
+          ? response
+          : (response['categories'] ?? response['data'] ?? response) as List<dynamic>;
       setState(() {
-        _categories = raw.cast<Map<String, dynamic>>();
+        _categories = raw.map((e) => e is Map<String, dynamic> ? e : <String, dynamic>{}).where((m) => m.isNotEmpty).toList();
         _categoriesLoading = false;
       });
     } catch (e) {

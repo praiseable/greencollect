@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/api_service.dart';
 
 // ✅ FIX: Removed MockData.categories.
@@ -155,7 +156,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
           const SnackBar(content: Text('Listing created successfully!'),
               backgroundColor: Colors.green),
         );
-        Navigator.pop(context, true);
+        if (context.mounted) context.pop(true);
       }
     } catch (e, stack) {
       if (kDebugMode) {
