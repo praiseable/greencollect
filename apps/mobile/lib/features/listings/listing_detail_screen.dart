@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/api_service.dart';
 import '../../core/providers/app_providers.dart';
 
@@ -288,8 +289,9 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    if (seller?['id'] != null) {
-                      Navigator.pushNamed(context, '/chat/${seller!['id']}');
+                    final sellerId = seller?['id']?.toString();
+                    if (sellerId != null && sellerId.isNotEmpty) {
+                      context.push('/chat/$sellerId');
                     }
                   },
                   icon: const Icon(Icons.chat_bubble_outline),

@@ -327,13 +327,13 @@ async function runEscalation(io) {
  */
 async function notifyZoneDealersOnNewListing(listing, seller, io) {
   try {
-    // 1. Notify dealers assigned to the listing's LOCAL zone
+    // 1. Notify dealers assigned to the listing's exact zone (LOCAL)
     const localDealerIds = await findDealersForLevel(listing, 'LOCAL');
 
-    // 2. Also find and notify city-level franchise (always should know about new listings)
+    // 2. Notify city-level dealers (listing in city, or listing in local area of this city)
     const listingZone = await prisma.geoZone.findUnique({
       where: { id: listing.geoZoneId },
-      include: { parent: true },
+      include: { parent: { include: { parent: true } } },
     });
     
     const cityZoneId = listingZone?.type === 'CITY' ? listingZone.id :
@@ -348,7 +348,17 @@ async function notifyZoneDealersOnNewListing(listing, seller, io) {
       cityDealerIds = cityDealers.map(d => d.userId);
     }
 
-    // 3. Always notify admins
+    // 3. Fallback: notify dealers whose territory is the listing zone's parent (e.g. province)
+    let parentDealerIds = [];
+    if (listingZone?.parentId) {
+      const parentDealers = await prisma.dealerTerritory.findMany({
+        where: { geoZoneId: listingZone.parentId, isActive: true },
+        select: { userId: true },
+      });
+      parentDealerIds = parentDealers.map(d => d.userId);
+    }
+
+    // 4. Always notify admins
     const admins = await prisma.user.findMany({
       where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] }, isActive: true },
       select: { id: true },
@@ -356,10 +366,13 @@ async function notifyZoneDealersOnNewListing(listing, seller, io) {
     const adminIds = admins.map(a => a.id);
 
     // Merge all IDs, deduplicate, remove seller
-    const allIds = new Set([...localDealerIds, ...cityDealerIds, ...adminIds]);
+    const allIds = new Set([...localDealerIds, ...cityDealerIds, ...parentDealerIds, ...adminIds]);
     allIds.delete(listing.sellerId);
 
-    if (allIds.size === 0) return;
+    if (allIds.size === 0) {
+      console.warn(`[Notification] New listing "${listing.title}" (geoZoneId=${listing.geoZoneId}, cityName=${listing.cityName}) → no dealers/admins found to notify. Run seed or assign territories.`);
+      return;
+    }
 
     const notifData = Array.from(allIds).map(userId => ({
       userId,
