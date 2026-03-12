@@ -12,10 +12,32 @@ async function canUserViewListing(user, listing) {
     return true;
   }
 
-  // If user is not logged in, only PUBLIC listings are visible
-  if (!user || !user.geoZoneId) {
-    return false;
+  if (!user) return false;
+
+  // Dealers/franchises with territory: allow if listing is in any of their assigned zones (or child zones)
+  if (['DEALER', 'FRANCHISE_OWNER', 'REGIONAL_MANAGER', 'WHOLESALE_BUYER'].includes(user.role)) {
+    const territories = await prisma.dealerTerritory.findMany({
+      where: { userId: user.id, isActive: true },
+      select: { geoZoneId: true },
+    });
+    const territoryZoneIds = new Set(territories.map(t => t.geoZoneId));
+    if (territoryZoneIds.has(listing.geoZoneId)) return true;
+    // Listing might be in a child of a territory zone (e.g. franchise has city, listing in local area)
+    const listingZone = await prisma.geoZone.findUnique({
+      where: { id: listing.geoZoneId },
+      include: { parent: { include: { parent: true } } },
+    });
+    if (listingZone) {
+      let current = listingZone;
+      while (current) {
+        if (territoryZoneIds.has(current.id)) return true;
+        current = current.parent;
+      }
+    }
   }
+
+  // If user has no zone, only territory-based access above applies
+  if (!user.geoZoneId) return false;
 
   // If listing has no geoZone, allow viewing (fallback)
   if (!listing.geoZoneId) {

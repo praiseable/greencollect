@@ -72,7 +72,7 @@ async function findDealersForLevel(listing, visibilityLevel) {
           select: { id: true },
         });
         const siblingIds = siblingZones.map(z => z.id);
-        
+
         const dealers = await prisma.dealerTerritory.findMany({
           where: { geoZoneId: { in: siblingIds }, isActive: true },
           select: { userId: true },
@@ -85,8 +85,8 @@ async function findDealersForLevel(listing, visibilityLevel) {
     case 'CITY': {
       // Find the city zone and notify franchise owners there
       const cityZone = listingZone.type === 'CITY' ? listingZone :
-                        listingZone.parent?.type === 'CITY' ? listingZone.parent : null;
-      
+        listingZone.parent?.type === 'CITY' ? listingZone.parent : null;
+
       if (cityZone) {
         const dealers = await prisma.dealerTerritory.findMany({
           where: { geoZoneId: cityZone.id, isActive: true },
@@ -220,7 +220,7 @@ async function runEscalation(io) {
     for (const listing of listings) {
       const currentLevel = listing.visibilityLevel;
       const currentIndex = VISIBILITY_ORDER.indexOf(currentLevel);
-      
+
       if (currentIndex === -1 || currentIndex >= VISIBILITY_ORDER.length - 1) continue;
 
       const nextLevel = VISIBILITY_ORDER[currentIndex + 1];
@@ -335,10 +335,10 @@ async function notifyZoneDealersOnNewListing(listing, seller, io) {
       where: { id: listing.geoZoneId },
       include: { parent: { include: { parent: true } } },
     });
-    
+
     const cityZoneId = listingZone?.type === 'CITY' ? listingZone.id :
-                       listingZone?.parent?.type === 'CITY' ? listingZone.parent.id : null;
-    
+      listingZone?.parent?.type === 'CITY' ? listingZone.parent.id : null;
+
     let cityDealerIds = [];
     if (cityZoneId) {
       const cityDealers = await prisma.dealerTerritory.findMany({
