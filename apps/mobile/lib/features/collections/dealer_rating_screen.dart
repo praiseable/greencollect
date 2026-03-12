@@ -41,7 +41,7 @@ class _DealerRatingScreenState extends State<DealerRatingScreen> {
       });
     } catch (e) {
       setState(() {
-        _error   = e.toString().split('Exception:').last.trim();
+        _error = e is ApiException ? (e as ApiException).displayMessage : e.toString();
         _loading = false;
       });
     }

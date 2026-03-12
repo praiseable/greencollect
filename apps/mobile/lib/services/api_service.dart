@@ -47,6 +47,9 @@ class ApiService {
     // Parse error body (support both { error: { message } } and { errors: [ { msg } ] })
     Map<String, dynamic> errorBody = {};
     try { errorBody = jsonDecode(res.body); } catch (_) {}
+    if (kDebugMode && res.body.isNotEmpty) {
+      debugPrint('[API] Error ${res.statusCode} response: ${res.body.length > 500 ? "${res.body.substring(0, 500)}..." : res.body}');
+    }
     String msg = errorBody['error']?['message'] ??
         errorBody['message'] ??
         'Request failed (${res.statusCode})';
@@ -57,8 +60,22 @@ class ApiService {
         msg = first['msg'] as String;
       }
     }
+    // Build detail string for UI (code, details, or raw body snippet)
+    String? detail;
+    final err = errorBody['error'];
+    if (err is Map) {
+      final parts = <String>[];
+      if (err['code'] != null) parts.add('code: ${err['code']}');
+      if (err['details'] != null) parts.add(err['details'].toString());
+      if (parts.isNotEmpty) detail = parts.join(' · ');
+    }
+    if (detail == null && res.body.isNotEmpty && res.body.length <= 300) {
+      detail = res.body;
+    } else if (detail == null && res.body.length > 300) {
+      detail = '${res.body.substring(0, 300)}…';
+    }
     if (res.statusCode == 401) _storage.clearAuth();
-    throw ApiException(msg, res.statusCode);
+    throw ApiException(msg, res.statusCode, details: detail);
   }
 
   // ── GET ──────────────────────────────────────────────────────────────────
@@ -161,7 +178,20 @@ class ApiService {
 class ApiException implements Exception {
   final String message;
   final int statusCode;
-  ApiException(this.message, this.statusCode);
+  final String? details;
+
+  ApiException(this.message, this.statusCode, {this.details});
+
+  /// Full message for UI: message + HTTP status + optional details.
+  String get displayMessage {
+    final buf = StringBuffer(message);
+    buf.write(' (HTTP $statusCode)');
+    if (details != null && details!.isNotEmpty) {
+      buf.write('\n$details');
+    }
+    return buf.toString();
+  }
+
   @override
   String toString() => message;
 }

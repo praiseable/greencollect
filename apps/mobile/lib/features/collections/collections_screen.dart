@@ -42,7 +42,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
       });
     } catch (e) {
       setState(() {
-        _error   = e.toString().split('Exception:').last.trim();
+        _error = e is ApiException ? (e as ApiException).displayMessage : e.toString();
         _loading = false;
       });
     }
@@ -55,7 +55,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job accepted'), backgroundColor: Colors.green));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().split('Exception:').last.trim()), backgroundColor: Colors.red),
+        SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()), backgroundColor: Colors.red),
       );
     }
   }

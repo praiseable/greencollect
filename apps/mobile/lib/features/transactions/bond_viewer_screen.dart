@@ -35,7 +35,7 @@ class _BondViewerScreenState extends State<BondViewerScreen> {
       });
     } catch (e) {
       setState(() {
-        _error   = e.toString().split('Exception:').last.trim();
+        _error = e is ApiException ? (e as ApiException).displayMessage : e.toString();
         _loading = false;
       });
     }

@@ -56,7 +56,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = e.toString().split('Exception:').last.trim();
+        _error = e is ApiException ? (e as ApiException).displayMessage : e.toString();
         _loading = false;
       });
     }
@@ -85,7 +85,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().split('Exception:').last.trim()), backgroundColor: Colors.red),
+          SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -116,7 +116,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().split('Exception:').last.trim()), backgroundColor: Colors.red),
+          SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -147,7 +147,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().split('Exception:').last.trim()), backgroundColor: Colors.red),
+          SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -172,7 +172,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().split('Exception:').last.trim()), backgroundColor: Colors.red),
+          SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {

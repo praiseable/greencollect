@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 
@@ -144,6 +145,9 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         if (_contactCtrl.text.isNotEmpty) 'contactNumber': _contactCtrl.text.trim(),
       };
 
+      if (kDebugMode) {
+        debugPrint('[CreateListing] POST listings body: $body');
+      }
       await _api.post('listings', body);
 
       if (mounted) {
@@ -153,11 +157,16 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         );
         Navigator.pop(context, true);
       }
-    } catch (e) {
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[CreateListing] Error: $e');
+        debugPrint('[CreateListing] StackTrace: $stack');
+        if (e is ApiException) debugPrint('[CreateListing] API statusCode: ${e.statusCode}');
+      }
       setState(() {
         _error = e is ApiException
-            ? (e as ApiException).message
-            : 'Failed to create listing.';
+            ? (e as ApiException).displayMessage
+            : 'Failed to create listing.\n$e';
       });
     } finally {
       setState(() => _submitting = false);

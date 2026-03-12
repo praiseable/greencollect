@@ -37,9 +37,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
       });
     } catch (e) {
       setState(() {
-        _error   = e.toString().contains('Exception:')
-            ? e.toString().split('Exception:').last.trim()
-            : 'Failed to load listing.';
+        _error = e is ApiException ? (e as ApiException).displayMessage : 'Failed to load listing.\n$e';
         _loading = false;
       });
     }

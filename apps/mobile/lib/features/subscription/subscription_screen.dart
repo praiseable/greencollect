@@ -46,7 +46,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       });
     } catch (e) {
       setState(() {
-        _error   = e.toString().split('Exception:').last.trim();
+        _error = e is ApiException ? (e as ApiException).displayMessage : e.toString();
         _loading = false;
       });
     }
@@ -85,7 +85,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().split('Exception:').last.trim()),
+          SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()),
               backgroundColor: Colors.red),
         );
       }

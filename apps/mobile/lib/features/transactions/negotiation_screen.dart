@@ -47,7 +47,7 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
       });
     } catch (e) {
       setState(() {
-        _error   = e.toString().split('Exception:').last.trim();
+        _error = e is ApiException ? (e as ApiException).displayMessage : e.toString();
         _loading = false;
       });
     }
@@ -74,7 +74,7 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
       await _fetchTransaction();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().split('Exception:').last.trim()),
+        SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()),
             backgroundColor: Colors.red),
       );
     } finally {
@@ -89,7 +89,7 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
       await _fetchTransaction();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().split('Exception:').last.trim()),
+        SnackBar(content: Text(e is ApiException ? (e as ApiException).displayMessage : e.toString()),
             backgroundColor: Colors.red),
       );
     }
