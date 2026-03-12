@@ -38,24 +38,28 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// PUT /notifications/:id/read
-router.put('/:id/read', authenticate, async (req, res) => {
+// Mark single as read (PUT and PATCH so app PATCH calls succeed)
+const markOneRead = async (req, res) => {
   try {
     await prisma.notification.update({ where: { id: req.params.id }, data: { isRead: true } });
     res.json({ message: 'Marked as read' });
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to mark as read' } });
   }
-});
+};
+router.put('/:id/read', authenticate, markOneRead);
+router.patch('/:id/read', authenticate, markOneRead);
 
-// PUT /notifications/read-all
-router.put('/read-all', authenticate, async (req, res) => {
+// Mark all as read (PUT and PATCH)
+const markAllRead = async (req, res) => {
   try {
     await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });
     res.json({ message: 'All marked as read' });
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to mark all as read' } });
   }
-});
+};
+router.put('/read-all', authenticate, markAllRead);
+router.patch('/read-all', authenticate, markAllRead);
 
 module.exports = router;

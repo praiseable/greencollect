@@ -42,6 +42,27 @@ class NotificationModel {
     this.data = const {},
   });
 
+  /// Normalize backend enum (e.g. NEW_LISTING) to app type (new_listing) for routing.
+  static String _normalizeType(String? raw) {
+    if (raw == null || raw.isEmpty) return NotificationType.system;
+    final lower = raw.toLowerCase();
+    if (lower == 'new_listing') return NotificationType.newListing;
+    if (lower == 'offer_received') return NotificationType.offerReceived;
+    if (lower == 'offer_accepted') return NotificationType.offerAccepted;
+    if (lower == 'offer_rejected') return NotificationType.offerRejected;
+    if (lower == 'payment_received') return NotificationType.paymentReceived;
+    if (lower == 'payment_sent') return NotificationType.paymentSent;
+    if (lower == 'escalation') return NotificationType.escalation;
+    if (lower == 'subscription_expiring') return NotificationType.subscriptionExpiring;
+    if (lower == 'subscription_expired') return NotificationType.subscriptionExpired;
+    if (lower == 'system') return NotificationType.system;
+    if (lower == 'chat_message') return NotificationType.chatMessage;
+    if (lower == 'price_alert') return NotificationType.priceAlert;
+    if (lower == 'kyc_update') return NotificationType.kycUpdate;
+    if (lower == 'deal_finalized') return NotificationType.dealFinalized;
+    return raw;
+  }
+
   /// Parse from API JSON (e.g. GET /v1/notifications)
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>?;
@@ -57,7 +78,7 @@ class NotificationModel {
       titleUr: json['titleUr'] as String? ?? '',
       body: json['body'] as String? ?? '',
       bodyUr: json['bodyUr'] as String? ?? '',
-      type: json['type'] as String? ?? NotificationType.system,
+      type: _normalizeType(json['type'] as String?),
       isRead: (json['isRead'] as bool?) ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
