@@ -10,13 +10,13 @@ router.get('/conversations', authenticate, async (req, res) => {
       where: { fromUserId: req.user.id },
       distinct: ['toUserId'],
       orderBy: { createdAt: 'desc' },
-      include: { toUser: { select: { id: true, firstName: true, lastName: true, avatar: true } } },
+      include: { toUser: { select: { id: true, firstName: true, lastName: true, displayName: true, avatar: true } } },
     });
     const received = await prisma.chatMessage.findMany({
       where: { toUserId: req.user.id },
       distinct: ['fromUserId'],
       orderBy: { createdAt: 'desc' },
-      include: { fromUser: { select: { id: true, firstName: true, lastName: true, avatar: true } } },
+      include: { fromUser: { select: { id: true, firstName: true, lastName: true, displayName: true, avatar: true } } },
     });
 
     // Merge unique conversations
@@ -29,10 +29,17 @@ router.get('/conversations', authenticate, async (req, res) => {
       }
     });
 
-    const conversations = Array.from(partnerMap.entries()).map(([userId, data]) => ({
-      userId,
-      ...data,
-    })).sort((a, b) => b.lastAt - a.lastAt);
+    const conversations = Array.from(partnerMap.entries()).map(([userId, data]) => {
+      const u = data.user;
+      const name = u ? [u.firstName, u.lastName].filter(Boolean).join(' ').trim() || u.displayName || 'User' : 'User';
+      return {
+        userId,
+        otherUserId: userId,
+        ...data,
+        name,
+        updatedAt: data.lastAt,
+      };
+    }).sort((a, b) => b.lastAt - a.lastAt);
 
     res.json(conversations);
   } catch (err) {
@@ -76,12 +83,13 @@ router.post('/:userId', authenticate, async (req, res) => {
       data: { fromUserId: req.user.id, toUserId: req.params.userId, message },
     });
 
-    // Create notification
+    const senderName = [req.user.firstName, req.user.lastName].filter(Boolean).join(' ').trim()
+      || req.user.displayName || 'Someone';
     await prisma.notification.create({
       data: {
         userId: req.params.userId,
         type: 'CHAT_MESSAGE',
-        title: `Message from ${req.user.firstName}`,
+        title: `Message from ${senderName}`,
         body: message.substring(0, 100),
         data: { fromUserId: req.user.id },
       },

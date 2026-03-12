@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/chat.provider.dart';
 import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
@@ -25,10 +26,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOtherUser();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(chatProvider).openChat(widget.otherUserId);
-    });
+    if (widget.otherUserId.isNotEmpty) {
+      _loadOtherUser();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(chatProvider).openChat(widget.otherUserId);
+      });
+    }
   }
 
   @override
@@ -77,6 +80,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.otherUserId.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Chat'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.person_off_outlined, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                const Text(
+                  'Unable to start chat. Seller information is missing.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                ),
+                const SizedBox(height: 24),
+                TextButton.icon(
+                  onPressed: () => context.pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Go back'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final myId = ref.watch(authChangeNotifierProvider).user?.id ?? '';
 
     return Scaffold(

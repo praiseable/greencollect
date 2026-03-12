@@ -80,8 +80,15 @@ class ChatProvider extends ChangeNotifier {
     _socket!.on('error',      (e) => debugPrint('[ChatProvider] Socket error: $e'));
   }
 
+  /// Ensure socket is connected (call once after login).
+  Future<void> ensureSocket() async {
+    if (_socket != null && _socket!.connected) return;
+    await initSocket();
+  }
+
   // ── Fetch conversations list ─────────────────────────────────────────────
   Future<void> fetchConversations() async {
+    await ensureSocket();
     _loading = true;
     _error   = null;
     notifyListeners();
@@ -101,6 +108,7 @@ class ChatProvider extends ChangeNotifier {
 
   // ── Open a chat with a specific user ─────────────────────────────────────
   Future<void> openChat(String otherUserId) async {
+    await ensureSocket();
     _currentChatUserId = otherUserId;
 
     // Join the chat room
@@ -168,9 +176,14 @@ class ChatProvider extends ChangeNotifier {
         'message':    message,
       });
 
-      // Replace temp message with real one from server
+      // Replace temp message with real one from server (POST returns full message object at root)
+      final msgMap = response is Map<String, dynamic> ? response : null;
+      if (msgMap == null || msgMap['id'] == null) {
+        notifyListeners();
+        return true;
+      }
       final savedMsg = ChatMessageModel.fromJson(
-        (response['message'] ?? response) as Map<String, dynamic>,
+        msgMap,
         currentUserId: _myUserId!,
         roomId: toUserId,
       );

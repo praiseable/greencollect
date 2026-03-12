@@ -1,8 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../config/api_config.dart';
 import '../../services/api_service.dart';
 import '../../core/providers/app_providers.dart';
+
+/// True when displayName is a generic placeholder like "User 4567".
+bool _isGenericSellerName(String? s) {
+  if (s == null || s.trim().isEmpty) return true;
+  return RegExp(r'^User\s*\d+$', caseSensitive: false).hasMatch(s.trim());
+}
+
+String _sellerDisplayName(Map<String, dynamic> seller) {
+  final first = '${seller['firstName'] ?? ''} ${seller['lastName'] ?? ''}'.trim();
+  if (first.isNotEmpty) return first;
+  final display = seller['displayName'] as String?;
+  if (display != null && display.isNotEmpty && !_isGenericSellerName(display)) {
+    return display;
+  }
+  return 'Seller';
+}
 
 // ✅ FIX: Removed MockData. Now fetches listing from real API: GET /v1/listings/:id
 
@@ -51,6 +68,27 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
     } catch (e) {
       debugPrint('toggleFavorite error: $e');
     }
+  }
+
+  void _openChat(BuildContext context, Map<String, dynamic> listing, Map<String, dynamic>? seller) {
+    final sellerId = seller?['id']?.toString() ?? listing['sellerId']?.toString();
+    if (sellerId == null || sellerId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to start chat. Seller information is not available.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final myId = ref.read(authChangeNotifierProvider).user?.id?.toString();
+    if (myId != null && myId == sellerId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This is your listing.'), backgroundColor: Colors.grey),
+      );
+      return;
+    }
+    context.push('/chat/$sellerId');
   }
 
   Future<void> _startTransaction() async {
@@ -141,9 +179,12 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                   : PageView.builder(
                       itemCount: images.length,
                       itemBuilder: (ctx, i) {
-                        final url = images[i]['url'] ?? images[i]['imageUrl'] ?? '';
+                        final raw = images[i]['url'] ?? images[i]['imageUrl'] ?? '';
+                        final url = raw.toString().startsWith('http')
+                            ? raw.toString()
+                            : '${ApiConfig.effectiveBaseUrl.replaceFirst(RegExp(r'/$'), '')}$raw';
                         return Image.network(
-                          url.toString(),
+                          url,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
                             color: Colors.grey.shade200,
@@ -243,9 +284,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                         CircleAvatar(
                           backgroundColor: Colors.green.shade100,
                           child: Text(
-                            ((seller['firstName'] ?? seller['displayName'] ?? 'S')
-                                as String)
-                                .characters.first.toUpperCase(),
+                            _sellerDisplayName(seller).characters.first.toUpperCase(),
                             style: TextStyle(color: Colors.green.shade700,
                                 fontWeight: FontWeight.bold),
                           ),
@@ -256,9 +295,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${seller['firstName'] ?? ''} ${seller['lastName'] ?? ''}'.trim().isEmpty
-                                    ? seller['displayName'] as String? ?? 'Seller'
-                                    : '${seller['firstName']} ${seller['lastName']}',
+                                _sellerDisplayName(seller),
                                 style: const TextStyle(fontWeight: FontWeight.w600),
                               ),
                               if (seller['avgRating'] != null)
@@ -288,12 +325,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    final sellerId = seller?['id']?.toString();
-                    if (sellerId != null && sellerId.isNotEmpty) {
-                      context.push('/chat/$sellerId');
-                    }
-                  },
+                  onPressed: () => _openChat(context, listing, seller),
                   icon: const Icon(Icons.chat_bubble_outline),
                   label: const Text('Chat'),
                   style: OutlinedButton.styleFrom(

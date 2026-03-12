@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 
@@ -35,6 +39,10 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
   String? _selectedProductTypeId;
   String? _selectedUnitId;
   String? _selectedCity;
+
+  final List<XFile> _selectedImages = [];
+  static const int _maxImages = 5;
+  final ImagePicker _picker = ImagePicker();
 
   bool _loading    = false;
   bool _submitting = false;
@@ -94,7 +102,28 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
     return [];
   }
 
-  Future<void> _onCategoryChange(String? categoryId) async {
+  Future<void> _pickImages() async {
+    if (_selectedImages.length >= _maxImages) return;
+    try {
+      final List<XFile> picked = await _picker.pickMultiImage();
+      if (picked.isEmpty) return;
+      setState(() {
+        for (final x in picked) {
+          if (_selectedImages.length >= _maxImages) break;
+          _selectedImages.add(x);
+        }
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[CreateListing] pickImages: $e');
+      setState(() => _error = 'Could not pick images. Try again.');
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() => _selectedImages.removeAt(index));
+  }
+
+  Future<void> _submit() async {
     setState(() {
       _selectedCategoryId    = categoryId;
       _selectedProductTypeId = null;
@@ -151,14 +180,40 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       if (kDebugMode) {
         debugPrint('[CreateListing] POST listings body: $body');
       }
-      await _api.post('listings', body);
+      final response = await _api.post('listings', body);
+      final created = response is Map<String, dynamic> ? response : null;
+      final listingId = created?['id']?.toString();
+
+      if (listingId != null && _selectedImages.isNotEmpty) {
+        final files = <http.MultipartFile>[];
+        for (var i = 0; i < _selectedImages.length; i++) {
+          final x = _selectedImages[i];
+          final bytes = await x.readAsBytes();
+          final name = x.name.isNotEmpty ? x.name : 'image_$i.jpg';
+          files.add(http.MultipartFile.fromBytes('images', bytes, filename: name));
+        }
+        try {
+          await _api.multipartPost(
+            'listings/$listingId/images',
+            fields: {},
+            files: files,
+          );
+        } catch (e) {
+          if (kDebugMode) debugPrint('[CreateListing] Image upload error: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Listing created but some photos could not be uploaded: $e'),
+                  backgroundColor: Colors.orange),
+            );
+          }
+        }
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Listing created successfully!'),
               backgroundColor: Colors.green),
         );
-        // Refresh listings so Home and Listings tab show the new item
         ref.read(listingsProvider).fetchListings(refresh: true);
         if (context.mounted) context.pop(true);
       }
@@ -218,6 +273,60 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                       v!.isEmpty ? 'Title is required' : null),
                   const SizedBox(height: 12),
                   _field(_descCtrl, 'Description', maxLines: 3),
+                  const SizedBox(height: 20),
+
+                  _SectionLabel('Photos (optional, up to $_maxImages)'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...List.generate(_selectedImages.length, (i) {
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            SizedBox(
+                              width: 72,
+                              height: 72,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: _selectedImages[i].path.isNotEmpty
+                                    ? Image.file(File(_selectedImages[i].path), fit: BoxFit.cover)
+                                    : const Icon(Icons.image, size: 48, color: Colors.grey),
+                              ),
+                            ),
+                            Positioned(
+                              top: -6,
+                              right: -6,
+                              child: IconButton(
+                                icon: const Icon(Icons.close, size: 18, color: Colors.white),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  padding: const EdgeInsets.all(4),
+                                  minimumSize: Size.zero,
+                                ),
+                                onPressed: () => _removeImage(i),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
+                      if (_selectedImages.length < _maxImages)
+                        InkWell(
+                          onTap: _submitting ? null : _pickImages,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.add_photo_alternate_outlined, size: 32, color: Colors.grey),
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 20),
 
                   _SectionLabel('Category *'),
