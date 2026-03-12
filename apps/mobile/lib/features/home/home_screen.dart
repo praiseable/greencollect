@@ -197,19 +197,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 if (provider.error != null && provider.listings.isEmpty) {
                   return SliverFillRemaining(
                     child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
-                          const SizedBox(height: 12),
-                          Text(provider.error!,
-                              style: const TextStyle(color: Colors.grey)),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: () => provider.fetchListings(refresh: true),
-                            child: const Text('Retry'),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
+                            const SizedBox(height: 12),
+                            SelectableText(
+                              provider.error!,
+                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () => provider.fetchListings(refresh: true),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

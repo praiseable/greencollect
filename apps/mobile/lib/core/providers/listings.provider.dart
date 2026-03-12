@@ -82,7 +82,7 @@ class ListingsProvider extends ChangeNotifier {
       if (kDebugMode) debugPrint('[Listings] fetchListings error: $e');
       _error = e is ApiException
           ? (e as ApiException).displayMessage
-          : _parseError(e, 'Failed to load listings');
+          : 'Failed to load listings.\n${e.toString()}';
     } finally {
       _loading = false;
       notifyListeners();
