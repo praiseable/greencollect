@@ -19,15 +19,53 @@ class ApiService {
   /// Called when session is expired and refresh failed (so we cleared auth). Set from app to sync AuthProvider.
   void Function()? onSessionExpired;
 
-  /// Lock so only one refresh runs when multiple requests get 401.
+  /// Lock so only one refresh runs when multiple requests get 401 or proactive refresh.
   bool _refreshing = false;
+  /// When set, other callers can await this to get the result of the in-flight refresh.
+  Future<bool>? _refreshFuture;
 
   String get baseUrl => ApiConfig.effectiveBaseUrl;
 
+  /// Seconds before expiry at which we proactively refresh the access token.
+  static const int _refreshBeforeExpirySeconds = 120;
+
+  /// Decode JWT payload (no verification) to read exp. Returns expiry seconds since epoch or null.
+  static int? _tokenExpiry(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      String payload = parts[1];
+      payload = payload.replaceAll('-', '+').replaceAll('_', '/');
+      switch (payload.length % 4) {
+        case 2: payload += '=='; break;
+        case 3: payload += '='; break;
+      }
+      final bytes = base64Decode(payload);
+      final map = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>?;
+      final exp = map?['exp'];
+      if (exp is int) return exp;
+      if (exp is num) return exp.toInt();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Build headers with auth token ────────────────────────────────────────
+  /// Proactively refreshes access token if it expires in the next [_refreshBeforeExpirySeconds].
   Future<Map<String, String>> _headers() async {
-    final token = await _storage.getAccessToken();
-    final lang  = await _storage.getLanguage() ?? 'en';
+    String? token = await _storage.getAccessToken();
+    final lang = await _storage.getLanguage() ?? 'en';
+
+    if (token != null && token.isNotEmpty) {
+      final exp = _tokenExpiry(token);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      if (exp != null && exp <= now + _refreshBeforeExpirySeconds) {
+        final refreshed = await _doRefresh();
+        if (refreshed) token = await _storage.getAccessToken();
+      }
+    }
+
     return {
       'Content-Type':   'application/json',
       'Accept':         'application/json',
@@ -37,14 +75,28 @@ class ApiService {
   }
 
   /// Call POST /auth/refresh-token and save new tokens. Returns true if new access token was saved.
-  /// Does not use _parse (so no clearAuth). Used only for retry-after-401.
+  /// Concurrent callers share the same refresh (one runs, others await its result).
   Future<bool> _doRefresh() async {
-    if (_refreshing) return false;
+    if (_refreshing && _refreshFuture != null) return _refreshFuture!;
     _refreshing = true;
+    _refreshFuture = _performRefresh();
+    try {
+      return await _refreshFuture!;
+    } finally {
+      _refreshing = false;
+      _refreshFuture = null;
+    }
+  }
+
+  Future<bool> _performRefresh() async {
     try {
       final refreshToken = await _storage.getRefreshToken();
-      if (refreshToken == null || refreshToken.isEmpty) return false;
+      if (refreshToken == null || refreshToken.isEmpty) {
+        if (kDebugMode) debugPrint('[API] Refresh skipped: no refresh token in storage');
+        return false;
+      }
 
+      if (kDebugMode) debugPrint('[API] Sending refresh token request to auth/refresh-token');
       final uri = _uri('auth/refresh-token');
       final res = await _client.post(
         uri,
@@ -70,8 +122,6 @@ class ApiService {
     } catch (e) {
       if (kDebugMode) debugPrint('[API] Refresh token failed: $e');
       return false;
-    } finally {
-      _refreshing = false;
     }
   }
 
