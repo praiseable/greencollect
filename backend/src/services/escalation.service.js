@@ -420,9 +420,10 @@ async function runCollectionEscalation(io) {
 
   try {
     // Find all overdue collections (past deadline, not completed/cancelled/escalated)
+    // CollectionStatus enum: ASSIGNED, ACCEPTED, EN_ROUTE, ARRIVED, COLLECTED, DELIVERED_TO_CENTER, CANCELLED, ESCALATED, EXPIRED
     const overdueCollections = await prisma.collection.findMany({
       where: {
-        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSIGNED'] },
+        status: { in: ['ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'COLLECTED'] },
         // Collections where deadline has passed
         // We use collectionDate as deadline proxy in existing schema
         collectionDate: { lt: new Date() },

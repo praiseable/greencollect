@@ -147,6 +147,21 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       return;
     }
 
+    // Require login to create listing (backend returns 401 without token)
+    final auth = ref.read(authProvider);
+    if (auth == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to create a listing.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        context.push('/auth/login');
+      }
+      return;
+    }
+
     setState(() { _submitting = true; _error = null; });
     try {
       final priceRaw = double.tryParse(_priceCtrl.text.trim()) ?? 0;
@@ -223,11 +238,25 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         debugPrint('[CreateListing] StackTrace: $stack');
         if (e is ApiException) debugPrint('[CreateListing] API statusCode: ${e.statusCode}');
       }
-      setState(() {
-        _error = e is ApiException
-            ? (e as ApiException).displayMessage
-            : 'Failed to create listing.\n$e';
-      });
+      if (e is ApiException && (e as ApiException).statusCode == 401) {
+        await ref.read(authChangeNotifierProvider).logout();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Session expired or not logged in. Please log in again to create a listing.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          context.go('/auth/login');
+        }
+        setState(() => _error = 'Please log in to create a listing.');
+      } else {
+        setState(() {
+          _error = e is ApiException
+              ? (e as ApiException).displayMessage
+              : 'Failed to create listing.\n$e';
+        });
+      }
     } finally {
       setState(() => _submitting = false);
     }

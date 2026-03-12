@@ -16,6 +16,12 @@ class ApiService {
   final StorageService _storage = StorageService();
   final http.Client _client = http.Client();
 
+  /// Called when session is expired and refresh failed (so we cleared auth). Set from app to sync AuthProvider.
+  void Function()? onSessionExpired;
+
+  /// Lock so only one refresh runs when multiple requests get 401.
+  bool _refreshing = false;
+
   String get baseUrl => ApiConfig.effectiveBaseUrl;
 
   // ── Build headers with auth token ────────────────────────────────────────
@@ -28,6 +34,51 @@ class ApiService {
       'Accept-Language': lang,
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
+  }
+
+  /// Call POST /auth/refresh-token and save new tokens. Returns true if new access token was saved.
+  /// Does not use _parse (so no clearAuth). Used only for retry-after-401.
+  Future<bool> _doRefresh() async {
+    if (_refreshing) return false;
+    _refreshing = true;
+    try {
+      final refreshToken = await _storage.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) return false;
+
+      final uri = _uri('auth/refresh-token');
+      final res = await _client.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'refreshToken': refreshToken}),
+      ).timeout(ApiConfig.receiveTimeout);
+
+      if (res.statusCode != 200) return false;
+      final data = jsonDecode(res.body) as Map<String, dynamic>?;
+      final accessToken = data?['accessToken'] as String?;
+      final newRefreshToken = data?['refreshToken'] as String?;
+      if (accessToken == null || accessToken.isEmpty) return false;
+
+      await _storage.saveAccessToken(accessToken);
+      if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
+        await _storage.saveRefreshToken(newRefreshToken);
+      }
+      if (kDebugMode) debugPrint('[API] Refresh token succeeded');
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[API] Refresh token failed: $e');
+      return false;
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  /// Clear auth and notify app so AuthProvider can sync (e.g. redirect to login).
+  void _clearSession() {
+    _storage.clearAuth();
+    onSessionExpired?.call();
   }
 
   // ── Build full URI ───────────────────────────────────────────────────────
@@ -74,17 +125,30 @@ class ApiService {
     } else if (detail == null && res.body.length > 300) {
       detail = '${res.body.substring(0, 300)}…';
     }
-    if (res.statusCode == 401) _storage.clearAuth();
+    // 401: caller may retry after refresh; if not retried, _clearSession() is used
     throw ApiException(msg, res.statusCode, details: detail);
+  }
+
+  /// On 401: try refresh once, retry request, then parse. If still 401 or refresh fails, clear session and throw.
+  Future<dynamic> _requestWithRefreshRetry(Future<http.Response> Function() request) async {
+    http.Response res = await request();
+    if (res.statusCode == 401) {
+      final refreshed = await _doRefresh();
+      if (refreshed) res = await request();
+      if (res.statusCode == 401) {
+        _clearSession();
+        _parse(res);
+      }
+    }
+    return _parse(res);
   }
 
   // ── GET ──────────────────────────────────────────────────────────────────
   Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
-    final res = await _client.get(
+    return _requestWithRefreshRetry(() => _client.get(
       _uri(path, queryParams: queryParams),
       headers: await _headers(),
-    ).timeout(ApiConfig.receiveTimeout);
-    return _parse(res);
+    ).timeout(ApiConfig.receiveTimeout));
   }
 
   // ── POST ─────────────────────────────────────────────────────────────────
@@ -93,45 +157,43 @@ class ApiService {
     if (kDebugMode && path.contains('auth')) {
       debugPrint('[API] POST $uri body=${body != null ? body.toString().replaceAll(RegExp(r'[\s\n]+'), ' ') : null}');
     }
-    final res = await _client.post(
-      uri,
-      headers: await _headers(),
-      body: body != null ? jsonEncode(body) : null,
-    ).timeout(ApiConfig.receiveTimeout);
-    if (kDebugMode && path.contains('auth')) {
-      debugPrint('[API] POST $path → ${res.statusCode}');
-    }
-    return _parse(res);
+    return _requestWithRefreshRetry(() async {
+      final res = await _client.post(
+        uri,
+        headers: await _headers(),
+        body: body != null ? jsonEncode(body) : null,
+      ).timeout(ApiConfig.receiveTimeout);
+      if (kDebugMode && path.contains('auth')) {
+        debugPrint('[API] POST $path → ${res.statusCode}');
+      }
+      return res;
+    });
   }
 
   // ── PUT ──────────────────────────────────────────────────────────────────
   Future<dynamic> put(String path, [Map<String, dynamic>? body]) async {
-    final res = await _client.put(
+    return _requestWithRefreshRetry(() => _client.put(
       _uri(path),
       headers: await _headers(),
       body: body != null ? jsonEncode(body) : null,
-    ).timeout(ApiConfig.receiveTimeout);
-    return _parse(res);
+    ).timeout(ApiConfig.receiveTimeout));
   }
 
   // ── PATCH ────────────────────────────────────────────────────────────────
-  // ✅ FIX: patch() was missing — needed for mark-notification-read endpoints
   Future<dynamic> patch(String path, [Map<String, dynamic>? body]) async {
-    final res = await _client.patch(
+    return _requestWithRefreshRetry(() => _client.patch(
       _uri(path),
       headers: await _headers(),
       body: body != null ? jsonEncode(body) : null,
-    ).timeout(ApiConfig.receiveTimeout);
-    return _parse(res);
+    ).timeout(ApiConfig.receiveTimeout));
   }
 
   // ── DELETE ───────────────────────────────────────────────────────────────
   Future<dynamic> delete(String path) async {
-    final res = await _client.delete(
+    return _requestWithRefreshRetry(() => _client.delete(
       _uri(path),
       headers: await _headers(),
-    ).timeout(ApiConfig.receiveTimeout);
-    return _parse(res);
+    ).timeout(ApiConfig.receiveTimeout));
   }
 
   // ── Multipart POST (image upload) ────────────────────────────────────────
@@ -140,15 +202,16 @@ class ApiService {
     required Map<String, String> fields,
     List<http.MultipartFile>? files,
   }) async {
-    final headers = await _headers()
-      ..remove('Content-Type');
-    final request = http.MultipartRequest('POST', _uri(path))
-      ..headers.addAll(headers)
-      ..fields.addAll(fields);
-    if (files != null) request.files.addAll(files);
-    final streamed = await request.send().timeout(const Duration(seconds: 60));
-    final res = await http.Response.fromStream(streamed);
-    return _parse(res);
+    return _requestWithRefreshRetry(() async {
+      final headers = await _headers()
+        ..remove('Content-Type');
+      final request = http.MultipartRequest('POST', _uri(path))
+        ..headers.addAll(headers)
+        ..fields.addAll(fields);
+      if (files != null) request.files.addAll(files);
+      final streamed = await request.send().timeout(const Duration(seconds: 60));
+      return http.Response.fromStream(streamed);
+    });
   }
 
   // ── App version / listings helpers (keep compatibility) ───────────────────

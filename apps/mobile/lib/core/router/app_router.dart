@@ -32,12 +32,14 @@ import '../../features/paywall/balance_gate_screen.dart';
 import '../providers/app_providers.dart';
 import '../config/app_variant.dart';
 import '../models/user.model.dart';
+import '../../services/api_service.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.read(authChangeNotifierProvider);
+  ApiService().onSessionExpired = () => authNotifier.logout();
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',

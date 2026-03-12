@@ -26,10 +26,15 @@ router.get('/', optionalAuth, async (req, res) => {
     const {
       page = 1, limit = 20, categoryId, productTypeId,
       geoZoneId, cityName, minPrice, maxPrice, status = 'ACTIVE',
-      sortBy = 'createdAt', sortOrder = 'desc', search, countryId = 'PK',
+      sortBy: sortByQ = 'createdAt', sortOrder: sortOrderQ = 'desc',
+      sort, search, countryId = 'PK',
     } = req.query;
 
     const lang = req.lang || 'en';
+    // App sends sort=latest; map to Prisma orderBy. Whitelist to avoid invalid orderBy.
+    const allowedSortFields = ['createdAt', 'updatedAt', 'pricePaisa', 'title', 'viewCount', 'interestedCount'];
+    const sortBy = (sort === 'latest' || sort === 'newest') ? 'createdAt' : (allowedSortFields.includes(sortByQ) ? sortByQ : 'createdAt');
+    const sortOrder = (sort === 'latest' || sort === 'newest') ? 'desc' : ((sortOrderQ === 'asc' || sortOrderQ === 'desc') ? sortOrderQ : 'desc');
 
     // Admins see all listings (no geo-fencing); normalize role for comparison
     const role = req.user && req.user.role ? String(req.user.role).toUpperCase() : '';
@@ -45,7 +50,10 @@ router.get('/', optionalAuth, async (req, res) => {
     if (!isAdmin) {
       const geoFenceWhere = await buildGeoFenceWhere(req.user, { countryId });
       if (geoFenceWhere.OR) {
-        where.AND = [{ OR: geoFenceWhere.OR }];
+        // Include own listings in feed so "my new listing" always shows when logged in
+        const orClauses = [...geoFenceWhere.OR];
+        if (req.user?.id) orClauses.push({ sellerId: req.user.id });
+        where.AND = [{ OR: orClauses }];
       }
     }
 
@@ -84,7 +92,7 @@ router.get('/', optionalAuth, async (req, res) => {
           productType: { include: { translations: { where: { languageId: lang } } } },
           unit: { include: { translations: { where: { languageId: lang } } } },
           currency: true,
-          seller: { select: { id: true, firstName: true, lastName: true, displayName: true, avatar: true, city: true } },
+          seller: { select: { id: true, firstName: true, lastName: true, displayName: true, avatar: true, city: true, phone: true } },
           geoZone: { select: { id: true, name: true } },
           images: { orderBy: { sortOrder: 'asc' }, take: 3 },
           _count: { select: { transactions: true } },
@@ -93,13 +101,16 @@ router.get('/', optionalAuth, async (req, res) => {
       prisma.listing.count({ where }),
     ]);
 
-    // Add formatted prices
+    // Add formatted prices and seller display (app expects sellerName, sellerPhone)
     const data = listings.map(l => {
       const item = { ...l, pricePaisa: l.pricePaisa.toString() };
       item.priceFormatted = `₨ ${Number(l.pricePaisa).toLocaleString('en-PK')}`;
       item.categoryName = l.category?.translations[0]?.name || l.category?.slug;
       item.productTypeName = l.productType?.translations[0]?.name || l.productType?.slug;
       item.unitName = l.unit?.translations[0]?.abbreviation || l.unit?.slug;
+      const s = l.seller;
+      item.sellerName = s?.displayName || (s ? [s.firstName, s.lastName].filter(Boolean).join(' ') : '') || '';
+      item.sellerPhone = s?.phone || l.contactNumber || '';
       return item;
     });
 
