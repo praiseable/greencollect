@@ -1,19 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 
 // ✅ FIX: Removed MockData.categories.
 //          Categories, units, and geo-zones now fetched from real API.
 
-class CreateListingScreen extends StatefulWidget {
+class CreateListingScreen extends ConsumerStatefulWidget {
   const CreateListingScreen({super.key});
 
   @override
-  State<CreateListingScreen> createState() => _CreateListingScreenState();
+  ConsumerState<CreateListingScreen> createState() => _CreateListingScreenState();
 }
 
-class _CreateListingScreenState extends State<CreateListingScreen> {
+class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
   final ApiService _api = ApiService();
   final _formKey = GlobalKey<FormState>();
 
@@ -156,6 +158,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
           const SnackBar(content: Text('Listing created successfully!'),
               backgroundColor: Colors.green),
         );
+        // Refresh listings so Home and Listings tab show the new item
+        ref.read(listingsProvider).fetchListings(refresh: true);
         if (context.mounted) context.pop(true);
       }
     } catch (e, stack) {

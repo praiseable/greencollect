@@ -128,79 +128,14 @@ async function buildGeoFenceWhere(user, options = {}) {
   const { countryId = 'PK' } = options;
 
   // If no user, only show PUBLIC listings
-  if (!user || !user.geoZoneId) {
+  if (!user) {
     return {
       visibilityLevel: 'PUBLIC',
       countryId,
     };
   }
 
-  // Get user's geoZone hierarchy
-  const userZone = await prisma.geoZone.findUnique({
-    where: { id: user.geoZoneId },
-    include: {
-      parent: {
-        include: {
-          parent: {
-            include: {
-              parent: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!userZone) {
-    // User has invalid geoZone, show only PUBLIC
-    return {
-      visibilityLevel: 'PUBLIC',
-      countryId,
-    };
-  }
-
-  // Build visibility level conditions
-  const userCity = findZoneByType(userZone, 'CITY');
-  const userProvince = findZoneByType(userZone, 'PROVINCE');
-  const userCountry = findZoneByType(userZone, 'COUNTRY') || userZone.countryId;
-
-  // Collect allowed geoZoneIds based on visibility levels
-  const allowedZoneIds = [userZone.id]; // LOCAL: same zone
-
-  if (userCity) {
-    // NEIGHBOR and CITY: same city
-    allowedZoneIds.push(userCity.id);
-    // Also include all local areas in the same city
-    const cityChildren = await prisma.geoZone.findMany({
-      where: {
-        parentId: userCity.id,
-        type: 'LOCAL_AREA',
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    allowedZoneIds.push(...cityChildren.map(c => c.id));
-  }
-
-  if (userProvince) {
-    // PROVINCE: same province
-    allowedZoneIds.push(userProvince.id);
-    // Also include all cities in the same province
-    const provinceCities = await prisma.geoZone.findMany({
-      where: {
-        parentId: userProvince.id,
-        type: 'CITY',
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    allowedZoneIds.push(...provinceCities.map(c => c.id));
-  }
-
-  // NATIONAL: same country (already filtered by countryId)
-
-  // ── TERRITORY-BASED ACCESS ──
-  // Dealers with territory assignments can see listings in ALL their assigned zones
+  // ── TERRITORY-BASED ACCESS (compute first so dealers without geoZoneId still see their zone listings) ──
   const territoryZoneIds = [];
   if (['DEALER', 'FRANCHISE_OWNER', 'REGIONAL_MANAGER', 'WHOLESALE_BUYER'].includes(user.role)) {
     const territories = await prisma.dealerTerritory.findMany({
@@ -226,57 +161,68 @@ async function buildGeoFenceWhere(user, options = {}) {
     }
   }
 
-  // Merge territory zone IDs with geo-fence zone IDs
-  const allAllowedZoneIds = [...new Set([...allowedZoneIds, ...territoryZoneIds])];
+  // User has no zone and no territory → only PUBLIC listings
+  if (!user.geoZoneId && territoryZoneIds.length === 0) {
+    return {
+      visibilityLevel: 'PUBLIC',
+      countryId,
+    };
+  }
 
-  // Build OR conditions for visibility levels
-  // Structure: (visibilityLevel = PUBLIC) OR (visibilityLevel = LOCAL AND geoZoneId matches) OR ...
-  const orConditions = [
-    // PUBLIC: everyone can see
-    { visibilityLevel: 'PUBLIC' },
-    // LOCAL: same zone
-    {
-      AND: [
-        { visibilityLevel: 'LOCAL' },
-        { geoZoneId: { in: allAllowedZoneIds } },
-      ],
-    },
-    // NEIGHBOR: same city zones
-    {
-      AND: [
-        { visibilityLevel: 'NEIGHBOR' },
-        { geoZoneId: { in: allAllowedZoneIds } },
-      ],
-    },
-    // CITY: same city
-    {
-      AND: [
-        { visibilityLevel: 'CITY' },
-        { geoZoneId: { in: allAllowedZoneIds } },
-      ],
-    },
-    // PROVINCE: same province
-    {
-      AND: [
-        { visibilityLevel: 'PROVINCE' },
-        { geoZoneId: { in: allAllowedZoneIds } },
-      ],
-    },
-    // NATIONAL: same country
-    {
-      AND: [
-        { visibilityLevel: 'NATIONAL' },
-        { countryId: userCountry || userZone.countryId },
-      ],
-    },
-  ];
+  // Build OR conditions: always include PUBLIC
+  const orConditions = [{ visibilityLevel: 'PUBLIC' }];
 
-  // If dealer has territories, also allow them to see ANY listing in their territory zones
-  // regardless of visibility level (they're the zone manager)
+  // Dealers with territories see ALL listings in their territory zones (any visibility level)
   if (territoryZoneIds.length > 0) {
     orConditions.push({
       geoZoneId: { in: territoryZoneIds },
     });
+  }
+
+  // If user has a geoZone, add visibility-based conditions (LOCAL, CITY, etc.)
+  let allowedZoneIds = [...territoryZoneIds];
+  let userCountry = countryId;
+  if (user.geoZoneId) {
+    const userZone = await prisma.geoZone.findUnique({
+      where: { id: user.geoZoneId },
+      include: {
+        parent: {
+          include: {
+            parent: { include: { parent: true } },
+          },
+        },
+      },
+    });
+    if (userZone) {
+      const userCity = findZoneByType(userZone, 'CITY');
+      const userProvince = findZoneByType(userZone, 'PROVINCE');
+      userCountry = findZoneByType(userZone, 'COUNTRY') || userZone.countryId || countryId;
+      allowedZoneIds = [userZone.id];
+      if (userCity) {
+        allowedZoneIds.push(userCity.id);
+        const cityChildren = await prisma.geoZone.findMany({
+          where: { parentId: userCity.id, type: 'LOCAL_AREA', isActive: true },
+          select: { id: true },
+        });
+        allowedZoneIds.push(...cityChildren.map(c => c.id));
+      }
+      if (userProvince) {
+        allowedZoneIds.push(userProvince.id);
+        const provinceCities = await prisma.geoZone.findMany({
+          where: { parentId: userProvince.id, type: 'CITY', isActive: true },
+          select: { id: true },
+        });
+        allowedZoneIds.push(...provinceCities.map(c => c.id));
+      }
+      allowedZoneIds = [...new Set([...allowedZoneIds, ...territoryZoneIds])];
+      orConditions.push(
+        { AND: [{ visibilityLevel: 'LOCAL' }, { geoZoneId: { in: allowedZoneIds } }] },
+        { AND: [{ visibilityLevel: 'NEIGHBOR' }, { geoZoneId: { in: allowedZoneIds } }] },
+        { AND: [{ visibilityLevel: 'CITY' }, { geoZoneId: { in: allowedZoneIds } }] },
+        { AND: [{ visibilityLevel: 'PROVINCE' }, { geoZoneId: { in: allowedZoneIds } }] },
+        { AND: [{ visibilityLevel: 'NATIONAL' }, { countryId: userCountry }] }
+      );
+    }
   }
 
   return {
