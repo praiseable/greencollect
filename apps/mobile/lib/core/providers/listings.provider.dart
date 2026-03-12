@@ -56,10 +56,15 @@ class ListingsProvider extends ChangeNotifier {
       // ✅ Calls GET /v1/listings?page=&limit=&sort=&categoryId=&city=&search=
       final response = await _api.get('listings', queryParams: queryParams);
 
-      final List<dynamic> raw =
-          (response['listings'] ?? response['data'] ?? response) as List<dynamic>;
+      List<dynamic> raw = const [];
+      if (response is List) {
+        raw = response;
+      } else if (response is Map) {
+        final d = response['listings'] ?? response['data'];
+        raw = d is List ? d : const [];
+      }
 
-      final fetched = raw.map((e) => ListingModel.fromJson(e)).toList();
+      final fetched = raw.map((e) => ListingModel.fromJson(e as Map<String, dynamic>)).toList();
 
       _listings = refresh ? fetched : [..._listings, ...fetched];
       _page++;

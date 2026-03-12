@@ -149,6 +149,12 @@ function findZoneByType(zone, type) {
 async function buildGeoFenceWhere(user, options = {}) {
   const { countryId = 'PK' } = options;
 
+  // Admins and collection managers see all listings (match-all)
+  const role = user && user.role ? String(user.role).toUpperCase() : '';
+  if (['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(role)) {
+    return { countryId, OR: [{ id: { not: null } }] };
+  }
+
   // If no user, only show PUBLIC listings
   if (!user) {
     return {
