@@ -102,7 +102,9 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
         
         // Load existing images
         final images = listing['images'] as List<dynamic>? ?? [];
-        _existingImages.addAll(images.map((img) => img is Map ? img : {'url': img.toString(), 'id': img.toString()}));
+        _existingImages.addAll(images.map((img) => img is Map<String, dynamic> 
+            ? img as Map<String, dynamic>
+            : <String, dynamic>{'url': img.toString(), 'id': img.toString()}));
         
         _loading = false;
       });

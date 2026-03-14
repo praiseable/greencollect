@@ -64,26 +64,9 @@ class NotificationModel {
     return raw;
   }
   
-  /// Static method for creating notifications from socket data (used by NotificationsProvider)
-  static NotificationType fromString(String? raw) {
-    if (raw == null || raw.isEmpty) return NotificationType.system;
-    final lower = raw.toLowerCase();
-    // Handle both underscore and camelCase formats from backend
-    if (lower == 'new_listing' || lower == 'newlisting') return NotificationType.newListing;
-    if (lower == 'offer_received' || lower == 'offerreceived') return NotificationType.offerReceived;
-    if (lower == 'offer_accepted' || lower == 'offeraccepted') return NotificationType.offerAccepted;
-    if (lower == 'offer_rejected' || lower == 'offerrejected') return NotificationType.offerRejected;
-    if (lower == 'payment_received' || lower == 'paymentreceived') return NotificationType.paymentReceived;
-    if (lower == 'payment_sent' || lower == 'paymentsent') return NotificationType.paymentSent;
-    if (lower == 'escalation') return NotificationType.escalation;
-    if (lower == 'subscription_expiring' || lower == 'subscriptionexpiring') return NotificationType.subscriptionExpiring;
-    if (lower == 'subscription_expired' || lower == 'subscriptionexpired') return NotificationType.subscriptionExpired;
-    if (lower == 'system') return NotificationType.system;
-    if (lower == 'chat_message' || lower == 'chatmessage') return NotificationType.chatMessage;
-    if (lower == 'price_alert' || lower == 'pricealert') return NotificationType.priceAlert;
-    if (lower == 'kyc_update' || lower == 'kycupdate') return NotificationType.kycUpdate;
-    if (lower == 'deal_finalized' || lower == 'dealfinalized') return NotificationType.dealFinalized;
-    return NotificationType.system;
+  /// Public method for normalizing notification types (used by NotificationsProvider)
+  static String normalizeType(String? raw) {
+    return _normalizeType(raw);
   }
 
   /// Parse from API JSON (e.g. GET /v1/notifications)
