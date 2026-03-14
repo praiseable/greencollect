@@ -425,9 +425,7 @@ async function runCollectionEscalation(io) {
       where: {
         status: { in: ['ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'COLLECTED'] },
         // Collections where deadline has passed
-        // We use collectionDate as deadline proxy in existing schema
-        collectionDate: { lt: new Date() },
-        verifiedByAdmin: false,
+        deadlineAt: { lt: new Date() },
       },
       include: {
         listing: {
@@ -437,7 +435,7 @@ async function runCollectionEscalation(io) {
             },
           },
         },
-        collector: {
+        dealer: {
           select: { id: true, firstName: true, lastName: true },
         },
       },
@@ -455,19 +453,22 @@ async function runCollectionEscalation(io) {
         where: { id: collection.id },
         data: {
           status: 'CANCELLED',
-          adminNotes: (collection.adminNotes || '') + '\n[SYSTEM] Deadline passed — escalated to next dealer.',
+          cancelReason: 'Deadline passed — escalated to next dealer.',
+          notes: (collection.notes || '') + '\n[SYSTEM] Deadline passed — escalated to next dealer.',
         },
       });
 
       // 2. Create a DealerRating penalty entry
       await prisma.dealerRating.create({
         data: {
-          dealerId: collection.collectorId,
-          raterId: collection.collectorId, // System-generated
-          listingId: listing.id,
+          dealerId: collection.dealerId,
           collectionId: collection.id,
-          rating: 1, // Penalty: lowest rating
-          comment: '[SYSTEM] Collection deadline exceeded. Auto-escalated.',
+          customerId: collection.customerId,
+          responseScore: 1.0, // Penalty: lowest score
+          collectionScore: 1.0,
+          complianceScore: 1.0,
+          overallScore: 1.0,
+          period: new Date().toISOString().slice(0, 7), // "2026-03"
         },
       });
 
@@ -492,7 +493,7 @@ async function runCollectionEscalation(io) {
             where: {
               geoZoneId: { in: siblingZones.map(z => z.id) },
               isActive: true,
-              userId: { not: collection.collectorId }, // Exclude the failed dealer
+              userId: { not: collection.dealerId }, // Exclude the failed dealer
             },
             select: { userId: true },
           });
@@ -505,7 +506,7 @@ async function runCollectionEscalation(io) {
             where: {
               geoZoneId: geoZone.parentId,
               isActive: true,
-              userId: { not: collection.collectorId },
+              userId: { not: collection.dealerId },
             },
             select: { userId: true },
           });
@@ -525,10 +526,15 @@ async function runCollectionEscalation(io) {
         await prisma.collection.create({
           data: {
             listingId: listing.id,
-            collectorId: nextDealerId,
-            collectionDate: newDeadline,
-            status: 'PENDING',
-            collectedQuantity: collection.collectedQuantity,
+            dealerId: nextDealerId,
+            customerId: collection.customerId,
+            status: 'ASSIGNED',
+            deadlineAt: newDeadline,
+            listingLat: listing.latitude ?? 0,
+            listingLng: listing.longitude ?? 0,
+            categoryId: listing.categoryId,
+            cityName: listing.cityName ?? listing.geoZone?.name ?? null,
+            geoZoneId: listing.geoZoneId ?? undefined,
           },
         });
 
@@ -552,7 +558,7 @@ async function runCollectionEscalation(io) {
           });
         }
 
-        console.log(`[CollectionEscalation] Reassigned "${listing.title}" from ${collection.collectorId} → ${nextDealerId}`);
+        console.log(`[CollectionEscalation] Reassigned "${listing.title}" from ${collection.dealerId} → ${nextDealerId}`);
       } else {
         // No dealers available — escalate listing visibility level
         const currentLevelIndex = VISIBILITY_ORDER.indexOf(listing.visibilityLevel);
@@ -569,7 +575,7 @@ async function runCollectionEscalation(io) {
       // 5. Notify the failed dealer about penalty
       await prisma.notification.create({
         data: {
-          userId: collection.collectorId,
+          userId: collection.dealerId,
           type: 'COLLECTION_PENALTY',
           title: 'Collection Deadline Missed',
           body: `You missed the deadline for "${listing.title}". Your rating has been affected. The collection has been reassigned.`,
@@ -578,7 +584,7 @@ async function runCollectionEscalation(io) {
       });
 
       if (io) {
-        io.to(`user-${collection.collectorId}`).emit('notification', {
+        io.to(`user-${collection.dealerId}`).emit('notification', {
           type: 'COLLECTION_PENALTY',
           title: 'Collection Deadline Missed',
           body: `You missed the deadline for "${listing.title}". Rating penalty applied.`,
