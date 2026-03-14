@@ -21,17 +21,86 @@ async function canUserViewListing(user, listing) {
       select: { geoZoneId: true },
     });
     const territoryZoneIds = new Set(territories.map(t => t.geoZoneId));
+    
+    // If dealer has user.geoZoneId but no territory entry, use geoZoneId as territory
+    // This handles dealers created with geoZoneId but without DealerTerritory entry
+    if (user.geoZoneId && territoryZoneIds.size === 0) {
+      territoryZoneIds.add(user.geoZoneId);
+      // Also include children of the user's zone (e.g., if dealer has city, include all local areas)
+      const userZoneChildren = await prisma.geoZone.findMany({
+        where: { parentId: user.geoZoneId, isActive: true },
+        select: { id: true },
+      });
+      userZoneChildren.forEach(child => territoryZoneIds.add(child.id));
+    }
+    
     if (territoryZoneIds.has(listing.geoZoneId)) return true;
+    
     // Listing might be in a child of a territory zone (e.g. franchise has city, listing in local area)
+    // Or listing might be in the same city/province as dealer's zone
     const listingZone = await prisma.geoZone.findUnique({
       where: { id: listing.geoZoneId },
       include: { parent: { include: { parent: true } } },
     });
     if (listingZone) {
+      // Check if listing zone or any parent matches territory
       let current = listingZone;
       while (current) {
         if (territoryZoneIds.has(current.id)) return true;
         current = current.parent;
+      }
+      
+      // Also check if any territory zone is a parent of listing zone
+      // (e.g., dealer has city zone, listing is in a local area of that city)
+      for (const territoryZoneId of territoryZoneIds) {
+        const territoryZone = await prisma.geoZone.findUnique({
+          where: { id: territoryZoneId },
+          include: { 
+            children: { 
+              include: { 
+                children: true 
+              } 
+            } 
+          },
+        });
+        if (territoryZone) {
+          // Recursively check if listing zone is a descendant of territory zone
+          const checkDescendants = (zone) => {
+            if (!zone) return false;
+            if (zone.id === listing.geoZoneId) return true;
+            if (zone.children && zone.children.length > 0) {
+              for (const child of zone.children) {
+                if (checkDescendants(child)) return true;
+              }
+            }
+            return false;
+          };
+          if (checkDescendants(territoryZone)) return true;
+        }
+      }
+    }
+    
+    // For dealers, if both user and listing are in the same city, allow access
+    // This is a fallback to handle cases where zones don't match exactly
+    if (user.geoZoneId && listing.geoZoneId) {
+      const userZone = await prisma.geoZone.findUnique({
+        where: { id: user.geoZoneId },
+        include: { parent: { include: { parent: true } } },
+      });
+      const listingZone = await prisma.geoZone.findUnique({
+        where: { id: listing.geoZoneId },
+        include: { parent: { include: { parent: true } } },
+      });
+      
+      if (userZone && listingZone) {
+        // Find city for both
+        const userCity = userZone.type === 'CITY' ? userZone : (userZone.parent?.type === 'CITY' ? userZone.parent : null);
+        const listingCity = listingZone.type === 'CITY' ? listingZone : (listingZone.parent?.type === 'CITY' ? listingZone.parent : null);
+        
+        // If both are in the same city, allow access
+        if (userCity && listingCity && userCity.id === listingCity.id) {
+          return true;
+        }
       }
     }
   }
