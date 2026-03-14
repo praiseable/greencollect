@@ -94,14 +94,14 @@ class ChatProvider extends ChangeNotifier {
         final chatUserId = notifData['data']?['chatUserId'] as String?;
         final fromUserId = notifData['data']?['fromUserId'] as String?;
         
-        // If we're not currently viewing this chat, refresh conversations
-        if (chatUserId != null && chatUserId != _currentChatUserId) {
+        // chatUserId is the ID of the user we're chatting with (the other person)
+        // If we're currently viewing this chat, refresh messages to show the new one
+        if (chatUserId != null && chatUserId == _currentChatUserId && fromUserId != null) {
+          // We're viewing this chat, so fetch messages to get the new one
+          fetchMessages(chatUserId);
+        } else if (chatUserId != null) {
+          // We're not viewing this chat, just refresh conversations list
           fetchConversations();
-        }
-        
-        // If message is from someone we're chatting with, also refresh messages
-        if (fromUserId != null && fromUserId == _currentChatUserId) {
-          fetchMessages(fromUserId);
         }
       }
     });
