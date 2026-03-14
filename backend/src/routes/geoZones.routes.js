@@ -51,6 +51,110 @@ router.get('/cities', async (req, res) => {
   }
 });
 
+// GET /geo-zones/available — Zones available for current user to post listings
+router.get('/available', authenticate, async (req, res) => {
+  try {
+    const { countryId = 'PK' } = req.query;
+    const user = req.user;
+    
+    // Admins can post in any zone
+    if (['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(user.role)) {
+      const allZones = await prisma.geoZone.findMany({
+        where: { countryId, isActive: true, type: { in: ['CITY', 'LOCAL_AREA'] } },
+        orderBy: { name: 'asc' },
+        include: { parent: { select: { id: true, name: true, type: true } } },
+      });
+      return res.json(allZones);
+    }
+    
+    // Dealers: return their territories + children zones
+    if (['DEALER', 'FRANCHISE_OWNER', 'REGIONAL_MANAGER', 'WHOLESALE_BUYER'].includes(user.role)) {
+      const territories = await prisma.dealerTerritory.findMany({
+        where: { userId: user.id, isActive: true },
+        include: {
+          geoZone: {
+            include: {
+              children: { where: { isActive: true } },
+            },
+          },
+        },
+      });
+      
+      const availableZones = [];
+      for (const territory of territories) {
+        const zone = territory.geoZone;
+        // Add the territory zone itself
+        availableZones.push({
+          id: zone.id,
+          name: zone.name,
+          type: zone.type,
+          slug: zone.slug,
+          parent: zone.parent ? { id: zone.parent.id, name: zone.parent.name, type: zone.parent.type } : null,
+        });
+        // Add children zones
+        if (zone.children && zone.children.length > 0) {
+          for (const child of zone.children) {
+            availableZones.push({
+              id: child.id,
+              name: child.name,
+              type: child.type,
+              slug: child.slug,
+              parent: { id: zone.id, name: zone.name, type: zone.type },
+            });
+          }
+        }
+      }
+      
+      // If dealer has geoZoneId but no territories, use geoZoneId as fallback
+      if (availableZones.length === 0 && user.geoZoneId) {
+        const userZone = await prisma.geoZone.findUnique({
+          where: { id: user.geoZoneId },
+          include: { children: { where: { isActive: true } }, parent: true },
+        });
+        if (userZone) {
+          availableZones.push({
+            id: userZone.id,
+            name: userZone.name,
+            type: userZone.type,
+            slug: userZone.slug,
+            parent: userZone.parent ? { id: userZone.parent.id, name: userZone.parent.name, type: userZone.parent.type } : null,
+          });
+          if (userZone.children) {
+            for (const child of userZone.children) {
+              availableZones.push({
+                id: child.id,
+                name: child.name,
+                type: child.type,
+                slug: child.slug,
+                parent: { id: userZone.id, name: userZone.name, type: userZone.type },
+              });
+            }
+          }
+        }
+      }
+      
+      // Remove duplicates
+      const uniqueZones = availableZones.filter((zone, index, self) =>
+        index === self.findIndex((z) => z.id === zone.id)
+      );
+      
+      return res.json(uniqueZones.sort((a, b) => a.name.localeCompare(b.name)));
+    }
+    
+    // Customers: return all cities (they can post in any city)
+    const cities = await prisma.geoZone.findMany({
+      where: { countryId, type: 'CITY', isActive: true },
+      orderBy: { name: 'asc' },
+      include: { parent: { select: { id: true, name: true, type: true } } },
+    });
+    
+    res.json(cities);
+  } catch (err) {
+    console.error('GET /geo-zones/available error:', err);
+    res.status(500).json({ error: { message: 'Failed to fetch available zones' } });
+  }
+});
+
 // GET /geo-zones/:id
 router.get('/:id', async (req, res) => {
   try {

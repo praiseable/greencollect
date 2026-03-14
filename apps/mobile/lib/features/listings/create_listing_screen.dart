@@ -33,12 +33,12 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
   List<Map<String, dynamic>> _categories    = [];
   List<Map<String, dynamic>> _productTypes  = [];
   List<Map<String, dynamic>> _units         = [];
-  List<String>               _cities        = [];
+  List<Map<String, dynamic>> _zones         = [];
 
   String? _selectedCategoryId;
   String? _selectedProductTypeId;
   String? _selectedUnitId;
-  String? _selectedCity;
+  String? _selectedZoneId;
 
   final List<XFile> _selectedImages = [];
   static const int _maxImages = 5;
@@ -71,20 +71,17 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       final results = await Future.wait([
         _api.get('categories'),
         _api.get('units'),
-        _api.get('geo-zones/cities'),
+        _api.get('geo-zones/available'),
       ]);
 
       final cats   = _asList(results[0], 'categories');
       final units  = _asList(results[1], 'units');
-      final cities = _asList(results[2], 'cities');
+      final zones  = _asList(results[2], 'zones');
 
       setState(() {
         _categories = cats.map((c) => c is Map<String, dynamic> ? c : <String, dynamic>{}).where((c) => c.isNotEmpty).toList();
         _units      = units.map((u) => u is Map<String, dynamic> ? u : <String, dynamic>{}).where((u) => u.isNotEmpty).toList();
-        _cities     = cities.map((c) {
-          if (c is Map) return (c['name'] ?? c['id'] ?? c.toString()).toString();
-          return c.toString();
-        }).toList();
+        _zones      = zones.map((z) => z is Map<String, dynamic> ? z : <String, dynamic>{}).where((z) => z.isNotEmpty).toList();
         _loading    = false;
       });
     } catch (e) {
@@ -187,7 +184,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         'pricePaisa':  pricePaisa,
         'quantity':    quantity,
         'unitId':      _selectedUnitId,
-        if (_selectedCity != null) 'cityName': _selectedCity,
+        if (_selectedZoneId != null) 'geoZoneId': _selectedZoneId,
         if (_addressCtrl.text.isNotEmpty) 'address': _addressCtrl.text.trim(),
         if (_contactCtrl.text.isNotEmpty) 'contactNumber': _contactCtrl.text.trim(),
       };
@@ -428,11 +425,20 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                   const SizedBox(height: 20),
                   _SectionLabel('Location'),
                   DropdownButtonFormField<String>(
-                    value: _selectedCity,
-                    hint: const Text('Select city'),
-                    onChanged: (v) => setState(() => _selectedCity = v),
-                    items: _cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    decoration: _dropdownDecoration('City'),
+                    value: _selectedZoneId,
+                    hint: const Text('Select zone'),
+                    onChanged: (v) => setState(() => _selectedZoneId = v),
+                    validator: (v) => v == null ? 'Please select a zone' : null,
+                    items: _zones.map((z) {
+                      final zoneName = z['name'] as String? ?? '';
+                      final parentName = z['parent']?['name'] as String?;
+                      final displayName = parentName != null ? '$zoneName, $parentName' : zoneName;
+                      return DropdownMenuItem(
+                        value: z['id'] as String? ?? '',
+                        child: Text(displayName),
+                      );
+                    }).toList(),
+                    decoration: _dropdownDecoration('Zone *'),
                   ),
                   const SizedBox(height: 12),
                   _field(_addressCtrl, 'Address / Area'),
