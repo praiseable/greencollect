@@ -7,6 +7,11 @@ const prisma = require('./prisma');
  * @returns {Promise<boolean>} - True if user can view the listing
  */
 async function canUserViewListing(user, listing) {
+  // Listing owner can always view their own listing
+  if (user && user.id && listing.sellerId && user.id === listing.sellerId) {
+    return true;
+  }
+
   // PUBLIC visibility: everyone can see
   if (listing.visibilityLevel === 'PUBLIC') {
     return true;
