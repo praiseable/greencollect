@@ -62,7 +62,7 @@ class NotificationsNotifier extends StateNotifier<List<NotificationModel>> {
         final notifData = data as Map<String, dynamic>;
         // Convert socket notification to NotificationModel
         final notifType = notifData['type'] as String? ?? 'system';
-        final normalizedType = NotificationModel._normalizeType(notifType);
+        final normalizedType = NotificationModel.normalizeType(notifType);
         final notifDataMap = notifData['data'] as Map<String, dynamic>? ?? {};
         final dataStr = <String, String>{};
         for (final e in notifDataMap.entries) {
@@ -180,7 +180,7 @@ class NotificationsProvider extends ChangeNotifier {
         final notifData = data as Map<String, dynamic>;
         // Convert socket notification to NotificationModel
         final notifType = notifData['type'] as String? ?? 'system';
-        final normalizedType = NotificationModel._normalizeType(notifType);
+        final normalizedType = NotificationModel.normalizeType(notifType);
         final notifDataMap = notifData['data'] as Map<String, dynamic>? ?? {};
         final dataStr = <String, String>{};
         for (final e in notifDataMap.entries) {
