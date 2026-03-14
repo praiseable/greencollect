@@ -11,6 +11,7 @@ import '../../features/home/home_screen.dart';
 import '../../features/listings/listings_screen.dart';
 import '../../features/listings/listing_detail_screen.dart';
 import '../../features/listings/create_listing_screen.dart';
+import '../../features/listings/edit_listing_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/profile/edit_profile_screen.dart';
@@ -158,6 +159,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
           return ListingDetailScreen(listingId: id);
+        },
+      ),
+      GoRoute(
+        path: '/listing/:id/edit',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return EditListingScreen(listingId: id);
         },
       ),
       GoRoute(

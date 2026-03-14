@@ -116,6 +116,47 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
     }
   }
 
+  Future<void> _deleteListing(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Listing'),
+        content: const Text('Are you sure you want to delete this listing? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _api.delete('listings/${widget.listingId}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Listing deleted successfully.'),
+              backgroundColor: Colors.green),
+        );
+        context.pop(true); // Return to previous screen
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().split('Exception:').last.trim()),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -161,6 +202,25 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
             pinned: true,
             backgroundColor: Colors.white,
             actions: [
+              // Show edit button only if user is the owner
+              Builder(
+                builder: (context) {
+                  final currentUser = ref.read(authChangeNotifierProvider).user;
+                  final listingSellerId = listing['sellerId']?.toString() ?? seller?['id']?.toString();
+                  final isOwner = currentUser != null && 
+                                  listingSellerId != null && 
+                                  currentUser.id.toString() == listingSellerId;
+                  
+                  if (isOwner) {
+                    return IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      onPressed: () => context.push('/listing/${widget.listingId}/edit'),
+                      tooltip: 'Edit Listing',
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
               IconButton(
                 icon: Icon(
                   _isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -318,41 +378,92 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
         ],
       ),
 
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _openChat(context, listing, seller),
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  label: const Text('Chat'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: const BorderSide(color: Colors.green),
-                    foregroundColor: Colors.green,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+      bottomNavigationBar: Builder(
+        builder: (context) {
+          final currentUser = ref.read(authChangeNotifierProvider).user;
+          final listingSellerId = listing['sellerId']?.toString() ?? seller?['id']?.toString();
+          final isOwner = currentUser != null && 
+                          listingSellerId != null && 
+                          currentUser.id.toString() == listingSellerId;
+          
+          // Owner sees edit/delete options, others see chat/make offer
+          if (isOwner) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push('/listing/${widget.listingId}/edit'),
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Edit'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Colors.green),
+                          foregroundColor: Colors.green,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _deleteListing(context),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Colors.red),
+                          foregroundColor: Colors.red,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: listing['status'] == 'active' ? _startTransaction : null,
-                  icon: const Icon(Icons.handshake_outlined),
-                  label: const Text('Make Offer'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            );
+          }
+          
+          // Non-owner sees chat and make offer buttons
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openChat(context, listing, seller),
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Chat'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Colors.green),
+                        foregroundColor: Colors.green,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: listing['status'] == 'active' ? _startTransaction : null,
+                      icon: const Icon(Icons.handshake_outlined),
+                      label: const Text('Make Offer'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
