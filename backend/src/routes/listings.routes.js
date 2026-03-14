@@ -311,9 +311,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
       ...listing,
       pricePaisa: listing.pricePaisa.toString(),
       priceFormatted: `₨ ${Number(listing.pricePaisa).toLocaleString('en-PK')}`,
+      sellerId: listing.sellerId, // Ensure sellerId is at root level for easy access
     };
 
-    res.json(result);
+    res.json({ listing: result });
   } catch (err) {
     console.error('Get listing error:', err);
     res.status(500).json({ error: { message: 'Failed to fetch listing' } });
