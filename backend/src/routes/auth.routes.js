@@ -807,9 +807,15 @@ router.get('/me', authenticate, async (req, res) => {
         wallet: true,
       },
     });
+    
+    if (!user) {
+      return res.status(404).json({ error: { message: 'User not found' } });
+    }
+    
     res.json(user);
   } catch (err) {
-    res.status(500).json({ error: { message: 'Failed to fetch profile' } });
+    console.error('Auth /me error:', err);
+    res.status(500).json({ error: { message: 'Failed to fetch profile', details: err.message } });
   }
 });
 

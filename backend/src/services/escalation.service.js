@@ -435,9 +435,6 @@ async function runCollectionEscalation(io) {
             },
           },
         },
-        dealer: {
-          select: { id: true, firstName: true, lastName: true },
-        },
       },
     });
 
