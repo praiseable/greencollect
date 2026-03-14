@@ -83,6 +83,29 @@ class ChatProvider extends ChangeNotifier {
       }
     });
 
+    // ✅ Listen for notifications (including chat notifications)
+    _socket!.on('notification', (data) {
+      debugPrint('[ChatProvider] Received notification: $data');
+      final notifData = data as Map<String, dynamic>;
+      final type = notifData['type'] as String?;
+      
+      // If it's a chat notification, refresh conversations to show new message
+      if (type == 'CHAT_MESSAGE') {
+        final chatUserId = notifData['data']?['chatUserId'] as String?;
+        final fromUserId = notifData['data']?['fromUserId'] as String?;
+        
+        // If we're not currently viewing this chat, refresh conversations
+        if (chatUserId != null && chatUserId != _currentChatUserId) {
+          fetchConversations();
+        }
+        
+        // If message is from someone we're chatting with, also refresh messages
+        if (fromUserId != null && fromUserId == _currentChatUserId) {
+          fetchMessages(fromUserId);
+        }
+      }
+    });
+
     _socket!.on('disconnect', (_) => debugPrint('[ChatProvider] Socket disconnected'));
     _socket!.on('error',      (e) => debugPrint('[ChatProvider] Socket error: $e'));
   }
