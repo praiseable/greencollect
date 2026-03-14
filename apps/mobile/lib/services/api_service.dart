@@ -231,6 +231,29 @@ class ApiService {
     if (kDebugMode && path.contains('auth')) {
       debugPrint('[API] POST $uri body=${body != null ? body.toString().replaceAll(RegExp(r'[\s\n]+'), ' ') : null}');
     }
+    
+    // Skip retry mechanism for logout to prevent infinite loops
+    if (path.contains('auth/logout')) {
+      try {
+        final res = await _client.post(
+          uri,
+          headers: await _headers(),
+          body: body != null ? jsonEncode(body) : null,
+        ).timeout(ApiConfig.receiveTimeout);
+        
+        // For logout, always return success even on 401 to prevent loops
+        if (res.statusCode == 401 || (res.statusCode >= 200 && res.statusCode < 300)) {
+          if (kDebugMode) debugPrint('[API] Logout call completed (status: ${res.statusCode})');
+          return {};
+        }
+        return _parse(res);
+      } catch (e) {
+        // For logout, ignore errors to prevent loops
+        if (kDebugMode) debugPrint('[API] Logout call failed (ignored): $e');
+        return {};
+      }
+    }
+    
     return _requestWithRefreshRetry(() async {
       final res = await _client.post(
         uri,

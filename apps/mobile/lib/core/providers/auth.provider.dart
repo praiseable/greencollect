@@ -201,14 +201,48 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ── Logout ───────────────────────────────────────────────────────────────
+  bool _isLoggingOut = false; // Prevent multiple simultaneous logout calls
+  
   Future<void> logout() async {
+    // Prevent multiple simultaneous logout calls
+    if (_isLoggingOut) {
+      if (kDebugMode) debugPrint('[Auth] Logout already in progress, skipping');
+      return;
+    }
+    
+    _isLoggingOut = true;
+    
+    // Temporarily disable session expired callback to prevent loop
+    final originalCallback = _api.onSessionExpired;
+    _api.onSessionExpired = null;
+    
     try {
-      await _api.post('auth/logout', {});
-    } catch (_) {}
-    await _storage.clearAll();
-    _user   = null;
-    _status = AuthStatus.unauthenticated;
-    notifyListeners();
+      // Check if we have a valid token before attempting API logout
+      // If token is expired/invalid, skip API call to avoid 401 loop
+      final token = await _storage.getAccessToken();
+      final hasValidToken = token != null && token.isNotEmpty;
+      
+      if (hasValidToken) {
+        try {
+          // API service now handles logout specially to prevent loops
+          await _api.post('auth/logout', {});
+        } catch (e) {
+          // If logout fails, just clear local storage
+          // Don't retry to avoid infinite loop
+          if (kDebugMode) debugPrint('[Auth] Logout API call failed, clearing local storage: $e');
+        }
+      }
+    } finally {
+      // Restore callback
+      _api.onSessionExpired = originalCallback;
+      
+      // Always clear local storage regardless of API call result
+      await _storage.clearAll();
+      _user   = null;
+      _status = AuthStatus.unauthenticated;
+      _isLoggingOut = false;
+      notifyListeners();
+    }
   }
 
   void clearError() {

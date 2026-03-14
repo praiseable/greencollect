@@ -754,22 +754,45 @@ router.post('/dealer/login', loginThrottle, idempotency(), [
 });
 
 // POST /auth/logout
-router.post('/logout', authenticate, async (req, res) => {
+// Allow logout without authentication to prevent 401 loops when token is expired
+router.post('/logout', async (req, res) => {
   try {
-    const portal = req.user.portal || ROLE_TO_PORTAL[req.user.role] || Portal.CUSTOMER;
+    // Try to authenticate, but don't fail if token is invalid/expired
+    let userId = null;
+    let portal = Portal.CUSTOMER;
     
-    // Delete all refresh tokens from Redis and PostgreSQL
-    await deleteAllRefreshTokens(req.user.id, portal);
+    try {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        userId = decoded.userId || decoded.id;
+        portal = decoded.portal || ROLE_TO_PORTAL[decoded.role] || Portal.CUSTOMER;
+      }
+    } catch (err) {
+      // Token is invalid/expired - that's okay, we'll just clear cookies
+      // This prevents 401 loops when app tries to logout with expired token
+    }
     
-    // Clear refresh token cookie
+    // If we have a valid user ID, delete refresh tokens
+    if (userId) {
+      try {
+        await deleteAllRefreshTokens(userId, portal);
+      } catch (err) {
+        console.error('Error deleting refresh tokens:', err);
+        // Continue anyway - we'll still clear the cookie
+      }
+    }
+    
+    // Always clear refresh token cookie
     clearRefreshTokenCookie(res);
     
     res.json({ message: 'Logged out successfully' });
   } catch (err) {
     console.error('Logout error:', err);
-    // Still clear cookie even if DB operation fails
+    // Still clear cookie even if everything fails
     clearRefreshTokenCookie(res);
-    res.status(500).json({ error: { message: 'Logout failed' } });
+    res.json({ message: 'Logged out successfully' }); // Return success to prevent retries
   }
 });
 
