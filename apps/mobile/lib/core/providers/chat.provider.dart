@@ -69,12 +69,18 @@ class ChatProvider extends ChangeNotifier {
       );
       final otherId = msg.fromUserId == _myUserId ? msg.toUserId : msg.fromUserId;
 
-      _messages[otherId] = [...(_messages[otherId] ?? []), msg];
-
-      // Update conversation preview
-      _updateConversationPreview(otherId, msg);
-
-      notifyListeners();
+      // Avoid duplicates - check if message already exists
+      final existing = _messages[otherId] ?? [];
+      final exists = existing.any((m) => m.id == msg.id || 
+        (m.id.startsWith('temp_') && m.message == msg.message && 
+         (m.createdAt.difference(msg.createdAt).inSeconds.abs() < 2)));
+      
+      if (!exists) {
+        _messages[otherId] = [...existing, msg];
+        // Update conversation preview
+        _updateConversationPreview(otherId, msg);
+        notifyListeners();
+      }
     });
 
     _socket!.on('disconnect', (_) => debugPrint('[ChatProvider] Socket disconnected'));
@@ -176,14 +182,8 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       // ✅ Calls POST /v1/chat/:userId  { message }
+      // Backend now handles socket emission, so we don't need to emit 'send-message'
       final response = await _api.post('chat/$toUserId', {'message': message});
-
-      // Emit via socket for real-time delivery to recipient
-      _socket?.emit('send-message', {
-        'fromUserId': _myUserId,
-        'toUserId':   toUserId,
-        'message':    message,
-      });
 
       // Replace temp message with real one from server (POST returns full message object at root)
       final msgMap = response is Map<String, dynamic> ? response : null;
@@ -196,8 +196,10 @@ class ChatProvider extends ChangeNotifier {
         currentUserId: _myUserId!,
         roomId: toUserId,
       );
+      
+      // Remove temp message and add real one (avoid duplicates)
       _messages[toUserId] = (_messages[toUserId] ?? [])
-          .where((m) => m.id != tempMsg.id)
+          .where((m) => m.id != tempMsg.id && m.id != savedMsg.id)
           .toList()
         ..add(savedMsg);
 

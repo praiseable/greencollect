@@ -81,6 +81,10 @@ router.post('/:userId', authenticate, async (req, res) => {
     const { message } = req.body;
     const msg = await prisma.chatMessage.create({
       data: { fromUserId: req.user.id, toUserId: req.params.userId, message },
+      include: {
+        fromUser: { select: { id: true, firstName: true, lastName: true, displayName: true } },
+        toUser: { select: { id: true, firstName: true, lastName: true, displayName: true } },
+      },
     });
 
     const senderName = [req.user.firstName, req.user.lastName].filter(Boolean).join(' ').trim()
@@ -91,12 +95,36 @@ router.post('/:userId', authenticate, async (req, res) => {
         type: 'CHAT_MESSAGE',
         title: `Message from ${senderName}`,
         body: message.substring(0, 100),
-        data: { fromUserId: req.user.id },
+        data: { fromUserId: req.user.id, chatUserId: req.params.userId },
       },
     });
 
+    // Emit socket events for real-time delivery
+    const io = req.app.get('io');
+    if (io) {
+      // Emit to chat room (both users)
+      const room = [req.user.id, req.params.userId].sort().join('-');
+      io.to(`chat-${room}`).emit('new-message', {
+        id: msg.id,
+        fromUserId: msg.fromUserId,
+        toUserId: msg.toUserId,
+        message: msg.message,
+        createdAt: msg.createdAt.toISOString(),
+        isRead: msg.isRead,
+      });
+
+      // Emit notification to recipient's personal room
+      io.to(`user-${req.params.userId}`).emit('notification', {
+        type: 'CHAT_MESSAGE',
+        title: `Message from ${senderName}`,
+        body: message.substring(0, 100),
+        data: { fromUserId: req.user.id, chatUserId: req.params.userId },
+      });
+    }
+
     res.status(201).json(msg);
   } catch (err) {
+    console.error('POST /chat/:userId error:', err);
     res.status(500).json({ error: { message: 'Failed to send message' } });
   }
 });
