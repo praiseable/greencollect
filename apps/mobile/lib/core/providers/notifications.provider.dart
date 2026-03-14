@@ -1,21 +1,87 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../../services/api_service.dart';
+import '../../services/storage_service.dart';
+import '../../config/api_config.dart';
 import '../models/notification.model.dart';
 
 // ✅ FIX: Removed all MockService/MockData usage.
 //          Now fetches notifications from real backend via ApiService.
+//          Also listens to socket notifications for real-time updates.
 
 /// Riverpod provider used by NotificationsScreen (ref.watch(notificationsProvider))
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, List<NotificationModel>>((ref) {
-  return NotificationsNotifier()..fetchNotifications();
+  return NotificationsNotifier()..init();
 });
 
 class NotificationsNotifier extends StateNotifier<List<NotificationModel>> {
   final ApiService _api = ApiService();
+  final StorageService _storage = StorageService();
+  io.Socket? _socket;
 
   NotificationsNotifier() : super([]);
+
+  Future<void> init() async {
+    await fetchNotifications();
+    await _initSocket();
+  }
+
+  Future<void> _initSocket() async {
+    final token = await _storage.getAccessToken();
+    if (token == null) return;
+
+    // Connect to socket for real-time notifications
+    _socket = io.io(
+      ApiConfig.effectiveSocketUrl,
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token})
+          .disableAutoConnect()
+          .build(),
+    );
+
+    _socket!.connect();
+
+    _socket!.on('connect', (_) async {
+      debugPrint('[NotificationsProvider] Socket connected');
+      // Join personal room for notifications
+      final user = await _storage.getUser();
+      final userId = user?['id']?.toString();
+      if (userId != null && userId.isNotEmpty) {
+        _socket!.emit('join-room', userId);
+        debugPrint('[NotificationsProvider] Joined user room: user-$userId');
+      }
+    });
+
+    // Listen for real-time notifications
+    _socket!.on('notification', (data) {
+      debugPrint('[NotificationsProvider] Received socket notification: $data');
+      try {
+        final notifData = data as Map<String, dynamic>;
+        // Convert socket notification to NotificationModel
+        final notification = NotificationModel(
+          id: 'socket_${DateTime.now().millisecondsSinceEpoch}',
+          type: NotificationType.fromString(notifData['type'] as String? ?? 'system'),
+          title: notifData['title'] as String? ?? '',
+          body: notifData['body'] as String? ?? '',
+          data: notifData['data'] as Map<String, dynamic>? ?? {},
+          isRead: false,
+          createdAt: DateTime.now(),
+        );
+        
+        // Add to beginning of list (newest first)
+        state = [notification, ...state];
+        debugPrint('[NotificationsProvider] Added notification: ${notification.title}');
+      } catch (e) {
+        debugPrint('[NotificationsProvider] Error processing socket notification: $e');
+      }
+    });
+
+    _socket!.on('disconnect', (_) => debugPrint('[NotificationsProvider] Socket disconnected'));
+    _socket!.on('error', (e) => debugPrint('[NotificationsProvider] Socket error: $e'));
+  }
 
   Future<void> fetchNotifications({bool refresh = false}) async {
     try {
@@ -56,6 +122,8 @@ class NotificationsNotifier extends StateNotifier<List<NotificationModel>> {
 /// ChangeNotifier version for code using Provider.of<NotificationsProvider>
 class NotificationsProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
+  final StorageService _storage = StorageService();
+  io.Socket? _socket;
 
   List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
@@ -66,6 +134,64 @@ class NotificationsProvider extends ChangeNotifier {
   int     get unreadCount => _unreadCount;
   bool    get loading     => _loading;
   String? get error       => _error;
+
+  // ── Initialize socket connection for real-time notifications ─────────────
+  Future<void> initSocket() async {
+    if (_socket != null && _socket!.connected) return;
+    
+    final token = await _storage.getAccessToken();
+    if (token == null) return;
+
+    _socket = io.io(
+      ApiConfig.effectiveSocketUrl,
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token})
+          .disableAutoConnect()
+          .build(),
+    );
+
+    _socket!.connect();
+
+    _socket!.on('connect', (_) async {
+      debugPrint('[NotificationsProvider] Socket connected');
+      final user = await _storage.getUser();
+      final userId = user?['id']?.toString();
+      if (userId != null && userId.isNotEmpty) {
+        _socket!.emit('join-room', userId);
+        debugPrint('[NotificationsProvider] Joined user room: user-$userId');
+      }
+    });
+
+    // Listen for real-time notifications
+    _socket!.on('notification', (data) {
+      debugPrint('[NotificationsProvider] Received socket notification: $data');
+      try {
+        final notifData = data as Map<String, dynamic>;
+        // Convert socket notification to NotificationModel
+        final notification = NotificationModel(
+          id: 'socket_${DateTime.now().millisecondsSinceEpoch}',
+          type: NotificationType.fromString(notifData['type'] as String? ?? 'system'),
+          title: notifData['title'] as String? ?? '',
+          body: notifData['body'] as String? ?? '',
+          data: notifData['data'] as Map<String, dynamic>? ?? {},
+          isRead: false,
+          createdAt: DateTime.now(),
+        );
+        
+        // Add to beginning of list (newest first)
+        _notifications = [notification, ..._notifications];
+        _unreadCount = _notifications.where((n) => !n.isRead).length;
+        notifyListeners();
+        debugPrint('[NotificationsProvider] Added notification: ${notification.title}');
+      } catch (e) {
+        debugPrint('[NotificationsProvider] Error processing socket notification: $e');
+      }
+    });
+
+    _socket!.on('disconnect', (_) => debugPrint('[NotificationsProvider] Socket disconnected'));
+    _socket!.on('error', (e) => debugPrint('[NotificationsProvider] Socket error: $e'));
+  }
 
   // ── Fetch notifications ──────────────────────────────────────────────────
   Future<void> fetchNotifications({bool refresh = false}) async {
@@ -85,6 +211,11 @@ class NotificationsProvider extends ChangeNotifier {
 
       _notifications = raw.map((e) => NotificationModel.fromJson(e)).toList();
       _unreadCount   = _notifications.where((n) => !n.isRead).length;
+      
+      // Initialize socket if not already done
+      if (_socket == null || !_socket!.connected) {
+        await initSocket();
+      }
     } catch (e) {
       _error = _parseError(e, 'Failed to load notifications');
     } finally {
