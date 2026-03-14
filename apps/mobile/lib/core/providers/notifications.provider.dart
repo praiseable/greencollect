@@ -169,12 +169,22 @@ class NotificationsProvider extends ChangeNotifier {
       try {
         final notifData = data as Map<String, dynamic>;
         // Convert socket notification to NotificationModel
+        final notifType = notifData['type'] as String? ?? 'system';
+        final normalizedType = NotificationModel._normalizeType(notifType);
+        final notifDataMap = notifData['data'] as Map<String, dynamic>? ?? {};
+        final dataStr = <String, String>{};
+        for (final e in notifDataMap.entries) {
+          if (e.value != null) dataStr[e.key.toString()] = e.value.toString();
+        }
+        
         final notification = NotificationModel(
           id: 'socket_${DateTime.now().millisecondsSinceEpoch}',
-          type: NotificationType.fromString(notifData['type'] as String? ?? 'system'),
+          type: normalizedType,
           title: notifData['title'] as String? ?? '',
+          titleUr: '',
           body: notifData['body'] as String? ?? '',
-          data: notifData['data'] as Map<String, dynamic>? ?? {},
+          bodyUr: '',
+          data: dataStr,
           isRead: false,
           createdAt: DateTime.now(),
         );
