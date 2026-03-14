@@ -1,7 +1,7 @@
 {
   "name": "@gc-app/shared",
   "version": "1.0.0",
-  "description": "Shared constants and utilities for GreenCollect",
+  "description": "Shared constants and utilities for Kabariya",
   "main": "src/constants.js",
   "scripts": {},
   "keywords": [],

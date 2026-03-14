@@ -1,4 +1,4 @@
-package com.greencollect.app
+package com.kabariya.app
 
 import io.flutter.embedding.android.FlutterActivity
 

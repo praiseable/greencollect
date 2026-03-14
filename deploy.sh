@@ -5,7 +5,7 @@ DOMAIN="gc.directconnect.services"
 EMAIL="admin@directconnect.services"
 
 echo "============================================"
-echo " Kabariya — Production Deployment"
+echo "Kabariya — Production Deployment"
 echo " Geo-Franchise Marketplace Platform"
 echo "============================================"
 echo ""
@@ -138,7 +138,7 @@ fi
 # 8. Wait for database
 echo "Waiting for database to be ready..."
 RETRIES=40
-until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U gcadmin -d greencollect 2>/dev/null; do
+until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U gcadmin -d kabariya 2>/dev/null; do
   RETRIES=$((RETRIES - 1))
   if [ $RETRIES -le 0 ]; then
     echo -e "${RED}Database did not become ready in time.${NC}"
@@ -219,6 +219,6 @@ echo " Useful Commands:"
 echo "   View logs:    docker compose -f docker-compose.prod.yml logs -f"
 echo "   Stop:         docker compose -f docker-compose.prod.yml down"
 echo "   Restart:      docker compose -f docker-compose.prod.yml restart"
-echo "   DB shell:     docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect"
+echo "   DB shell:     docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d kabariya"
 echo "   Rebuild:      docker compose -f docker-compose.prod.yml up -d --build"
 echo ""

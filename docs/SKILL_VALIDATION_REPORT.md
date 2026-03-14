@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-14  
 **Skill:** `app-development` (multi-portal-unified-backend)  
-**Project:** gc-app (GreenCollect/Kabariya)
+**Project:** gc-app (Kabariya)
 
 ---
 

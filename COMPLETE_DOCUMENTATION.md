@@ -1,4 +1,4 @@
-# GreenCollect / Kabariya — Complete Project Documentation
+# Kabariya — Complete Project Documentation
 
 > **Single consolidated documentation file** — Everything in one place.  
 > Last consolidated: March 2026.
@@ -32,7 +32,7 @@
 
 ## 1. Main README
 
-# 🌍 GreenCollect — Geo-Franchise Marketplace Platform
+# 🌍 Kabariya — Geo-Franchise Marketplace Platform
 
 > **Pakistan's leading B2B/B2C marketplace for recyclable and reusable goods**  
 > Trade scrap, metals, plastics, electronics, furniture, and more with geo-fenced, franchise-controlled supply chains.
@@ -44,7 +44,7 @@
 
 ### Overview
 
-**GreenCollect** is a production-grade, geo-fenced, franchise-based marketplace platform designed for trading recyclable and reusable goods. Built with Pakistan as the primary market.
+**Kabariya** is a production-grade, geo-fenced, franchise-based marketplace platform designed for trading recyclable and reusable goods. Built with Pakistan as the primary market.
 
 ### Tech Stack
 
@@ -61,7 +61,7 @@
 ### Quick Start
 
 ```bash
-git clone https://github.com/praiseable/greencollect.git
+git clone https://github.com/praiseable/kabariya.git
 cd gc-app
 docker compose up -d
 docker compose exec backend npx prisma db push
@@ -74,7 +74,7 @@ docker compose exec backend node prisma/seed.js
 
 ### Default Admin (after seed)
 
-- **Email**: `admin@greencollect.pk` or `admin@marketplace.pk`
+- **Email**: `admin@kabariya.pk` or `admin@marketplace.pk`
 - **Password**: `Admin@123` or `Admin@123456`
 - **Role**: SUPER_ADMIN
 
@@ -176,8 +176,8 @@ cd apps/web-admin && npm run build
 
 ## 5. APK Build Summary
 
-- **Customer**: `app-customer-release.apk` — Package `com.greencollect.app`
-- **Pro**: `app-pro-release.apk` — Package `com.greencollect.app.pro`
+- **Customer**: `app-customer-release.apk` — Package `com.kabariya.app`
+- **Pro**: `app-pro-release.apk` — Package `com.kabariya.app.pro`
 - **Build**: `flutter build apk --release --flavor customer --dart-define=APP_VARIANT=customer` (and pro variant).
 - **Install**: `adb install -r apps/mobile/build/app/outputs/flutter-apk/app-customer-release.apk`
 
@@ -256,7 +256,7 @@ cd apps/web-admin && npm run build
 - **Creating listing**: Title, category, quantity, unit, price, location (map), description, photos (max 5).
 - **Contacting**: Chat, Call, Get directions.
 - **Dealers**: Dashboard, listings, orders, analytics, subscription.
-- **Admins**: Dashboard, users, categories/product types/units, geo-zones, translations, currencies, payments, subscriptions, analytics, audit logs. Access: https://gc.directconnect.services/admin (or :8080). Default: admin@greencollect.pk / Admin@123.
+- **Admins**: Dashboard, users, categories/product types/units, geo-zones, translations, currencies, payments, subscriptions, analytics, audit logs. Access: https://gc.directconnect.services/admin (or :8080). Default: admin@kabariya.pk / Admin@123.
 - **Mobile**: Home, create listing (with map picker), listing detail, notifications, profile. Offline: cached listings.
 - **Troubleshooting**: Login, listing not appearing, map, image upload, payment issues.
 
@@ -269,7 +269,7 @@ cd apps/web-admin && npm run build
 - **Quick start**: backend/.env (DATABASE_URL, REDIS_URL, JWT_SECRET, PORT), `npm install`, `npx prisma db push`, `node prisma/seed.js`, `npm run dev` (port 4000).
 - **API**: Auth, Listings, Categories, ProductTypes, Units, GeoZones, Users, Notifications, Chat, Transactions, Subscriptions, Payments, Languages, Translations, Currencies, Countries, Admin (dashboard, users, etc.).
 - **WebSocket**: connection, new_listing, new_notification, chat_message, join_room.
-- **Docker**: Dockerfile (Alpine), port 4000. Default admin: admin@greencollect.pk / Admin@123.
+- **Docker**: Dockerfile (Alpine), port 4000. Default admin: admin@kabariya.pk / Admin@123.
 
 ---
 
@@ -278,7 +278,7 @@ cd apps/web-admin && npm run build
 - **Stack**: React 18, Vite, TailwindCSS, React Router, Axios.
 - **Structure**: src/App.jsx, pages/* (Login, Dashboard, Users, Categories, ProductTypes, Units, Listings, GeoZones, Languages, Translations, Countries, Currencies, Payments, Subscriptions, Analytics, Notifications), services/api.js.
 - **Quick start**: .env (VITE_API_BASE_URL), `npm run dev` (e.g. 5174).
-- **Admin login**: admin@greencollect.pk / Admin@123.
+- **Admin login**: admin@kabariya.pk / Admin@123.
 - **Routes**: /login, /dashboard, /users, /catalog/*, /listings, /geo-zones, /languages, /translations, /countries, /currencies, /payments, /subscriptions, /analytics, /notifications; plus Marketplace (same as app): /marketplace, listings, create, profile, chat, transactions, wallet.
 - **Docker**: docker build -t gc-web-admin; docker run -p 3002:80.
 
@@ -301,7 +301,7 @@ cd apps/web-admin && npm run build
 - **Run**: `flutter pub get`, `flutter run` or `flutter run -d emulator-5554`.
 - **Build**: `flutter build apk --debug` | `--release` | `--split-per-abi`; `flutter build appbundle --release`.
 - **Variants**: APP_VARIANT=customer (Kabariya) or pro (Kabariya Pro). Flavors: customer, pro.
-- **Test accounts**: See Test Users section above. Config: Google Maps API key in AndroidManifest; package com.greencollect.app, minSdk 24, targetSdk 35.
+- **Test accounts**: See Test Users section above. Config: Google Maps API key in AndroidManifest; package com.kabariya.app, minSdk 24, targetSdk 35.
 
 ---
 

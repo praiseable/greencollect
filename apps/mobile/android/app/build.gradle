@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.greencollect.app"
+    namespace = "com.kabariya.app"
     compileSdk = 35
     ndkVersion = "25.1.8937393"
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.greencollect.app"
+        applicationId = "com.kabariya.app"
         minSdk = 24
         targetSdk = 35
         versionCode = flutter.versionCode

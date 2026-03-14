@@ -3,13 +3,13 @@ services:
     image: postgis/postgis:15-3.3
     restart: always
     environment:
-      POSTGRES_DB: greencollect
+      POSTGRES_DB: kabariya
       POSTGRES_USER: gcadmin
       POSTGRES_PASSWORD: GC_Str0ng_Passw0rd_2026!
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gcadmin -d greencollect"]
+      test: ["CMD-SHELL", "pg_isready -U gcadmin -d kabariya"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,7 +34,7 @@ services:
       # Set to "true" to accept test OTPs 123456/111111 and return OTP in API (for staging/testing). Remove or set to "false" for real production.
       ALLOW_TEST_OTP: "true"
       PORT: 4000
-      DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/greencollect
+      DATABASE_URL: postgresql://gcadmin:GC_Str0ng_Passw0rd_2026!@db:5432/kabariya
       REDIS_URL: redis://:GC_Redis_Pass_2026!@redis:6379
       JWT_SECRET: gc_jwt_prod_s3cr3t_k3y_2026_x7m9q
       JWT_REFRESH_SECRET: gc_jwt_refresh_pr0d_k3y_2026_r4n8p

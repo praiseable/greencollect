@@ -93,7 +93,7 @@ OTPs are stored in the **`OTP`** table (Prisma model `OTP`).
 
 ```bash
 # From host (replace with your DB container/service name and credentials)
-docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d greencollect -c \
+docker compose -f docker-compose.prod.yml exec db psql -U gcadmin -d kabariya -c \
   "SELECT phone, code, purpose, \"expiresAt\", \"isUsed\", \"createdAt\" FROM \"OTP\" ORDER BY \"createdAt\" DESC LIMIT 20;"
 ```
 

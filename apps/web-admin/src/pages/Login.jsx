@@ -51,7 +51,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-green-600">GreenCollect</h1>
+          <h1 className="text-3xl font-bold text-green-600">Kabariya</h1>
           <p className="text-gray-500 mt-1">Admin Portal</p>
         </div>
 
@@ -66,7 +66,7 @@ export default function Login() {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="admin@greencollect.pk"
+              placeholder="admin@kabariya.pk"
             />
           </div>
 
