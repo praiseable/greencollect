@@ -63,23 +63,31 @@ class ChatProvider extends ChangeNotifier {
 
     // ✅ Receive new messages from backend
     _socket!.on('new-message', (data) {
-      final msg = ChatMessageModel.fromJson(
-        data as Map<String, dynamic>,
-        currentUserId: _myUserId ?? '',
-      );
-      final otherId = msg.fromUserId == _myUserId ? msg.toUserId : msg.fromUserId;
+      debugPrint('[ChatProvider] Received new-message via socket: $data');
+      try {
+        final msg = ChatMessageModel.fromJson(
+          data as Map<String, dynamic>,
+          currentUserId: _myUserId ?? '',
+        );
+        final otherId = msg.fromUserId == _myUserId ? msg.toUserId : msg.fromUserId;
 
-      // Avoid duplicates - check if message already exists
-      final existing = _messages[otherId] ?? [];
-      final exists = existing.any((m) => m.id == msg.id || 
-        (m.id.startsWith('temp_') && m.message == msg.message && 
-         (m.createdAt.difference(msg.createdAt).inSeconds.abs() < 2)));
-      
-      if (!exists) {
-        _messages[otherId] = [...existing, msg];
-        // Update conversation preview
-        _updateConversationPreview(otherId, msg);
-        notifyListeners();
+        // Avoid duplicates - check if message already exists
+        final existing = _messages[otherId] ?? [];
+        final exists = existing.any((m) => m.id == msg.id || 
+          (m.id.startsWith('temp_') && m.message == msg.message && 
+           (m.createdAt.difference(msg.createdAt).inSeconds.abs() < 2)));
+        
+        if (!exists) {
+          _messages[otherId] = [...existing, msg];
+          // Update conversation preview
+          _updateConversationPreview(otherId, msg);
+          debugPrint('[ChatProvider] Added new message to chat with $otherId (current chat: $_currentChatUserId)');
+          notifyListeners();
+        } else {
+          debugPrint('[ChatProvider] Message already exists, skipping duplicate');
+        }
+      } catch (e) {
+        debugPrint('[ChatProvider] Error processing new-message: $e');
       }
     });
 
@@ -172,13 +180,18 @@ class ChatProvider extends ChangeNotifier {
       final response = await _api.get('chat/$otherUserId');
       final List<dynamic> raw =
           (response['messages'] ?? response['data'] ?? response) as List<dynamic>;
-      _messages[otherUserId] =
-          raw.map((e) => ChatMessageModel.fromJson(
-                e as Map<String, dynamic>,
-                currentUserId: _myUserId ?? '',
-                roomId: otherUserId,
-              )).toList();
+      final fetchedMessages = raw.map((e) => ChatMessageModel.fromJson(
+            e as Map<String, dynamic>,
+            currentUserId: _myUserId ?? '',
+            roomId: otherUserId,
+          )).toList();
+      
+      // Replace existing messages with fetched ones (API is source of truth)
+      // This ensures we have all messages even if socket missed some
+      _messages[otherUserId] = fetchedMessages;
+      debugPrint('[ChatProvider] Fetched ${fetchedMessages.length} messages for $otherUserId');
     } catch (e) {
+      debugPrint('[ChatProvider] Error fetching messages: $e');
       _error = _parseError(e, 'Failed to load messages');
     } finally {
       _loading = false;
