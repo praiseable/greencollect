@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/listings.provider.dart';
 import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 import '../../widgets/listing_card.dart';
-import '../listings/listings_screen.dart';
 import '../listings/listing_detail_screen.dart';
-import '../listings/create_listing_screen.dart';
 
 // ✅ FIX: Removed all MockData references.
 //          Categories and listings now come from real API via ListingsProvider.
@@ -100,7 +99,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined, color: Colors.black87),
-            onPressed: () => Navigator.pushNamed(context, '/notifications'),
+            onPressed: () => context.go('/notifications'),
           ),
         ],
       ),
@@ -240,12 +239,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         }
                         final listing = provider.listings[i];
                         return GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ListingDetailScreen(listingId: listing.id),
-                            ),
-                          ),
+                          onTap: () => context.push('/listing/${listing.id}'),
                           child: ListingCard(listing: listing),
                         );
                       },
@@ -266,10 +260,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CreateListingScreen()),
-        ),
+        onPressed: () => context.go('/create'),
         backgroundColor: Colors.green,
         icon: const Icon(Icons.add),
         label: const Text('List Item'),

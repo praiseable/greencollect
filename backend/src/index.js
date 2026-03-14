@@ -1,8 +1,14 @@
 require('dotenv').config();
+
+// Validate config FIRST (skill requirement)
+const { validateConfig } = require('./config/validate');
+validateConfig();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -32,8 +38,12 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,
 }));
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true, // Required for HttpOnly cookies
+}));
 app.use(morgan('dev'));
+app.use(cookieParser()); // Parse cookies (required for refresh token cookies)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

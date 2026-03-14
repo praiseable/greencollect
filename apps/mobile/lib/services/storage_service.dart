@@ -11,8 +11,14 @@ class StorageService {
   final _secureStorage = const FlutterSecureStorage();
 
   // Auth Token
-  Future<void> setToken(String token) async {
+  Future<void> setToken(String token, [int? expiresInSeconds]) async {
     await _secureStorage.write(key: ApiConfig.tokenKey, value: token);
+    // Store expiry timestamp for proactive refresh (skill requirement)
+    if (expiresInSeconds != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final expiresAt = DateTime.now().millisecondsSinceEpoch + (expiresInSeconds * 1000);
+      await prefs.setInt(ApiConfig.tokenExpiresAtKey, expiresAt);
+    }
   }
 
   Future<String?> getToken() async {
@@ -22,8 +28,17 @@ class StorageService {
   /// Alias for getToken() — used by ApiService in fixes
   Future<String?> getAccessToken() async => getToken();
 
+  /// Check if token expires soon (for proactive refresh)
+  Future<bool> isTokenExpiringSoon([int thresholdSeconds = 60]) async {
+    final prefs = await SharedPreferences.getInstance();
+    final expiresAt = prefs.getInt(ApiConfig.tokenExpiresAtKey);
+    if (expiresAt == null) return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return (expiresAt - now) < (thresholdSeconds * 1000);
+  }
+
   /// Aliases for fix auth/chat providers
-  Future<void> saveAccessToken(String token) async => setToken(token);
+  Future<void> saveAccessToken(String token, [int? expiresInSeconds]) async => setToken(token, expiresInSeconds);
   Future<void> saveRefreshToken(String token) async => setRefreshToken(token);
   Future<void> saveUser(Map<String, dynamic>? user) async {
     if (user != null) await setUser(user);
@@ -68,5 +83,6 @@ class StorageService {
     await _secureStorage.delete(key: ApiConfig.refreshTokenKey);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(ApiConfig.userKey);
+    await prefs.remove(ApiConfig.tokenExpiresAtKey); // Clear expiry timestamp
   }
 }

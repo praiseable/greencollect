@@ -1,9 +1,11 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
+const { portalCheck } = require('../middleware/portalCheck');
+const { Portal } = require('../../../packages/shared/src/constants');
 
-// Admin-only routes
-router.use(authenticate, authorize('SUPER_ADMIN', 'ADMIN'));
+// Admin-only routes - require admin portal token
+router.use(authenticate, authorize('SUPER_ADMIN', 'ADMIN'), portalCheck(Portal.ADMIN));
 
 // GET /admin/dashboard — Dashboard stats
 router.get('/dashboard', async (req, res) => {

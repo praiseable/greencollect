@@ -1,6 +1,9 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
+const { auditLog } = require('../middleware/auditLog');
+const { idempotency } = require('../middleware/idempotency');
+const { created, ok, noContent } = require('../utils/dto');
 
 // GET /categories — Category tree (public, with translations)
 router.get('/', optionalAuth, async (req, res) => {
@@ -109,7 +112,7 @@ router.get('/:id/product-types', optionalAuth, async (req, res) => {
 });
 
 // POST /categories — Create category (admin)
-router.post('/', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
+router.post('/', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), idempotency(), auditLog('Category', (req) => null, (req) => req.body), async (req, res) => {
   try {
     const { slug, parentId, colorHex, icon, sortOrder, translations } = req.body;
 
@@ -131,7 +134,7 @@ router.post('/', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, re
       include: { translations: true },
     });
 
-    res.status(201).json(category);
+    res.status(201).json(created(category));
   } catch (err) {
     console.error('Create category error:', err);
     res.status(500).json({ error: { message: 'Failed to create category' } });
@@ -139,7 +142,7 @@ router.post('/', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, re
 });
 
 // PUT /categories/:id — Update category (admin)
-router.put('/:id', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
+router.put('/:id', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), auditLog('Category', (req) => req.params.id, (req) => req.body), async (req, res) => {
   try {
     const { slug, parentId, colorHex, icon, sortOrder, isActive } = req.body;
     const data = {};
@@ -156,7 +159,7 @@ router.put('/:id', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, 
       include: { translations: true },
     });
 
-    res.json(category);
+    res.json(ok(category));
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to update category' } });
   }
@@ -178,10 +181,10 @@ router.post('/:id/translations', authenticate, authorize('SUPER_ADMIN', 'ADMIN')
 });
 
 // DELETE /categories/:id — Soft delete
-router.delete('/:id', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
+router.delete('/:id', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), auditLog('Category', (req) => req.params.id), async (req, res) => {
   try {
     await prisma.category.update({ where: { id: req.params.id }, data: { isActive: false } });
-    res.json({ message: 'Category deactivated' });
+    res.json(noContent());
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to delete category' } });
   }

@@ -1,0 +1,10 @@
+{
+  "name": "@gc-app/shared",
+  "version": "1.0.0",
+  "description": "Shared constants and utilities for GreenCollect",
+  "main": "src/constants.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

@@ -1,36 +1,25 @@
-import axios from 'axios';
+import api, { tokenStore } from './api-client';
+import { PORTAL_CONFIG } from '../config/portal';
 
-// ✅ FIX: Must be set at build time via VITE_API_URL env variable
-// Fallback '/api' only works if nginx is proxying on the same origin
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
-const api = axios.create({ baseURL: API_BASE });
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin_refresh_token');
-      localStorage.removeItem('admin_user');
-      // ✅ FIX: Route is '/login' not '/admin/login'
-      window.location.href = '/login';
-    }
-    return Promise.reject(err);
-  }
-);
-
+// Re-export api for backward compatibility
 export default api;
 
 // ── Auth ────────────────────────────────────────────────────────────────────
-// ✅ FIX: Use /auth/admin-login (enforces admin/super_admin role server-side)
-export const login = (data) => api.post('/auth/admin-login', data);
+// Use portal-specific login endpoint (skill-compliant)
+export const login = async (data) => {
+  const response = await api.post(PORTAL_CONFIG.loginEndpoint, data);
+  // Store access token with expiry (skill requirement)
+  // Refresh token is in HttpOnly cookie - not in response body
+  if (response.data.accessToken) {
+    tokenStore.set(response.data.accessToken, response.data.expiresIn || 900);
+    // Note: refreshToken not in response - it's in HttpOnly cookie
+    if (response.data.user) {
+      localStorage.setItem('admin_user', JSON.stringify(response.data.user));
+    }
+  }
+  return response;
+};
+
 export const getMe = () => api.get('/auth/me');
 
 // ── Dashboard ───────────────────────────────────────────────────────────────

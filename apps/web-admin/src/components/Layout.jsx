@@ -7,7 +7,7 @@ import {
   FiMenu, FiX, FiChevronDown, FiChevronRight, FiPackage, FiSettings,
   FiMessageCircle, FiFileText, FiShoppingBag
 } from 'react-icons/fi';
-import { getNotifications, markAllRead } from '../services/api';
+import api, { getNotifications, markAllRead } from '../services/api';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: FiHome },
@@ -95,9 +95,14 @@ export default function Layout() {
     return () => clearInterval(iv);
   }, [fetchNotifs]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_user');
+  const handleLogout = async () => {
+    // Use tokenStore.clear() to clear all token-related storage
+    const { tokenStore } = await import('../services/api-client');
+    // Also call logout endpoint
+    try {
+      await api.post('/auth/logout');
+    } catch (e) { /* ignore */ }
+    tokenStore.clear();
     toast.info('Logged out');
     navigate('/login');
   };

@@ -53,14 +53,23 @@ class ApiService {
 
   // ── Build headers with auth token ────────────────────────────────────────
   /// Proactively refreshes access token if it expires in the next [_refreshBeforeExpirySeconds].
+  /// Uses stored expiry timestamp first (faster), falls back to JWT decoding.
   Future<Map<String, String>> _headers() async {
     String? token = await _storage.getAccessToken();
     final lang = await _storage.getLanguage() ?? 'en';
 
     if (token != null && token.isNotEmpty) {
-      final exp = _tokenExpiry(token);
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      if (exp != null && exp <= now + _refreshBeforeExpirySeconds) {
+      // Check stored expiry timestamp first (skill requirement - faster than JWT decode)
+      bool shouldRefresh = await _storage.isTokenExpiringSoon(_refreshBeforeExpirySeconds);
+      
+      // Fallback to JWT exp claim if timestamp not available
+      if (!shouldRefresh) {
+        final exp = _tokenExpiry(token);
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        shouldRefresh = exp != null && exp <= now + _refreshBeforeExpirySeconds;
+      }
+      
+      if (shouldRefresh) {
         final refreshed = await _doRefresh();
         if (refreshed) token = await _storage.getAccessToken();
       }
@@ -96,8 +105,9 @@ class ApiService {
         return false;
       }
 
-      if (kDebugMode) debugPrint('[API] Sending refresh token request to auth/refresh-token');
-      final uri = _uri('auth/refresh-token');
+      if (kDebugMode) debugPrint('[API] Sending refresh token request to auth/refresh');
+      // Use new skill-compliant endpoint (backward compatible with /auth/refresh-token)
+      final uri = _uri('auth/refresh');
       final res = await _client.post(
         uri,
         headers: {
@@ -111,9 +121,10 @@ class ApiService {
       final data = jsonDecode(res.body) as Map<String, dynamic>?;
       final accessToken = data?['accessToken'] as String?;
       final newRefreshToken = data?['refreshToken'] as String?;
+      final expiresIn = data?['expiresIn'] as int? ?? 900; // Default 15 minutes
       if (accessToken == null || accessToken.isEmpty) return false;
 
-      await _storage.saveAccessToken(accessToken);
+      await _storage.saveAccessToken(accessToken, expiresIn);
       if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
         await _storage.saveRefreshToken(newRefreshToken);
       }
@@ -180,9 +191,22 @@ class ApiService {
   }
 
   /// On 401: try refresh once, retry request, then parse. If still 401 or refresh fails, clear session and throw.
+  /// Checks X-Token-Error header to distinguish expired vs invalid tokens (skill requirement).
   Future<dynamic> _requestWithRefreshRetry(Future<http.Response> Function() request) async {
     http.Response res = await request();
     if (res.statusCode == 401) {
+      // Check X-Token-Error header (skill requirement)
+      final tokenError = res.headers['x-token-error'] ?? 
+                        (res.headers['x-token-expired'] == 'true' ? 'tokenExpired' : null);
+      
+      // If token is invalid (tampered/revoked), don't try refresh - clear session immediately
+      if (tokenError == 'tokenInvalid') {
+        if (kDebugMode) debugPrint('[API] Token invalid (X-Token-Error: tokenInvalid) - clearing session');
+        _clearSession();
+        _parse(res);
+      }
+      
+      // Try refresh for expired tokens
       final refreshed = await _doRefresh();
       if (refreshed) res = await request();
       if (res.statusCode == 401) {
@@ -195,7 +219,7 @@ class ApiService {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
-    return _requestWithRefreshRetry(() => _client.get(
+    return _requestWithRefreshRetry(() async => _client.get(
       _uri(path, queryParams: queryParams),
       headers: await _headers(),
     ).timeout(ApiConfig.receiveTimeout));
@@ -222,7 +246,7 @@ class ApiService {
 
   // ── PUT ──────────────────────────────────────────────────────────────────
   Future<dynamic> put(String path, [Map<String, dynamic>? body]) async {
-    return _requestWithRefreshRetry(() => _client.put(
+    return _requestWithRefreshRetry(() async => _client.put(
       _uri(path),
       headers: await _headers(),
       body: body != null ? jsonEncode(body) : null,
@@ -231,7 +255,7 @@ class ApiService {
 
   // ── PATCH ────────────────────────────────────────────────────────────────
   Future<dynamic> patch(String path, [Map<String, dynamic>? body]) async {
-    return _requestWithRefreshRetry(() => _client.patch(
+    return _requestWithRefreshRetry(() async => _client.patch(
       _uri(path),
       headers: await _headers(),
       body: body != null ? jsonEncode(body) : null,
@@ -240,7 +264,7 @@ class ApiService {
 
   // ── DELETE ───────────────────────────────────────────────────────────────
   Future<dynamic> delete(String path) async {
-    return _requestWithRefreshRetry(() => _client.delete(
+    return _requestWithRefreshRetry(() async => _client.delete(
       _uri(path),
       headers: await _headers(),
     ).timeout(ApiConfig.receiveTimeout));

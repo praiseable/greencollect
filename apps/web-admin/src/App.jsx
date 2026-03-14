@@ -33,8 +33,11 @@ import TransactionsApp from './pages/TransactionsApp';
 import TransactionDetail from './pages/TransactionDetail';
 import Wallet from './pages/Wallet';
 
+import { tokenStore } from './services/api-client';
+
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem('admin_token');
+  // Check both new and old token keys for backward compatibility
+  const token = tokenStore.get();
   if (!token) return <Navigate to="/login" replace />;
   return children;
 }

@@ -49,16 +49,18 @@ class AuthProvider extends ChangeNotifier {
       final refreshToken = await _storage.getRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) return false;
 
-      final response = await _api.post('auth/refresh-token', {
+      // Use new skill-compliant endpoint (backward compatible)
+      final response = await _api.post('auth/refresh', {
         'refreshToken': refreshToken,
       });
 
       final newAccessToken  = response['accessToken']  as String?;
       final newRefreshToken = response['refreshToken'] as String?;
+      final expiresIn = response['expiresIn'] as int? ?? 900; // Default 15 minutes
 
       if (newAccessToken == null) return false;
 
-      await _storage.saveAccessToken(newAccessToken);
+      await _storage.saveAccessToken(newAccessToken, expiresIn);
       if (newRefreshToken != null) await _storage.saveRefreshToken(newRefreshToken);
 
       final profileRes = await _api.get('auth/me');
@@ -129,7 +131,8 @@ class AuthProvider extends ChangeNotifier {
       }
 
       debugPrint('[Auth] verifyOtp: success user=${userData != null ? userData['id'] : null}');
-      await _storage.saveAccessToken(accessToken);
+      final expiresIn = response['expiresIn'] as int? ?? 900; // Default 15 minutes
+      await _storage.saveAccessToken(accessToken, expiresIn);
       if (refreshToken != null) await _storage.saveRefreshToken(refreshToken);
 
       _user = userData != null ? UserModel.fromJson(userData) : null;
@@ -164,7 +167,8 @@ class AuthProvider extends ChangeNotifier {
 
       if (accessToken == null) throw Exception('No token in response');
 
-      await _storage.saveAccessToken(accessToken);
+      final expiresIn = response['expiresIn'] as int? ?? 900; // Default 15 minutes
+      await _storage.saveAccessToken(accessToken, expiresIn);
       if (refreshToken != null) await _storage.saveRefreshToken(refreshToken);
 
       _user = userData != null ? UserModel.fromJson(userData) : null;

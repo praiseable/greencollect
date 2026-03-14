@@ -34,6 +34,7 @@ class ApiConfig {
   // Storage keys
   static const String tokenKey = 'auth_token';
   static const String refreshTokenKey = 'refresh_token';
+  static const String tokenExpiresAtKey = 'token_expires_at'; // Expiry timestamp (skill requirement)
   static const String userKey = 'user_data';
   static const String languageKey = 'app_language';
 }

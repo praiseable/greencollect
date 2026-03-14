@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import api from '../services/api';
+import { tokenStore } from '../services/api-client';
 
 const useAuthStore = create((set, get) => ({
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
-  token: localStorage.getItem('token') || null,
+  user: JSON.parse(localStorage.getItem('user') || localStorage.getItem('dealer_user') || 'null'),
+  token: tokenStore.get(), // Use tokenStore for backward compatibility
   loading: false,
   error: null,
 
@@ -11,9 +12,15 @@ const useAuthStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { data } = await api.post('/auth/login', credentials);
-      localStorage.setItem('token', data.accessToken);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      // Use tokenStore to store access token (refresh token is in HttpOnly cookie)
+      if (data.accessToken) {
+        tokenStore.set(data.accessToken, data.expiresIn || 900);
+      }
+      // Note: refreshToken not in response - it's in HttpOnly cookie (skill requirement)
+      if (data.user) {
+        localStorage.setItem('dealer_user', JSON.stringify(data.user));
+        localStorage.setItem('user', JSON.stringify(data.user)); // Old key
+      }
       set({ user: data.user, token: data.accessToken, loading: false });
       return data;
     } catch (err) {
@@ -27,9 +34,15 @@ const useAuthStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { data } = await api.post('/auth/register', userData);
-      localStorage.setItem('token', data.accessToken);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      // Use tokenStore to store access token (refresh token is in HttpOnly cookie)
+      if (data.accessToken) {
+        tokenStore.set(data.accessToken, data.expiresIn || 900);
+      }
+      // Note: refreshToken not in response - it's in HttpOnly cookie (skill requirement)
+      if (data.user) {
+        localStorage.setItem('dealer_user', JSON.stringify(data.user));
+        localStorage.setItem('user', JSON.stringify(data.user)); // Old key
+      }
       set({ user: data.user, token: data.accessToken, loading: false });
       return data;
     } catch (err) {
@@ -41,23 +54,22 @@ const useAuthStore = create((set, get) => ({
 
   logout: () => {
     api.post('/auth/logout').catch(() => { });
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+    tokenStore.clear(); // Clears all token-related storage
     set({ user: null, token: null });
   },
 
   fetchProfile: async () => {
     try {
       const { data } = await api.get('/auth/me');
-      localStorage.setItem('user', JSON.stringify(data));
+      localStorage.setItem('dealer_user', JSON.stringify(data));
+      localStorage.setItem('user', JSON.stringify(data)); // Old key
       set({ user: data });
     } catch (err) {
       console.error('Failed to fetch profile:', err);
     }
   },
 
-  isAuthenticated: () => !!get().token,
+  isAuthenticated: () => !!tokenStore.get(), // Use tokenStore
 }));
 
 export default useAuthStore;

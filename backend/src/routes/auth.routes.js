@@ -5,16 +5,43 @@ const { body, validationResult } = require('express-validator');
 const prisma = require('../services/prisma');
 const { authenticate } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
+const { Portal, Role, ROLE_TO_PORTAL } = require('../../../packages/shared/src/constants');
+const { loginThrottle, resetLoginThrottle } = require('../middleware/loginThrottle');
+const { storeRefreshToken, getRefreshToken, deleteRefreshToken, deleteAllRefreshTokens } = require('../utils/refreshToken');
+const { setRefreshTokenCookie, clearRefreshTokenCookie, getRefreshTokenFromRequest } = require('../utils/cookieHelper');
+const { serializeUser, ok, created } = require('../utils/dto');
+const { auditLog } = require('../middleware/auditLog');
+const { idempotency } = require('../middleware/idempotency');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'gc_jwt_prod_s3cr3t_k3y_2026_x7m9q';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'gc_jwt_refresh_pr0d_k3y_2026_r4n8p';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d'; // Changed from 30d to 7d per skill
 
-// Generate tokens
-function generateTokens(userId, role) {
-  const accessToken = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-  const refreshToken = jwt.sign({ userId, role, type: 'refresh' }, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
+// Generate tokens with portal claim (skill-compliant JWT payload)
+function generateTokens(userId, role, email, portal = null) {
+  // Determine portal from role if not provided
+  const userPortal = portal || ROLE_TO_PORTAL[role] || Portal.CUSTOMER;
+  
+  // Convert role to roles array (skill requirement)
+  const roles = [role];
+  
+  // Skill-compliant JWT payload
+  const payload = {
+    sub: userId,           // User ID (skill uses 'sub' not 'userId')
+    email: email || null,
+    portal: userPortal,   // REQUIRED — portal claim
+    roles: roles,         // REQUIRED — array of roles
+    iat: Math.floor(Date.now() / 1000),
+  };
+  
+  const refreshPayload = {
+    ...payload,
+    type: 'refresh',
+  };
+  
+  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const refreshToken = jwt.sign(refreshPayload, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
   return { accessToken, refreshToken };
 }
 
@@ -63,18 +90,25 @@ router.post('/register', [
       select: { id: true, email: true, phone: true, firstName: true, lastName: true, role: true },
     });
 
-    const tokens = generateTokens(user.id, user.role);
+    const tokens = generateTokens(user.id, user.role, user.email);
+    const portal = ROLE_TO_PORTAL[user.role] || Portal.CUSTOMER;
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Store refresh token
-    await prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: tokens.refreshToken,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
-    });
+    // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+    await storeRefreshToken(user.id, portal, tokens.refreshToken, expiresAt);
 
-    res.status(201).json({ user, ...tokens });
+    // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
+    // Return access token in response (refresh token is in cookie, not response body)
+    // Use DTO serializer to prevent sensitive field exposure
+    res.status(201).json(created({
+      user: serializeUser(user),
+      accessToken: tokens.accessToken, // Only access token in response
+      expiresIn: 900, // 15 minutes in seconds
+      // Note: refreshToken not in response - it's in HttpOnly cookie
+      // Mobile apps can still use request body (backward compatible)
+    }));
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: { message: 'Registration failed', code: 'INTERNAL_ERROR' } });
@@ -107,16 +141,15 @@ router.post('/login', [
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
 
-    const tokens = generateTokens(user.id, user.role);
+    const tokens = generateTokens(user.id, user.role, user.email);
+    const portal = ROLE_TO_PORTAL[user.role] || Portal.CUSTOMER;
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Store refresh token
-    await prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: tokens.refreshToken,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
-    });
+    // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+    await storeRefreshToken(user.id, portal, tokens.refreshToken, expiresAt);
+
+    // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
 
     // Update last login
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -133,7 +166,9 @@ router.post('/login', [
         languageId: user.languageId,
         countryId: user.countryId,
       },
-      ...tokens,
+      accessToken: tokens.accessToken, // Only access token in response
+      expiresIn: 900, // 15 minutes in seconds
+      // Note: refreshToken not in response - it's in HttpOnly cookie
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -248,16 +283,23 @@ async function otpVerifyHandler(req, res) {
           },
         });
       }
-      const tokens = generateTokens(user.id, user.role);
-      await prisma.refreshToken.create({
-        data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
-      });
+      const tokens = generateTokens(user.id, user.role, user.email);
+      const portal = ROLE_TO_PORTAL[user.role] || Portal.CUSTOMER;
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+      await storeRefreshToken(user.id, portal, tokens.refreshToken, expiresAt);
+
+      // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+      setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
       const userPayload = { id: user.id, phone: user.phone, firstName: user.firstName, lastName: user.lastName, role: user.role };
       return res.json({
         success: true,
         user: userPayload,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
+        accessToken: tokens.accessToken, // Only access token in response
+        expiresIn: 900, // 15 minutes in seconds
+        // Note: refreshToken not in response - it's in HttpOnly cookie
       });
     }
 
@@ -303,17 +345,23 @@ async function otpVerifyHandler(req, res) {
       });
     }
 
-    const tokens = generateTokens(user.id, user.role);
-    await prisma.refreshToken.create({
-      data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
-    });
+    const tokens = generateTokens(user.id, user.role, user.email);
+    const portal = ROLE_TO_PORTAL[user.role] || Portal.CUSTOMER;
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+    await storeRefreshToken(user.id, portal, tokens.refreshToken, expiresAt);
+
+    // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
 
     const userPayload = { id: user.id, phone: user.phone, firstName: user.firstName, lastName: user.lastName, role: user.role };
     res.json({
       success: true,
       user: userPayload,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      accessToken: tokens.accessToken, // Only access token in response
+      expiresIn: 900, // 15 minutes in seconds
+      // Note: refreshToken not in response - it's in HttpOnly cookie
     });
   } catch (err) {
     console.error('OTP verify error:', err);
@@ -324,28 +372,170 @@ async function otpVerifyHandler(req, res) {
 router.post('/otp/verify', otpVerifyValidators, otpVerifyHandler);
 router.post('/verify-otp', otpVerifyValidators, otpVerifyHandler); // mobile app alias
 
-// POST /auth/refresh-token
-router.post('/refresh-token', async (req, res) => {
+// POST /auth/refresh (skill-compliant endpoint)
+router.post('/refresh', async (req, res) => {
   try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(400).json({ error: { message: 'Refresh token required' } });
+    // Get refresh token from cookie (web) or request body (mobile - backward compatible)
+    const refreshToken = getRefreshTokenFromRequest(req);
+    if (!refreshToken) {
+      return res.status(400).json({ error: { message: 'Refresh token required', code: 'REFRESH_TOKEN_MISSING' } });
+    }
 
+    // Verify JWT
     const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
-    const stored = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
-    if (!stored) return res.status(401).json({ error: { message: 'Invalid refresh token' } });
+    const userId = decoded.sub || decoded.userId;
+    if (!userId) {
+      return res.status(401).json({ error: { message: 'Invalid token format', code: 'TOKEN_INVALID' } });
+    }
 
-    // Delete old token
-    await prisma.refreshToken.delete({ where: { id: stored.id } });
+    // Get user
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: { message: 'User not found or inactive', code: 'USER_INVALID' } });
+    }
+    
+    // Extract portal from decoded token (backward compatible)
+    const portal = decoded.portal || ROLE_TO_PORTAL[decoded.role] || Portal.CUSTOMER;
+    
+    // Verify token exists in Redis (primary) or PostgreSQL (fallback)
+    const tokenValid = await getRefreshToken(userId, portal, refreshToken);
+    if (!tokenValid) {
+      return res.status(401).json({ error: { message: 'Invalid refresh token', code: 'TOKEN_INVALID' } });
+    }
+    
+    // Token Family Tracking (skill requirement - detect stolen token reuse)
+    const { getRedisClient } = require('../utils/redis');
+    const redis = await getRedisClient();
+    if (redis) {
+      const tokenFamilyKey = `token_family:${portal}:${userId}`;
+      const existingFamily = await redis.get(tokenFamilyKey);
+      
+      // If token family exists and doesn't match current token, it's been reused
+      if (existingFamily && existingFamily !== refreshToken) {
+        // Token reused - revoke all tokens (security breach)
+        await redis.del(tokenFamilyKey);
+        await deleteAllRefreshTokens(userId, portal);
+        return res.status(401).json({
+          error: {
+            message: 'Token revoked due to reuse detection. Please login again.',
+            code: 'TOKEN_REVOKED'
+          }
+        });
+      }
+    }
 
-    const tokens = generateTokens(decoded.userId, decoded.role);
-    await prisma.refreshToken.create({
-      data: { userId: decoded.userId, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+    // Delete old token (token rotation)
+    await deleteRefreshToken(userId, portal, refreshToken);
+
+    // Generate new tokens
+    const roles = decoded.roles || [decoded.role];
+    const tokens = generateTokens(userId, roles[0], user.email, portal);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    // Store new refresh token in Redis (primary) or PostgreSQL (fallback)
+    await storeRefreshToken(userId, portal, tokens.refreshToken, expiresAt);
+
+    // Update token family in Redis (if available)
+    if (redis) {
+      const tokenFamilyKey = `token_family:${portal}:${userId}`;
+      await redis.set(tokenFamilyKey, tokens.refreshToken, { EX: 7 * 24 * 60 * 60 }); // 7 days
+    }
+
+    // Set new refresh token cookie (web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
+    // Return only access token (refresh token is in cookie)
+    res.json({ 
+      accessToken: tokens.accessToken, 
+      expiresIn: 900, // 15 minutes in seconds
+      // Note: refreshToken not in response - it's in HttpOnly cookie
     });
-
-    res.json(tokens);
   } catch (err) {
-    res.status(401).json({ error: { message: 'Invalid refresh token' } });
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: { message: 'Invalid refresh token', code: 'TOKEN_INVALID' } });
+    }
+    console.error('Refresh token error:', err);
+    res.status(401).json({ error: { message: 'Invalid refresh token', code: 'TOKEN_INVALID' } });
   }
+});
+
+// POST /auth/refresh-token (backward compatibility alias - same as /refresh)
+// Uses same logic as /refresh but keeps old endpoint for backward compatibility
+router.post('/refresh-token', async (req, res) => {
+  // Reuse the same handler as /refresh
+  // Get refresh token from cookie (web) or request body (mobile - backward compatible)
+  const refreshToken = getRefreshTokenFromRequest(req);
+  if (!refreshToken) {
+    return res.status(400).json({ error: { message: 'Refresh token required', code: 'REFRESH_TOKEN_MISSING' } });
+  }
+
+  // Verify JWT
+  const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+  const userId = decoded.sub || decoded.userId;
+  if (!userId) {
+    return res.status(401).json({ error: { message: 'Invalid token format', code: 'TOKEN_INVALID' } });
+  }
+
+  // Get user
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.isActive) {
+    return res.status(401).json({ error: { message: 'User not found or inactive', code: 'USER_INVALID' } });
+  }
+  
+  // Extract portal from decoded token (backward compatible)
+  const portal = decoded.portal || ROLE_TO_PORTAL[decoded.role] || Portal.CUSTOMER;
+  
+  // Verify token exists in Redis (primary) or PostgreSQL (fallback)
+  const tokenValid = await getRefreshToken(userId, portal, refreshToken);
+  if (!tokenValid) {
+    return res.status(401).json({ error: { message: 'Invalid refresh token', code: 'TOKEN_INVALID' } });
+  }
+  
+  // Token Family Tracking
+  const { getRedisClient } = require('../utils/redis');
+  const redis = await getRedisClient();
+  if (redis) {
+    const tokenFamilyKey = `token_family:${portal}:${userId}`;
+    const existingFamily = await redis.get(tokenFamilyKey);
+    
+    if (existingFamily && existingFamily !== refreshToken) {
+      await redis.del(tokenFamilyKey);
+      await deleteAllRefreshTokens(userId, portal);
+      return res.status(401).json({
+        error: {
+          message: 'Token revoked due to reuse detection. Please login again.',
+          code: 'TOKEN_REVOKED'
+        }
+      });
+    }
+  }
+
+  // Delete old token (token rotation)
+  await deleteRefreshToken(userId, portal, refreshToken);
+
+  // Generate new tokens
+  const roles = decoded.roles || [decoded.role];
+  const tokens = generateTokens(userId, roles[0], user.email, portal);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+  
+  // Store new refresh token in Redis (primary) or PostgreSQL (fallback)
+  await storeRefreshToken(userId, portal, tokens.refreshToken, expiresAt);
+
+  // Update token family in Redis (if available)
+  if (redis) {
+    const tokenFamilyKey = `token_family:${portal}:${userId}`;
+    await redis.set(tokenFamilyKey, tokens.refreshToken, { EX: 7 * 24 * 60 * 60 }); // 7 days
+  }
+
+  // Set new refresh token cookie (web clients)
+  setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
+  // Return only access token (refresh token is in cookie)
+  res.json({ 
+    accessToken: tokens.accessToken, 
+    expiresIn: 900, // 15 minutes in seconds
+    // Note: refreshToken not in response - it's in HttpOnly cookie
+  });
 });
 
 // POST /auth/admin-login — spec 2.4 (portal only: email + password, role admin|super_admin)
@@ -375,9 +565,9 @@ router.post('/admin-login', [
       return res.status(403).json({ error: { message: 'Account is deactivated', code: 'ACCOUNT_INACTIVE' } });
     }
 
-    const tokens = generateTokens(user.id, user.role);
+    const tokens = generateTokens(user.id, user.role, user.email, Portal.ADMIN);
     await prisma.refreshToken.create({
-      data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+      data: { userId: user.id, token: tokens.refreshToken, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) }, // 7 days
     });
 
     const userPayload = {
@@ -387,9 +577,178 @@ router.post('/admin-login', [
       lastName: user.lastName,
       role: user.role,
     };
-    res.json({ success: true, user: userPayload, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+    res.json({ 
+      success: true, 
+      user: userPayload, 
+      accessToken: tokens.accessToken, 
+      refreshToken: tokens.refreshToken,
+      expiresIn: 900, // 15 minutes in seconds
+    });
   } catch (err) {
     console.error('Admin login error:', err);
+    res.status(500).json({ error: { message: 'Login failed', code: 'INTERNAL_ERROR' } });
+  }
+});
+
+// Portal-specific login endpoints (skill requirement)
+// POST /auth/admin/login — Issues JWT with portal: "admin"
+router.post('/admin/login', loginThrottle, [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { email, password } = req.body;
+    const user = await prisma.user.findFirst({
+      where: {
+        email: email || undefined,
+        role: { in: ['ADMIN', 'SUPER_ADMIN', 'ADMIN_VIEWER', 'COLLECTION_MANAGER'] },
+      },
+    });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+    }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ error: { message: 'Account is deactivated', code: 'ACCOUNT_INACTIVE' } });
+    }
+
+    const tokens = generateTokens(user.id, user.role, user.email, Portal.ADMIN);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+    await storeRefreshToken(user.id, Portal.ADMIN, tokens.refreshToken, expiresAt);
+
+    // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
+    // Reset login throttle on successful login
+    await resetLoginThrottle(email);
+
+    // Use DTO serializer to prevent sensitive field exposure
+    res.json(ok({ 
+      user: serializeUser(user),
+      accessToken: tokens.accessToken, // Only access token in response
+      expiresIn: 900,
+      // Note: refreshToken not in response - it's in HttpOnly cookie
+    }));
+  } catch (err) {
+    console.error('Admin portal login error:', err);
+    res.status(500).json({ error: { message: 'Login failed', code: 'INTERNAL_ERROR' } });
+  }
+});
+
+// POST /auth/customer/login — Issues JWT with portal: "customer"
+router.post('/customer/login', loginThrottle, idempotency(), [
+  body('email').optional().isEmail(),
+  body('phone').optional(),
+  body('password').notEmpty(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { email, phone, password } = req.body;
+    let user;
+    if (email) {
+      user = await prisma.user.findUnique({ where: { email } });
+    } else if (phone) {
+      const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
+      user = await prisma.user.findUnique({ where: { phone: normalizedPhone } });
+    }
+
+    if (!user) return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+    if (!user.isActive) return res.status(403).json({ error: { message: 'Account is deactivated', code: 'ACCOUNT_INACTIVE' } });
+    if (!['CUSTOMER', 'PREMIUM_CUSTOMER'].includes(user.role)) {
+      return res.status(403).json({ error: { message: 'Access denied for this portal', code: 'FORBIDDEN' } });
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+
+    const tokens = generateTokens(user.id, user.role, user.email, Portal.CUSTOMER);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+    await storeRefreshToken(user.id, Portal.CUSTOMER, tokens.refreshToken, expiresAt);
+
+    // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    // Reset login throttle on successful login
+    await resetLoginThrottle(email || phone);
+
+    // Use DTO serializer to prevent sensitive field exposure
+    res.json(ok({
+      user: serializeUser(user),
+      accessToken: tokens.accessToken, // Only access token in response
+      expiresIn: 900,
+      // Note: refreshToken not in response - it's in HttpOnly cookie
+    }));
+  } catch (err) {
+    console.error('Customer portal login error:', err);
+    res.status(500).json({ error: { message: 'Login failed', code: 'INTERNAL_ERROR' } });
+  }
+});
+
+// POST /auth/dealer/login — Issues JWT with portal: "dealer" (for dealer/franchise portal)
+router.post('/dealer/login', loginThrottle, idempotency(), [
+  body('email').optional().isEmail(),
+  body('phone').optional(),
+  body('password').notEmpty(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { email, phone, password } = req.body;
+    let user;
+    if (email) {
+      user = await prisma.user.findUnique({ where: { email } });
+    } else if (phone) {
+      const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
+      user = await prisma.user.findUnique({ where: { phone: normalizedPhone } });
+    }
+
+    if (!user) return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+    if (!user.isActive) return res.status(403).json({ error: { message: 'Account is deactivated', code: 'ACCOUNT_INACTIVE' } });
+    if (!['DEALER', 'FRANCHISE_OWNER', 'REGIONAL_MANAGER', 'WHOLESALE_BUYER'].includes(user.role)) {
+      return res.status(403).json({ error: { message: 'Access denied for this portal', code: 'FORBIDDEN' } });
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
+
+    const tokens = generateTokens(user.id, user.role, user.email, Portal.DEALER);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Store refresh token in Redis (skill requirement) with fallback to PostgreSQL
+    await storeRefreshToken(user.id, Portal.DEALER, tokens.refreshToken, expiresAt);
+
+    // Set HttpOnly cookie for refresh token (skill requirement - web clients)
+    setRefreshTokenCookie(res, tokens.refreshToken, 7);
+
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    // Reset login throttle on successful login
+    await resetLoginThrottle(email || phone);
+
+    // Use DTO serializer to prevent sensitive field exposure
+    res.json(ok({
+      user: serializeUser(user),
+      accessToken: tokens.accessToken, // Only access token in response
+      expiresIn: 900,
+      // Note: refreshToken not in response - it's in HttpOnly cookie
+    }));
+  } catch (err) {
+    console.error('Dealer portal login error:', err);
     res.status(500).json({ error: { message: 'Login failed', code: 'INTERNAL_ERROR' } });
   }
 });
@@ -397,9 +756,19 @@ router.post('/admin-login', [
 // POST /auth/logout
 router.post('/logout', authenticate, async (req, res) => {
   try {
-    await prisma.refreshToken.deleteMany({ where: { userId: req.user.id } });
+    const portal = req.user.portal || ROLE_TO_PORTAL[req.user.role] || Portal.CUSTOMER;
+    
+    // Delete all refresh tokens from Redis and PostgreSQL
+    await deleteAllRefreshTokens(req.user.id, portal);
+    
+    // Clear refresh token cookie
+    clearRefreshTokenCookie(res);
+    
     res.json({ message: 'Logged out successfully' });
   } catch (err) {
+    console.error('Logout error:', err);
+    // Still clear cookie even if DB operation fails
+    clearRefreshTokenCookie(res);
     res.status(500).json({ error: { message: 'Logout failed' } });
   }
 });
@@ -418,6 +787,27 @@ router.get('/me', authenticate, async (req, res) => {
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to fetch profile' } });
+  }
+});
+
+// GET /auth/validate — Validate token (skill requirement for AuthGuard)
+// Used by frontend to confirm token validity on mount
+router.get('/validate', authenticate, async (req, res) => {
+  try {
+    res.json({
+      valid: true,
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        portal: req.user.portal,
+        roles: req.user.roles,
+      }
+    });
+  } catch (err) {
+    res.status(401).json({
+      valid: false,
+      error: { message: 'Token validation failed', code: 'TOKEN_INVALID' }
+    });
   }
 });
 

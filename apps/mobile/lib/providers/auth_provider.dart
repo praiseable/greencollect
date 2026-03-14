@@ -58,8 +58,9 @@ class AuthProvider extends ChangeNotifier {
       });
 
       final token = response['accessToken'] ?? response['token'];
+      final expiresIn = response['expiresIn'] as int? ?? 900; // Default 15 minutes
       if (token != null) {
-        await StorageService().setToken(token);
+        await StorageService().setToken(token, expiresIn);
       }
       if (response['refreshToken'] != null) {
         await StorageService().setRefreshToken(response['refreshToken']);
@@ -92,7 +93,8 @@ class AuthProvider extends ChangeNotifier {
       });
 
       final token = response['accessToken'] ?? response['token'];
-      if (token != null) await StorageService().setToken(token);
+      final expiresIn = response['expiresIn'] as int? ?? 900; // Default 15 minutes
+      if (token != null) await StorageService().setToken(token, expiresIn);
       if (response['refreshToken'] != null) {
         await StorageService().setRefreshToken(response['refreshToken']);
       }

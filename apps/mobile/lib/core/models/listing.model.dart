@@ -84,9 +84,7 @@ class ListingModel {
       descUrdu: json['descUrdu'] as String? ?? json['descUr'] as String?,
       pricePkr: _parsePricePkr(json),
       unit: _parseUnit(json),
-      quantity: (json['quantity'] ?? 1) is double
-          ? (json['quantity'] ?? 1) as double
-          : ((json['quantity'] ?? 1) as num).toDouble(),
+      quantity: _toDouble(json['quantity'], 1),
       categoryId: json['categoryId']?.toString() ?? '',
       categoryName: json['categoryName'] as String? ?? json['category']?['name'] as String? ?? '',
       categoryNameUr: json['categoryNameUr'] as String? ?? json['categoryNameUrdu'] as String? ?? '',
@@ -104,13 +102,26 @@ class ListingModel {
       status: _parseStatus(json['status']),
       visibilityLevel: _parseVisibility(json['visibilityLevel'] ?? json['visibility']),
       images: imgList,
-      daysAgo: (json['daysAgo'] ?? 0) is int
-          ? (json['daysAgo'] ?? 0) as int
-          : ((json['daysAgo'] ?? 0) as num).toInt(),
-      interestedCount: (json['interestedCount'] ?? 0) is int
-          ? (json['interestedCount'] ?? 0) as int
-          : ((json['interestedCount'] ?? 0) as num).toInt(),
+      daysAgo: _toInt(json['daysAgo'], 0),
+      interestedCount: _toInt(json['interestedCount'], 0),
     );
+  }
+
+  static double _toDouble(dynamic v, double def) {
+    if (v == null) return def;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? def;
+    return def;
+  }
+
+  static int _toInt(dynamic v, int def) {
+    if (v == null) return def;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? def;
+    return def;
   }
 
   static int _parsePricePkr(Map<String, dynamic> json) {

@@ -32,9 +32,8 @@ export default function Login() {
         return;
       }
 
-      localStorage.setItem('admin_token', accessToken);
-      if (refreshToken) localStorage.setItem('admin_refresh_token', refreshToken);
-      localStorage.setItem('admin_user', JSON.stringify(user));
+      // Token storage is handled by api.js login function (uses tokenStore)
+      // No need to manually store here - already done in api.js
 
       navigate('/dashboard');
     } catch (err) {
