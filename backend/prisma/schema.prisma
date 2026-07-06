@@ -381,7 +381,9 @@ model User {
   characterCertificate   String? // URL to character certificate
   dealerPhoto        String?    // URL to dealer's own photo (must match CNIC photo)
   shopPhoto          String?    // URL to shop/office photo (legacy — kept for backward compat)
-  ntnNumber          String?    // Tax number
+  ntnNumber          String?    // Optional encrypted/controlled tax number (NTN)
+  strnNumber         String?    // Optional Sales Tax Registration Number (STRN)
+  businessType       BusinessType? // individual | aop | private_limited
   bankName           String?
   bankAccountTitle   String?
   bankAccountNumber  String?
@@ -416,6 +418,9 @@ model User {
   listingReports     ListingReport[]   @relation("ListingReporter")
   transactions  Transaction[] @relation("BuyerTransactions")
   sellerTransactions Transaction[] @relation("SellerTransactions")
+  listingDeposits ListingDeposit[] @relation("BuyerListingDeposits")
+  adminFlags     AdminFlaggedUser[] @relation("FlaggedUser")
+  reviewedFlags  AdminFlaggedUser[] @relation("ReviewedAdminFlags")
   notifications Notification[]
   wallet        Wallet?
   subscription  UserSubscription?
@@ -443,6 +448,12 @@ enum CriminalCheckStatus {
   PENDING           // Check submitted, awaiting result
   CLEARED           // No criminal record found
   FLAGGED           // Criminal activity found — account blocked
+}
+
+enum BusinessType {
+  INDIVIDUAL
+  AOP
+  PRIVATE_LIMITED
 }
 
 model RefreshToken {
@@ -560,6 +571,7 @@ model Listing {
   favorites       ListingFavorite[]
   reports         ListingReport[]
   transactions    Transaction[]
+  deposits        ListingDeposit[]
   collections     Collection[]
   expiresAt       DateTime?
   createdAt       DateTime                @default(now())
@@ -697,6 +709,17 @@ model Transaction {
   currency          Currency          @relation(fields: [currencyId], references: [id])
   quantity          Decimal           @db.Decimal(12, 3)
   status            TransactionStatus @default(OFFER_MADE)
+  verificationStatus VerificationStatus @default(PENDING_WEIGHING)
+  actualQuantity    Decimal?          @db.Decimal(12, 3)
+  actualPricePaisa  BigInt?
+  amendmentAcknowledgedAt DateTime?
+  amendmentAcknowledgedBy String?
+  handshakeOtpHash  String?
+  handshakeOtpExpiresAt DateTime?
+  handshakeVerifiedAt DateTime?
+  handshakeAttemptCount Int           @default(0)
+  handshakeLockedUntil DateTime?
+  finalizedAt       DateTime?
   message           String?          // offer/counter message
   bond              Bond?
   paymentId         String?
@@ -704,15 +727,27 @@ model Transaction {
   notes             String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([listingId, buyerId])
+  @@index([verificationStatus])
 }
 
 model Bond {
   id            String   @id @default(uuid())
   transactionId String   @unique
   transaction   Transaction @relation(fields: [transactionId], references: [id])
+  bondNumber    String?  @unique
+  status        String   @default("ACTIVE")
   pdfUrl        String?
+  settlementPricePaisa BigInt?
+  commissionPaisa BigInt?
+  actualQuantity Decimal? @db.Decimal(12, 3)
+  taxSnapshot   Json?
   signedBySeller Boolean @default(false)
   signedByBuyer  Boolean @default(false)
+  issuedAt      DateTime @default(now())
   expiresAt     DateTime
   createdAt     DateTime @default(now())
 }
@@ -723,6 +758,7 @@ enum TransactionStatus {
   NEGOTIATING    // counter offered
   OFFER_ACCEPTED
   ACCEPTED       // alias (used by routes)
+  IN_PROGRESS
   OFFER_REJECTED
   REJECTED       // alias (used by routes)
   BOND_CREATED
@@ -730,8 +766,17 @@ enum TransactionStatus {
   PAYMENT_COMPLETED
   DELIVERED
   COMPLETED
+  FINALIZED
   CANCELLED
   DISPUTED
+}
+
+enum VerificationStatus {
+  PENDING_WEIGHING
+  AMENDED
+  HANDSHAKE_PENDING
+  HANDSHAKE_VERIFIED
+  FINALIZED
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -757,11 +802,96 @@ model Wallet {
   id          String   @id @default(uuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id])
-  balancePaisa BigInt  @default(0)
+  availableBalancePaisa BigInt  @default(0)
+  escrowedBalancePaisa  BigInt  @default(0)
+  balancePaisa BigInt  @default(0) // Legacy mirror of availableBalancePaisa kept for older clients
   currencyId  String
   currency    Currency @relation(fields: [currencyId], references: [id])
+  ledger      WalletLedger[]
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
+}
+
+model WalletLedger {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type        WalletLedgerType
+  amountPaisa BigInt
+  balanceAfterPaisa BigInt
+  availableAfterPaisa BigInt
+  escrowedAfterPaisa BigInt
+  referenceType WalletReferenceType
+  referenceId String?
+  note        String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model ListingDeposit {
+  id          String   @id @default(uuid())
+  listingId   String
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyerId     String
+  buyer       User     @relation("BuyerListingDeposits", fields: [buyerId], references: [id], onDelete: Cascade)
+  amountPaisa BigInt
+  status      ListingDepositStatus @default(HELD)
+  heldAt      DateTime @default(now())
+  releasedAt  DateTime?
+  capturedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([listingId, buyerId])
+  @@index([buyerId, status])
+  @@index([listingId, status])
+  @@index([expiresAt, status])
+}
+
+enum WalletLedgerType {
+  CREDIT
+  DEBIT
+  ESCROW_HOLD
+  ESCROW_RELEASE
+  ESCROW_CAPTURE
+}
+
+enum WalletReferenceType {
+  TOPUP
+  DEPOSIT_HOLD
+  DEPOSIT_REFUND
+  COMMISSION_CAPTURE
+  WITHDRAWAL
+  MANUAL_ADJUSTMENT
+  FORFEITURE
+  REVERSAL
+}
+
+enum ListingDepositStatus {
+  HELD
+  RELEASED
+  CAPTURED
+  FORFEITED
+}
+
+model AdminFlaggedUser {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation("FlaggedUser", fields: [userId], references: [id], onDelete: Cascade)
+  reason      String
+  metrics     Json?
+  status      String   @default("open")
+  reviewedBy  String?
+  reviewer    User?    @relation("ReviewedAdminFlags", fields: [reviewedBy], references: [id])
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([reason, status])
 }
 
 model CountryPaymentGateway {

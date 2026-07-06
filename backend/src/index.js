@@ -68,6 +68,7 @@ app.use('/api/translations', require('./routes/translations.routes'));
 app.use('/api/notifications', require('./routes/notifications.routes'));
 app.use('/api/subscriptions', require('./routes/subscriptions.routes'));
 app.use('/api/payments', require('./routes/payments.routes'));
+app.use('/api/wallet', require('./routes/wallet.routes'));
 app.use('/api/transactions', require('./routes/transactions.routes'));
 app.use('/api/chat', require('./routes/chat.routes'));
 app.use('/api/territories', require('./routes/territories.routes'));
@@ -92,6 +93,7 @@ app.use('/v1/territories', require('./routes/territories.routes'));
 app.use('/v1/collections', require('./routes/collections.routes'));
 app.use('/v1/kyc', require('./routes/kyc.routes'));
 app.use('/v1/payments', require('./routes/payments.routes'));
+app.use('/v1/wallet', require('./routes/wallet.routes'));
 app.use('/v1/subscriptions', require('./routes/subscriptions.routes'));
 
 // Config (app version for force-update) — before auth
@@ -183,13 +185,20 @@ function startEscalationCron() {
 }
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`🚀 Geo-Franchise Marketplace API running on port ${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   Country: Pakistan (PKR, +92)`);
-  
-  // Start the escalation engine
-  startEscalationCron();
-});
 
-module.exports = { app, server, io };
+function startServer() {
+  return server.listen(PORT, () => {
+    console.log(`🚀 Geo-Franchise Marketplace API running on port ${PORT}`);
+    console.log(`   Health: http://localhost:${PORT}/health`);
+    console.log(`   Country: Pakistan (PKR, +92)`);
+
+    // Start the escalation engine only for the runtime server, not when imported by tests.
+    startEscalationCron();
+  });
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, server, io, startServer };

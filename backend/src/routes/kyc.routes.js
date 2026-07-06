@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { creditWallet, serializeWallet, WalletError } = require('../services/wallet.service');
 
 // ═══════════════════════════════════════════════════════════
 // KYC REGISTRATION — Comprehensive dealer/franchise onboarding
@@ -18,7 +19,7 @@ const fs = require('fs');
 //   Step 4 → Warehouse: Address + 3 photos (inside, street view, front door)
 //   Step 5 → Criminal Check: Police verification cert + character certificate
 //   Step 6 → Review & Submit → Admin reviews → Approve / Reject
-//   Step 7 → Deposit: After approval, dealer deposits required amount
+//   Step 7 → Optional buyer wallet top-up: sellers are never charged to list or activate
 //
 // Customers: Free registration, no KYC required.
 // Criminal flagging: If flagged, ID is blocked permanently.
@@ -498,9 +499,9 @@ router.get('/status',
         isRejected: user.accountStatus === 'REJECTED',
         isCriminalFlagged: user.criminalFlagged,
         rejectionReason: user.kycRejectionReason,
-        depositRequired: user.requiredDeposit > 0 && !user.depositPaid,
-        depositAmount: user.requiredDeposit,
-        depositPaid: user.depositPaid,
+        depositRequired: false,
+        depositAmount: 0,
+        depositPaid: true,
         documents: {
           cnicFront: !!user.cnicFrontImage,
           cnicBack: !!user.cnicBackImage,
@@ -619,13 +620,13 @@ router.get('/admin/:userId', async (req, res) => {
       kycSubmittedAt: user.kycSubmittedAt,
       kycApprovedAt: user.kycApprovedAt,
       kycRejectionReason: user.kycRejectionReason,
-      // Deposit
-      requiredDeposit: user.requiredDeposit,
-      depositPaid: user.depositPaid,
-      depositAmount: user.depositAmount,
-      depositPaidAt: user.depositPaidAt,
+      // v3 buyer-funded model: no seller/pro activation deposit.
+      requiredDeposit: 0,
+      depositPaid: true,
+      depositAmount: 0,
+      depositPaidAt: null,
       // Wallet
-      balance: user.wallet ? Number(user.wallet.balancePaisa) / 100 : 0,
+      balance: user.wallet ? Number(user.wallet.availableBalancePaisa ?? user.wallet.balancePaisa) / 100 : 0,
       // Banking
       ntnNumber: user.ntnNumber,
       bankName: user.bankName,
@@ -650,7 +651,7 @@ router.get('/admin/:userId', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.post('/admin/:userId/approve',
   [
-    body('requiredDeposit').isInt({ min: 0 }).withMessage('Required deposit amount in PKR'),
+    body('requiredDeposit').optional().isInt({ min: 0 }).withMessage('Ignored in v3; seller-side activation deposits are disabled'),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -658,7 +659,8 @@ router.post('/admin/:userId/approve',
 
     try {
       const { userId } = req.params;
-      const { requiredDeposit = 0, notes } = req.body;
+      const { notes } = req.body;
+      const requiredDeposit = 0; // v3 buyer-funded model: sellers/pro users are never activated behind a deposit gate.
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) return res.status(404).json({ error: 'User not found' });
@@ -669,9 +671,8 @@ router.post('/admin/:userId/approve',
         });
       }
 
-      // If deposit is required, set UNDER_REVIEW until deposit is paid
-      // If no deposit needed, set ACTIVE directly
-      const newStatus = requiredDeposit > 0 ? 'UNDER_REVIEW' : 'ACTIVE';
+      // Sellers/pro users are approved directly. Buyer deposits are per-listing escrow holds, not onboarding fees.
+      const newStatus = 'ACTIVE';
 
       await prisma.user.update({
         where: { id: userId },
@@ -689,15 +690,13 @@ router.post('/admin/:userId/approve',
       const existingWallet = await prisma.wallet.findUnique({ where: { userId } });
       if (!existingWallet) {
         await prisma.wallet.create({
-          data: { userId, balancePaisa: 0n, currencyId: 'PKR' },
+          data: { userId, availableBalancePaisa: 0n, escrowedBalancePaisa: 0n, balancePaisa: 0n, currencyId: 'PKR' },
         });
       }
 
       res.json({
         success: true,
-        message: requiredDeposit > 0
-          ? `KYC approved. Dealer must deposit ₨${requiredDeposit} to activate account.`
-          : 'KYC approved. Account is now active.',
+        message: 'KYC approved. Account is now active. No seller-side deposit is required.',
         accountStatus: newStatus,
         requiredDeposit,
       });
@@ -834,33 +833,23 @@ router.post('/admin/:userId/deposit',
         },
       });
 
-      // Add to wallet
-      const wallet = await prisma.wallet.findUnique({ where: { userId } });
-      if (wallet) {
-        await prisma.wallet.update({
-          where: { userId },
-          data: {
-            balancePaisa: wallet.balancePaisa + BigInt(amount * 100),
-          },
-        });
-      } else {
-        await prisma.wallet.create({
-          data: {
-            userId,
-            balancePaisa: BigInt(amount * 100),
-            currencyId: 'PKR',
-          },
-        });
-      }
+      // Ledger-backed buyer wallet top-up. This endpoint no longer gates seller activation.
+      const wallet = await creditWallet(userId, BigInt(amount * 100), {
+        referenceType: 'MANUAL_ADJUSTMENT',
+        note: `Admin-recorded wallet top-up${method ? ` via ${method}` : ''}`,
+        metadata: { source: 'kyc_admin_deposit', method: method || null },
+      });
 
       res.json({
         success: true,
-        message: `Deposit of ₨${amount} recorded. Account is now ACTIVE.`,
+        message: `Wallet top-up of ₨${amount} recorded. Sellers remain free to list and transact.`,
         accountStatus: 'ACTIVE',
         depositAmount: amount,
+        wallet: serializeWallet(wallet),
       });
     } catch (err) {
       console.error('Deposit record error:', err);
+      if (err instanceof WalletError) return res.status(err.status).json({ error: { message: err.message, code: err.code, details: err.details } });
       res.status(500).json({ error: 'Failed to record deposit' });
     }
   }

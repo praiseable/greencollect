@@ -295,6 +295,15 @@ async function main() {
     bond_expiry_hours: '24', otp_expiry_seconds: '300',
     subscription_grace_days: '2', price_suggestion_enabled: 'true',
     catalog_version_hash: 'v1',
+    deposit_percent: '5',
+    deposit_min_flat_paisa: '50000',
+    commission_rate_percent: '5',
+    deposit_hold_expiry_days: '14',
+    buyer_forfeit_enabled: 'false',
+    handshake_otp_expiry_min: '30',
+    disintermediation_ratio_threshold: '0.35',
+    disintermediation_window_size: '10',
+    listing_expiry_days: '30',
   };
   // App version for force-update (Kabariya spec): minVersion, latestVersion, forceUpdate
   const appVersionPayload = JSON.stringify({ minVersion: '1.0.0', latestVersion: '1.0.0', forceUpdate: false });
@@ -561,7 +570,7 @@ async function main() {
       await prisma.wallet.upsert({
         where: { userId: userIds[email] },
         update: {},
-        create: { userId: userIds[email], balancePaisa: BigInt(0), currencyId: 'PKR' },
+        create: { userId: userIds[email], availableBalancePaisa: BigInt(0), escrowedBalancePaisa: BigInt(0), balancePaisa: BigInt(0), currencyId: 'PKR' },
       });
     }
   }

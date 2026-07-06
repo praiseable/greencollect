@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate } = require('../middleware/auth');
+const { creditWallet, serializeWallet, WalletError } = require('../services/wallet.service');
 
 // GET /payments/history — Payment history
 router.get('/history', authenticate, async (req, res) => {
@@ -58,18 +59,28 @@ router.post('/easypaisa/initiate', authenticate, async (req, res) => {
   }
 });
 
-// POST /payments/wallet/topup — Top-up wallet
+// POST /payments/wallet/topup — Development/manual top-up through the ledger engine.
+// Production payment webhooks must call the same creditWallet service after signature verification.
 router.post('/wallet/topup', authenticate, async (req, res) => {
   try {
-    const { amountPaisa, gateway = 'WALLET' } = req.body;
-    const wallet = await prisma.wallet.upsert({
-      where: { userId: req.user.id },
-      update: { balancePaisa: { increment: BigInt(amountPaisa) } },
-      create: { userId: req.user.id, balancePaisa: BigInt(amountPaisa), currencyId: 'PKR' },
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TEST_TOPUP !== 'true') {
+      return res.status(403).json({ error: { message: 'Direct top-up is disabled in production; use verified gateway webhooks', code: 'TOPUP_WEBHOOK_REQUIRED' } });
+    }
+
+    const { amountPaisa, gateway = 'WALLET', gatewayRef = null } = req.body;
+    const wallet = await creditWallet(req.user.id, amountPaisa, {
+      referenceType: 'TOPUP',
+      referenceId: gatewayRef,
+      note: `Wallet top-up via ${gateway}`,
+      metadata: { gateway, gatewayRef },
     });
-    res.json({ ...wallet, balancePaisa: wallet.balancePaisa.toString() });
+    res.json({ wallet: serializeWallet(wallet) });
   } catch (err) {
-    res.status(500).json({ error: { message: 'Failed to top up wallet' } });
+    if (err instanceof WalletError) {
+      return res.status(err.status).json({ error: { message: err.message, code: err.code, ...err.details } });
+    }
+    console.error('Wallet top-up error:', err);
+    res.status(500).json({ error: { message: 'Failed to top up wallet', code: 'INTERNAL_ERROR' } });
   }
 });
 

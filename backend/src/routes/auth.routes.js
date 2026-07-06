@@ -12,6 +12,7 @@ const { setRefreshTokenCookie, clearRefreshTokenCookie, getRefreshTokenFromReque
 const { serializeUser, ok, created } = require('../utils/dto');
 const { auditLog } = require('../middleware/auditLog');
 const { idempotency } = require('../middleware/idempotency');
+const { ensureWallet } = require('../services/wallet.service');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'gc_jwt_prod_s3cr3t_k3y_2026_x7m9q';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'gc_jwt_refresh_pr0d_k3y_2026_r4n8p';
@@ -73,21 +74,28 @@ router.post('/register', [
     const passwordHash = await bcrypt.hash(password, 12);
     const normalizedPhone = phone ? (phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`) : null;
 
-    const user = await prisma.user.create({
-      data: {
-        firstName,
-        lastName,
-        displayName: `${firstName} ${lastName}`,
-        email: email || null,
-        phone: normalizedPhone,
-        passwordHash,
-        role: role || 'CUSTOMER',
-        city: city || null,
-        countryId: 'PK',
-        currencyId: 'PKR',
-        languageId: 'en',
-      },
-      select: { id: true, email: true, phone: true, firstName: true, lastName: true, role: true },
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          firstName,
+          lastName,
+          displayName: `${firstName} ${lastName}`,
+          email: email || null,
+          phone: normalizedPhone,
+          passwordHash,
+          role: 'CUSTOMER',
+          isVerified: !!normalizedPhone,
+          city: city || null,
+          countryId: 'PK',
+          currencyId: 'PKR',
+          languageId: 'en',
+        },
+        select: { id: true, email: true, phone: true, firstName: true, lastName: true, role: true },
+      });
+      await tx.wallet.create({
+        data: { userId: createdUser.id, currencyId: 'PKR', availableBalancePaisa: 0n, escrowedBalancePaisa: 0n, balancePaisa: 0n },
+      });
+      return createdUser;
     });
 
     const tokens = generateTokens(user.id, user.role, user.email);
@@ -283,6 +291,7 @@ async function otpVerifyHandler(req, res) {
           },
         });
       }
+      await ensureWallet(user.id);
       const tokens = generateTokens(user.id, user.role, user.email);
       const portal = ROLE_TO_PORTAL[user.role] || Portal.CUSTOMER;
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -345,6 +354,7 @@ async function otpVerifyHandler(req, res) {
       });
     }
 
+    await ensureWallet(user.id);
     const tokens = generateTokens(user.id, user.role, user.email);
     const portal = ROLE_TO_PORTAL[user.role] || Portal.CUSTOMER;
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days

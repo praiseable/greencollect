@@ -33,6 +33,8 @@ const authenticate = async (req, res, next) => {
         displayName: true,
         role: true,
         isActive: true,
+        isVerified: true,
+        accountStatus: true,
         languageId: true,
         currencyId: true,
         countryId: true,
@@ -40,8 +42,11 @@ const authenticate = async (req, res, next) => {
       },
     });
 
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: { message: 'User not found or inactive', code: 'AUTH_INVALID' } });
+    if (!user) {
+      return res.status(401).json({ error: { message: 'User not found', code: 'AUTH_INVALID' } });
+    }
+    if (user.accountStatus === 'SUSPENDED' || user.isActive === false) {
+      return res.status(403).json({ error: { message: 'Account is suspended', code: 'ACCOUNT_SUSPENDED' } });
     }
 
     // Attach portal and roles from token (if present) for portal checking
@@ -90,12 +95,14 @@ const optionalAuth = async (req, res, next) => {
             role: true,
             geoZoneId: true,
             isActive: true,
+            isVerified: true,
+            accountStatus: true,
             languageId: true,
             currencyId: true,
             countryId: true,
           },
         });
-        if (user && user.isActive !== false) {
+        if (user && user.isActive !== false && user.accountStatus !== 'SUSPENDED') {
           req.user = user;
           req.user.portal = decoded.portal || null;
           req.user.roles = decoded.roles || [decoded.role || user.role];
