@@ -17,6 +17,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../services/prisma');
+const { authenticate } = require('../middleware/auth');
 const { body, param, query, validationResult } = require('express-validator');
 
 const validate = (req, res, next) => {
@@ -24,6 +25,29 @@ const validate = (req, res, next) => {
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   next();
 };
+
+const COLLECTION_ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER']);
+
+function isCollectionAdmin(user) {
+  return Boolean(user && COLLECTION_ADMIN_ROLES.has(user.role));
+}
+
+function canAccessCollection(user, collection) {
+  if (!user || !collection) return false;
+  if (isCollectionAdmin(user)) return true;
+  return collection.dealerId === user.id || collection.customerId === user.id;
+}
+
+function requireCollectionAdmin(req, res, next) {
+  if (!isCollectionAdmin(req.user)) {
+    return res.status(403).json({ error: { message: 'Collection admin access required', code: 'FORBIDDEN' } });
+  }
+  next();
+}
+
+// Collections/logistics endpoints mutate pickup workflow and are not public.
+// Read access is limited to admins/managers or users participating in the collection.
+router.use(authenticate);
 
 // ── GPS verification: check if dealer is within acceptable distance ──
 function isWithinRange(lat1, lng1, lat2, lng2, maxMeters = 500) {
@@ -68,6 +92,13 @@ router.get('/', async (req, res) => {
     if (status) where.status = status;
     if (listingId) where.listingId = listingId;
 
+    if (!isCollectionAdmin(req.user)) {
+      where.OR = [
+        { dealerId: req.user.id },
+        { customerId: req.user.id },
+      ];
+    }
+
     const [collections, total] = await Promise.all([
       prisma.collection.findMany({
         where,
@@ -111,6 +142,9 @@ router.get('/:id', async (req, res) => {
     if (!collection) {
       return res.status(404).json({ error: 'Collection not found' });
     }
+    if (!canAccessCollection(req.user, collection)) {
+      return res.status(403).json({ error: { message: 'Forbidden', code: 'FORBIDDEN' } });
+    }
 
     let collector = null;
     try {
@@ -131,6 +165,7 @@ router.get('/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.post(
   '/',
+  requireCollectionAdmin,
   [
     body('listingId').isUUID(),
     body('collectorId').optional().isUUID(),
@@ -183,7 +218,7 @@ router.post(
       // Notify collector
       const io = req.app.get('io');
       if (io) {
-        io.to(`user-${collectorId}`).emit('notification', {
+        io.to(`user-${dealerId}`).emit('notification', {
           type: 'COLLECTION_ASSIGNED',
           title: 'New Collection Assigned',
           body: `"${listing.title}" has been assigned to you for collection.`,
@@ -222,10 +257,13 @@ router.patch(
       let { status, notes } = req.body;
       const collection = await prisma.collection.findUnique({
         where: { id: req.params.id },
-        include: { listing: true },
+        include: { listing: { include: { category: { include: { translations: true } } } } },
       });
 
       if (!collection) return res.status(404).json({ error: 'Collection not found' });
+      if (!canAccessCollection(req.user, collection)) {
+        return res.status(403).json({ error: { message: 'Forbidden', code: 'FORBIDDEN' } });
+      }
 
       // Map legacy status to schema enum
       const statusMap = {
@@ -247,9 +285,9 @@ router.patch(
       else if (status === 'DELIVERED_TO_CENTER') updateData.deliveredAt = now;
       else if (status === 'CANCELLED') updateData.cancelledAt = now;
 
-      if (status === 'DELIVERED_TO_CENTER' && (collection.collectedWeight ?? collection.collectedQuantity)) {
-        const weight = parseFloat(collection.collectedWeight || collection.collectedQuantity);
-        const categoryName = collection.listing?.category?.name || collection.listing?.categoryName || 'Metals';
+      if (status === 'DELIVERED_TO_CENTER' && collection.confirmedWeightKg) {
+        const weight = parseFloat(collection.confirmedWeightKg);
+        const categoryName = collection.listing?.category?.translations?.find(t => t.languageId === 'en')?.name || 'Metals';
         updateData.carbonOffsetKg = calculateCarbonOffset(categoryName, weight);
       }
 
@@ -292,10 +330,13 @@ router.post(
       const { latitude, longitude } = req.body;
       const collection = await prisma.collection.findUnique({
         where: { id: req.params.id },
-        include: { listing: true },
+        include: { listing: { include: { category: { include: { translations: true } } } } },
       });
 
       if (!collection) return res.status(404).json({ error: 'Collection not found' });
+      if (!canAccessCollection(req.user, collection)) {
+        return res.status(403).json({ error: { message: 'Forbidden', code: 'FORBIDDEN' } });
+      }
 
       const listingLat = parseFloat(collection.listingLat || collection.listing?.latitude || 0);
       const listingLng = parseFloat(collection.listingLng || collection.listing?.longitude || 0);
@@ -341,10 +382,16 @@ router.patch(
   validate,
   async (req, res) => {
     try {
+      const collection = await prisma.collection.findUnique({ where: { id: req.params.id } });
+      if (!collection) return res.status(404).json({ error: 'Collection not found' });
+      if (!canAccessCollection(req.user, collection)) {
+        return res.status(403).json({ error: { message: 'Forbidden', code: 'FORBIDDEN' } });
+      }
+
       const updated = await prisma.collection.update({
         where: { id: req.params.id },
         data: {
-          collectedWeight: parseFloat(req.body.collectedWeight),
+          confirmedWeightKg: req.body.collectedWeight,
           notes: req.body.notes || undefined,
         },
       });
@@ -373,10 +420,13 @@ router.post(
       const { rating, raterType, comment } = req.body;
       const collection = await prisma.collection.findUnique({
         where: { id: req.params.id },
-        include: { listing: true },
+        include: { listing: { include: { category: { include: { translations: true } } } } },
       });
 
       if (!collection) return res.status(404).json({ error: 'Collection not found' });
+      if (!canAccessCollection(req.user, collection)) {
+        return res.status(403).json({ error: { message: 'Forbidden', code: 'FORBIDDEN' } });
+      }
 
       await prisma.collection.update({
         where: { id: req.params.id },
@@ -433,7 +483,7 @@ router.get('/dealer/:dealerId/rating', async (req, res) => {
     ]);
 
     const avgRating = ratings.length > 0
-      ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+      ? ratings.reduce((sum, r) => sum + Number(r.overallScore || 0), 0) / ratings.length
       : 0;
 
     res.json({
@@ -459,72 +509,63 @@ router.get('/analytics/carbon', async (req, res) => {
   try {
     const { period = 'month', geoZoneId } = req.query;
 
-    // Get all carbon credits
     const where = {};
-    if (geoZoneId) {
-      where.listing = { geoZoneId };
+    if (geoZoneId) where.geoZoneId = geoZoneId;
+
+    // The Prisma model is CarbonCreditRecord -> prisma.carbonCreditRecord.
+    // Return an empty-but-valid aggregate when no records exist instead of throwing.
+    const records = await prisma.carbonCreditRecord.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    const byCategory = {};
+    const byZone = {};
+    let totalCarbonKg = 0;
+    let totalCreditPkr = 0;
+    let totalCollected = 0;
+
+    for (const record of records) {
+      const categoryKey = record.categoryId || 'Unknown';
+      const zoneKey = record.geoZoneId || record.cityName || 'Unknown';
+      const weightKg = Number(record.totalWeightKg || 0);
+      const carbonKg = Number(record.carbonOffsetKg || 0);
+      const creditPkr = Number(record.carbonCreditValue || 0);
+      const collected = Number(record.totalCollected || 0);
+
+      totalCarbonKg += carbonKg;
+      totalCreditPkr += creditPkr;
+      totalCollected += collected;
+
+      if (!byCategory[categoryKey]) {
+        byCategory[categoryKey] = { totalWeightKg: 0, totalCarbonKg: 0, totalCreditPkr: 0, count: 0 };
+      }
+      byCategory[categoryKey].totalWeightKg += weightKg;
+      byCategory[categoryKey].totalCarbonKg += carbonKg;
+      byCategory[categoryKey].totalCreditPkr += creditPkr;
+      byCategory[categoryKey].count += 1;
+
+      if (!byZone[zoneKey]) {
+        byZone[zoneKey] = { totalCarbonKg: 0, totalCreditPkr: 0, count: 0 };
+      }
+      byZone[zoneKey].totalCarbonKg += carbonKg;
+      byZone[zoneKey].totalCreditPkr += creditPkr;
+      byZone[zoneKey].count += 1;
     }
 
-    const credits = await prisma.carbonCredit.findMany({
-      where,
-      include: {
-        listing: {
-          select: {
-            id: true, title: true, cityName: true,
-            category: { select: { name: true } },
-            geoZone: { select: { name: true, type: true } },
-          },
-        },
-        collection: {
-          select: {
-            collectedQuantity: true, collectedWeight: true,
-            collectorId: true,
-            collector: { select: { firstName: true, lastName: true } },
-          },
-        },
-      },
-      orderBy: { issuedDate: 'desc' },
-    });
-
-    // Aggregate by category
-    const byCategory = {};
-    credits.forEach((c) => {
-      const cat = c.listing?.category?.name || 'Unknown';
-      if (!byCategory[cat]) {
-        byCategory[cat] = { totalWeightKg: 0, totalCarbonKg: 0, totalCreditPkr: 0, count: 0 };
-      }
-      byCategory[cat].totalWeightKg += parseFloat(c.collection?.collectedWeight || c.collection?.collectedQuantity || 0);
-      byCategory[cat].totalCarbonKg += parseFloat(c.carbonAmountKg);
-      byCategory[cat].totalCreditPkr += parseFloat(c.creditValue);
-      byCategory[cat].count++;
-    });
-
-    // Aggregate by zone
-    const byZone = {};
-    credits.forEach((c) => {
-      const zone = c.listing?.geoZone?.name || 'Unknown';
-      if (!byZone[zone]) {
-        byZone[zone] = { totalCarbonKg: 0, totalCreditPkr: 0, count: 0 };
-      }
-      byZone[zone].totalCarbonKg += parseFloat(c.carbonAmountKg);
-      byZone[zone].totalCreditPkr += parseFloat(c.creditValue);
-      byZone[zone].count++;
-    });
-
-    // Totals
-    const totalCarbonKg = credits.reduce((sum, c) => sum + parseFloat(c.carbonAmountKg), 0);
-    const totalCreditPkr = credits.reduce((sum, c) => sum + parseFloat(c.creditValue), 0);
-
     res.json({
+      period,
       summary: {
-        totalCollections: credits.length,
+        totalCollections: totalCollected,
+        totalRecords: records.length,
         totalCarbonOffsetKg: Math.round(totalCarbonKg * 100) / 100,
         totalCreditValuePkr: Math.round(totalCreditPkr * 100) / 100,
-        estimatedTreesEquivalent: Math.round(totalCarbonKg / 21), // ~21 kg CO2 per tree/year
+        estimatedTreesEquivalent: Math.round(totalCarbonKg / 21),
       },
       byCategory,
       byZone,
-      recentCredits: credits.slice(0, 20),
+      recentCredits: records.slice(0, 20),
     });
   } catch (err) {
     console.error('Error fetching carbon analytics:', err);
