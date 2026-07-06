@@ -1,5 +1,12 @@
 require('dotenv').config();
 
+// Normalize Prisma BigInt fields for JSON responses (prices, wallet balances, ledger amounts).
+// Without this, routes that return BigInt values directly can throw "Do not know how to serialize a BigInt".
+if (typeof BigInt !== 'undefined' && !BigInt.prototype.toJSON) {
+  // Keep money values lossless by returning decimal strings, not floats.
+  BigInt.prototype.toJSON = function toJSON() { return this.toString(); };
+}
+
 // Validate config FIRST (skill requirement)
 const { validateConfig } = require('./config/validate');
 validateConfig();
