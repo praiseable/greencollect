@@ -3,6 +3,7 @@ const prisma = require('../services/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
 const { portalCheck } = require('../middleware/portalCheck');
 const { Portal } = require('../../../packages/shared/src/constants');
+const { runDisintermediationScan } = require('../services/disintermediation.service');
 
 // Admin-only routes - require admin portal token
 router.use(authenticate, authorize('SUPER_ADMIN', 'ADMIN'), portalCheck(Portal.ADMIN));
@@ -139,6 +140,58 @@ router.put('/listings/:id/status', async (req, res) => {
     res.json({ ...listing, pricePaisa: listing.pricePaisa?.toString() });
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to update listing status' } });
+  }
+});
+
+
+// GET /admin/flagged-users — Anti-disintermediation review queue
+router.get('/flagged-users', async (req, res) => {
+  try {
+    const { status = 'open', page = 1, limit = 50 } = req.query;
+    const where = status ? { status } : {};
+    const [flags, total] = await Promise.all([
+      prisma.adminFlaggedUser.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+        include: { user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, isActive: true, accountStatus: true } }, reviewer: { select: { id: true, firstName: true, lastName: true } } },
+      }),
+      prisma.adminFlaggedUser.count({ where }),
+    ]);
+    res.json({ data: flags, total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) });
+  } catch (err) {
+    console.error('GET /admin/flagged-users error:', err);
+    res.status(500).json({ error: { message: 'Failed to fetch flagged users', code: 'INTERNAL_ERROR' } });
+  }
+});
+
+// POST /admin/flagged-users/scan — manual trigger for the automated flagging engine
+router.post('/flagged-users/scan', async (req, res) => {
+  try {
+    const flags = await runDisintermediationScan();
+    res.json({ created: flags.length, flags });
+  } catch (err) {
+    console.error('POST /admin/flagged-users/scan error:', err);
+    res.status(500).json({ error: { message: 'Failed to run scan', code: 'INTERNAL_ERROR' } });
+  }
+});
+
+// PATCH /admin/flagged-users/:id — review/dismiss/action a flag without automatic penalties
+router.patch('/flagged-users/:id', async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['reviewed', 'dismissed', 'actioned'].includes(status)) {
+      return res.status(400).json({ error: { message: 'Invalid flag status', code: 'VALIDATION_ERROR' } });
+    }
+    const flag = await prisma.adminFlaggedUser.update({
+      where: { id: req.params.id },
+      data: { status, reviewedBy: req.user.id, reviewedAt: new Date() },
+    });
+    res.json(flag);
+  } catch (err) {
+    console.error('PATCH /admin/flagged-users/:id error:', err);
+    res.status(500).json({ error: { message: 'Failed to update flag', code: 'INTERNAL_ERROR' } });
   }
 });
 

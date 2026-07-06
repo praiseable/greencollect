@@ -2,6 +2,32 @@ const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
+const { serializeWallet } = require('../services/wallet.service');
+
+const BUSINESS_TYPE_MAP = {
+  individual: 'INDIVIDUAL',
+  aop: 'AOP',
+  private_limited: 'PRIVATE_LIMITED',
+  INDIVIDUAL: 'INDIVIDUAL',
+  AOP: 'AOP',
+  PRIVATE_LIMITED: 'PRIVATE_LIMITED',
+};
+
+function stripSensitiveProfile(user, viewer) {
+  if (!user) return user;
+  const canSee = viewer && (viewer.id === user.id || ['SUPER_ADMIN', 'ADMIN'].includes(viewer.role));
+  if (canSee) return user;
+  const copy = { ...user };
+  delete copy.cnicNumber;
+  delete copy.ntnNumber;
+  delete copy.strnNumber;
+  delete copy.bankName;
+  delete copy.bankAccountTitle;
+  delete copy.bankAccountNumber;
+  delete copy.cnicFrontImage;
+  delete copy.cnicBackImage;
+  return copy;
+}
 
 // GET /users/me — Own profile (spec 2.5; must be before /:id)
 router.get('/me', authenticate, async (req, res) => {
@@ -16,7 +42,10 @@ router.get('/me', authenticate, async (req, res) => {
     });
     if (!user) return res.status(404).json({ error: { message: 'User not found' } });
     const out = { ...user };
-    if (user.wallet) out.walletBalance = Number(user.wallet.balancePaisa);
+    if (user.wallet) {
+      out.wallet = serializeWallet(user.wallet);
+      out.walletBalance = Number(user.wallet.availableBalancePaisa ?? user.wallet.balancePaisa);
+    }
     res.json(out);
   } catch (err) {
     console.error('GET /users/me error:', err);
@@ -78,7 +107,7 @@ router.get('/:id', authenticate, async (req, res) => {
       },
     });
     if (!user) return res.status(404).json({ error: { message: 'User not found' } });
-    res.json(user);
+    res.json(stripSensitiveProfile(user, req.user));
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to fetch user' } });
   }
@@ -92,7 +121,7 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: { message: 'Cannot update other users' } });
     }
 
-    const { firstName, lastName, displayName, city, languageId, phone, avatar, cnicNumber, geoZoneId } = req.body;
+    const { firstName, lastName, displayName, city, languageId, phone, avatar, cnicNumber, geoZoneId, ntnNumber, strnNumber, businessType } = req.body;
     const data = {};
     if (firstName) data.firstName = firstName;
     if (lastName) data.lastName = lastName;
@@ -103,9 +132,26 @@ router.put('/:id', authenticate, async (req, res) => {
     if (avatar) data.avatar = avatar;
     if (cnicNumber) data.cnicNumber = cnicNumber;
     if (geoZoneId) data.geoZoneId = geoZoneId;
+    if (ntnNumber !== undefined) {
+      if (ntnNumber && !/^[A-Za-z0-9-]{3,20}$/.test(String(ntnNumber))) {
+        return res.status(400).json({ error: { message: 'Invalid NTN format', code: 'VALIDATION_ERROR' } });
+      }
+      data.ntnNumber = ntnNumber || null;
+    }
+    if (strnNumber !== undefined) {
+      if (strnNumber && !/^[A-Za-z0-9-]{3,20}$/.test(String(strnNumber))) {
+        return res.status(400).json({ error: { message: 'Invalid STRN format', code: 'VALIDATION_ERROR' } });
+      }
+      data.strnNumber = strnNumber || null;
+    }
+    if (businessType !== undefined) {
+      const mapped = BUSINESS_TYPE_MAP[businessType];
+      if (businessType && !mapped) return res.status(400).json({ error: { message: 'Invalid business type', code: 'VALIDATION_ERROR' } });
+      data.businessType = mapped || null;
+    }
 
     const user = await prisma.user.update({ where: { id: req.params.id }, data });
-    res.json(user);
+    res.json(stripSensitiveProfile(user, req.user));
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to update user' } });
   }
@@ -116,7 +162,7 @@ router.put('/:id/role', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (
   try {
     const { role } = req.body;
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { role } });
-    res.json(user);
+    res.json(stripSensitiveProfile(user, req.user));
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to change role' } });
   }

@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../services/prisma');
 const { body, validationResult } = require('express-validator');
+const { authenticate, authorize } = require('../middleware/auth');
+const { portalCheck } = require('../middleware/portalCheck');
+const { Portal } = require('../../../packages/shared/src/constants');
+const { creditWallet, debitWallet, serializeWallet, WalletError } = require('../services/wallet.service');
+
+router.use(authenticate, authorize('SUPER_ADMIN', 'ADMIN'), portalCheck(Portal.ADMIN));
 
 // ═══════════════════════════════════════════════════════════
 // DEALER ONBOARDING — Admin creates dealer accounts
@@ -16,7 +22,7 @@ router.post('/',
   body('firstName').notEmpty().trim(),
   body('lastName').notEmpty().trim(),
   body('phone').notEmpty().trim(),
-  body('role').isIn(['DEALER', 'FRANCHISE_ADMIN', 'COLLECTOR']),
+  body('role').isIn(['DEALER', 'FRANCHISE_OWNER', 'WHOLESALE_BUYER', 'REGIONAL_MANAGER']),
   body('city').notEmpty().trim(),
   body('area').notEmpty().trim(),
   body('cnicNumber').notEmpty().trim(),
@@ -72,10 +78,10 @@ router.post('/',
           simOwnerName: simOwnerName || null,
           simVerified: true, // Admin-created accounts skip SIM verification
           criminalCheckStatus: 'CLEARED', // Admin verifies before creation
-          requiredDeposit: parseInt(requiredDeposit) || 0,
-          depositPaid: initialBalance > 0,
-          depositAmount: initialBalance > 0 ? parseInt(initialBalance) : 0,
-          depositPaidAt: initialBalance > 0 ? new Date() : null,
+          requiredDeposit: 0,
+          depositPaid: true,
+          depositAmount: 0,
+          depositPaidAt: null,
           ntnNumber: ntnNumber || null,
           bankName: bankName || null,
           bankAccountTitle: bankAccountTitle || null,
@@ -85,14 +91,24 @@ router.post('/',
         },
       });
 
-      // Create wallet with initial balance
+      // Create a zero wallet. Any optional buyer-side top-up below is ledger-backed; sellers are never charged to activate.
       await prisma.wallet.create({
         data: {
           userId: user.id,
-          balancePaisa: BigInt(Math.round(initialBalance * 100)), // Store in paisa
+          availableBalancePaisa: 0n,
+          escrowedBalancePaisa: 0n,
+          balancePaisa: 0n,
           currencyId: 'PKR',
         },
       });
+
+      if (Number(initialBalance) > 0) {
+        await creditWallet(user.id, BigInt(Math.round(Number(initialBalance) * 100)), {
+          referenceType: 'MANUAL_ADJUSTMENT',
+          note: 'Admin-created buyer wallet top-up',
+          metadata: { source: 'admin_dealer_creation' },
+        });
+      }
 
       // Assign territory if geoZoneId is provided
       if (geoZoneId) {
@@ -141,12 +157,10 @@ router.post('/:userId/balance/add',
       const { amount, note } = req.body;
       const amountPaisa = BigInt(Math.round(amount * 100));
 
-      const wallet = await prisma.wallet.findUnique({ where: { userId } });
-      if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
-
-      const updated = await prisma.wallet.update({
-        where: { userId },
-        data: { balancePaisa: wallet.balancePaisa + amountPaisa },
+      const updated = await creditWallet(userId, amountPaisa, {
+        referenceType: 'MANUAL_ADJUSTMENT',
+        note: note || 'Admin wallet credit',
+        metadata: { source: 'admin_dealers_balance_add' },
       });
 
       // Ensure account is ACTIVE when balance > 0
@@ -160,20 +174,24 @@ router.post('/:userId/balance/add',
         data: {
           userId,
           action: 'BALANCE_ADD',
-          details: JSON.stringify({
+          entity: 'Wallet',
+          entityId: updated.id,
+          newData: {
             amount,
             note: note || '',
-            newBalance: Number(updated.balancePaisa) / 100,
-          }),
+            newBalancePaisa: updated.availableBalancePaisa?.toString() || updated.balancePaisa?.toString(),
+          },
         },
       });
 
       res.json({
         message: `₨${amount} added successfully`,
-        newBalance: Number(updated.balancePaisa) / 100,
+        wallet: serializeWallet(updated),
+        newBalance: Number(updated.availableBalancePaisa ?? updated.balancePaisa) / 100,
       });
     } catch (err) {
       console.error('Balance add error:', err);
+      if (err instanceof WalletError) return res.status(err.status).json({ error: { message: err.message, code: err.code, details: err.details } });
       res.status(500).json({ error: 'Failed to add balance' });
     }
   }
@@ -195,40 +213,38 @@ router.post('/:userId/balance/deduct',
       const { amount, reason } = req.body;
       const amountPaisa = BigInt(Math.round(amount * 100));
 
-      const wallet = await prisma.wallet.findUnique({ where: { userId } });
-      if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
-
-      const newBalance = wallet.balancePaisa - amountPaisa;
-      const finalBalance = newBalance < 0n ? 0n : newBalance;
-
-      const updated = await prisma.wallet.update({
-        where: { userId },
-        data: { balancePaisa: finalBalance },
+      const updated = await debitWallet(userId, amountPaisa, {
+        referenceType: 'MANUAL_ADJUSTMENT',
+        note: reason || 'Admin wallet debit',
+        metadata: { source: 'admin_dealers_balance_deduct' },
       });
 
-      // If balance is now 0, the app will automatically lock for this user
-      // (balance-gate check happens on every navigation in the Pro app)
+      // v3: wallet balance never locks seller/pro access; this is a buyer-side manual adjustment only.
 
       // Log the deduction
       await prisma.auditLog.create({
         data: {
           userId,
           action: 'BALANCE_DEDUCT',
-          details: JSON.stringify({
+          entity: 'Wallet',
+          entityId: updated.id,
+          newData: {
             amount,
             reason,
-            newBalance: Number(updated.balancePaisa) / 100,
-          }),
+            newBalancePaisa: updated.availableBalancePaisa?.toString() || updated.balancePaisa?.toString(),
+          },
         },
       });
 
       res.json({
         message: `₨${amount} deducted`,
-        newBalance: Number(updated.balancePaisa) / 100,
-        locked: Number(updated.balancePaisa) === 0,
+        wallet: serializeWallet(updated),
+        newBalance: Number(updated.availableBalancePaisa ?? updated.balancePaisa) / 100,
+        locked: false,
       });
     } catch (err) {
       console.error('Balance deduct error:', err);
+      if (err instanceof WalletError) return res.status(err.status).json({ error: { message: err.message, code: err.code, details: err.details } });
       res.status(500).json({ error: 'Failed to deduct balance' });
     }
   }
@@ -242,7 +258,7 @@ router.get('/wallets', async (req, res) => {
   try {
     const dealers = await prisma.user.findMany({
       where: {
-        role: { in: ['DEALER', 'FRANCHISE_ADMIN', 'COLLECTOR'] },
+        role: { in: ['DEALER', 'FRANCHISE_OWNER', 'WHOLESALE_BUYER', 'REGIONAL_MANAGER'] },
       },
       include: {
         wallet: true,
@@ -262,7 +278,7 @@ router.get('/wallets', async (req, res) => {
       city: d.city,
       area: d.geoZone?.name || d.city,
       accountStatus: d.accountStatus,
-      balance: d.wallet ? Number(d.wallet.balancePaisa) / 100 : 0,
+      balance: d.wallet ? Number(d.wallet.availableBalancePaisa ?? d.wallet.balancePaisa) / 100 : 0,
       kycStatus: d.kycApprovedAt ? 'APPROVED' : d.kycSubmittedAt ? 'SUBMITTED' : 'PENDING',
       territories: d.dealerTerritories.map(t => t.geoZone?.name),
       createdAt: d.createdAt,
@@ -311,7 +327,9 @@ router.patch('/:userId/status',
         data: {
           userId,
           action: 'ACCOUNT_STATUS_CHANGE',
-          details: JSON.stringify({ newStatus: status, reason: reason || '' }),
+          entity: 'User',
+          entityId: userId,
+          newData: { newStatus: status, reason: reason || '' },
         },
       });
 

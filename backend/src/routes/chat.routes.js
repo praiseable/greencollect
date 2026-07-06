@@ -2,6 +2,20 @@ const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate } = require('../middleware/auth');
 
+async function hasChatUnlock(userId, otherUserId) {
+  const unlockedAsBuyer = await prisma.listingDeposit.findFirst({
+    where: { buyerId: userId, status: { in: ['HELD', 'CAPTURED'] }, listing: { sellerId: otherUserId } },
+    select: { id: true },
+  }).catch(() => null);
+  if (unlockedAsBuyer) return true;
+
+  const unlockedAsSeller = await prisma.listingDeposit.findFirst({
+    where: { buyerId: otherUserId, status: { in: ['HELD', 'CAPTURED'] }, listing: { sellerId: userId } },
+    select: { id: true },
+  }).catch(() => null);
+  return !!unlockedAsSeller;
+}
+
 // GET /chat/conversations — List conversations
 router.get('/conversations', authenticate, async (req, res) => {
   try {
@@ -50,6 +64,8 @@ router.get('/conversations', authenticate, async (req, res) => {
 // GET /chat/:userId — Messages with specific user
 router.get('/:userId', authenticate, async (req, res) => {
   try {
+    const unlocked = await hasChatUnlock(req.user.id, req.params.userId);
+    if (!unlocked) return res.status(403).json({ error: { message: 'A held buyer deposit is required before chat is available', code: 'DEPOSIT_REQUIRED' } });
     const { page = 1, limit = 50 } = req.query;
     const messages = await prisma.chatMessage.findMany({
       where: {
@@ -78,6 +94,8 @@ router.get('/:userId', authenticate, async (req, res) => {
 // POST /chat/:userId — Send message
 router.post('/:userId', authenticate, async (req, res) => {
   try {
+    const unlocked = await hasChatUnlock(req.user.id, req.params.userId);
+    if (!unlocked) return res.status(403).json({ error: { message: 'A held buyer deposit is required before chat is available', code: 'DEPOSIT_REQUIRED' } });
     const { message } = req.body;
     const msg = await prisma.chatMessage.create({
       data: { fromUserId: req.user.id, toUserId: req.params.userId, message },

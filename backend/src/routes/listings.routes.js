@@ -5,6 +5,15 @@ const { success, error, paginated } = require('../utils/apiResponse');
 const { addFormattedPrice } = require('../services/currency.service');
 const { buildGeoFenceWhere, canUserViewListing } = require('../services/geoFencing.service');
 const { notifyZoneDealersOnNewListing } = require('../services/escalation.service');
+const {
+  getUnlockMapForListings,
+  maskListingContact,
+  canUnlockListing,
+  placeListingDeposit,
+  serializeDeposit,
+  WalletError,
+  getActiveDeposit,
+} = require('../services/wallet.service');
 const multer = require('multer');
 const path = require('path');
 
@@ -101,7 +110,11 @@ router.get('/', optionalAuth, async (req, res) => {
       prisma.listing.count({ where }),
     ]);
 
-    // Add formatted prices and seller display (app expects sellerName, sellerPhone)
+    const unlockMap = req.user?.id
+      ? await getUnlockMapForListings(listings.map((l) => l.id), req.user.id)
+      : new Map();
+
+    // Add formatted prices and seller display; mask seller contact until buyer has a held/captured deposit.
     const data = listings.map(l => {
       const item = { ...l, pricePaisa: l.pricePaisa.toString() };
       item.priceFormatted = `₨ ${Number(l.pricePaisa).toLocaleString('en-PK')}`;
@@ -110,8 +123,8 @@ router.get('/', optionalAuth, async (req, res) => {
       item.unitName = l.unit?.translations[0]?.abbreviation || l.unit?.slug;
       const s = l.seller;
       item.sellerName = s?.displayName || (s ? [s.firstName, s.lastName].filter(Boolean).join(' ') : '') || '';
-      item.sellerPhone = s?.phone || l.contactNumber || '';
-      return item;
+      const unlocked = !!(isAdmin || (req.user?.id && l.sellerId === req.user.id) || unlockMap.get(l.id));
+      return maskListingContact(item, unlocked);
     });
 
     res.json({
@@ -264,6 +277,25 @@ router.get('/my', authenticate, async (req, res) => {
   }
 });
 
+// POST /listings/:id/deposit — Buyer-funded escrow hold that unlocks seller contact
+router.post('/:id/deposit', authenticate, async (req, res) => {
+  try {
+    const result = await placeListingDeposit(req.params.id, req.user.id);
+    res.status(result.alreadyHeld ? 200 : 201).json({
+      deposit: serializeDeposit(result.deposit),
+      requiredDepositPaisa: result.requiredDepositPaisa.toString(),
+      alreadyHeld: result.alreadyHeld,
+      contactUnlocked: true,
+    });
+  } catch (err) {
+    if (err instanceof WalletError) {
+      return res.status(err.status).json({ error: { message: err.message, code: err.code, ...err.details } });
+    }
+    console.error('Place listing deposit error:', err);
+    res.status(500).json({ error: { message: 'Failed to place listing deposit', code: 'INTERNAL_ERROR' } });
+  }
+});
+
 // GET /listings/:id — Listing detail
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
@@ -307,12 +339,14 @@ router.get('/:id', optionalAuth, async (req, res) => {
     // Increment view count
     await prisma.listing.update({ where: { id: req.params.id }, data: { viewCount: { increment: 1 } } });
 
-    const result = {
+    const unlocked = await canUnlockListing(listing, req.user, prisma);
+    const result = maskListingContact({
       ...listing,
       pricePaisa: listing.pricePaisa.toString(),
       priceFormatted: `₨ ${Number(listing.pricePaisa).toLocaleString('en-PK')}`,
       sellerId: listing.sellerId, // Ensure sellerId is at root level for easy access
-    };
+      sellerName: listing.seller?.displayName || [listing.seller?.firstName, listing.seller?.lastName].filter(Boolean).join(' '),
+    }, unlocked);
 
     res.json({ listing: result });
   } catch (err) {
@@ -336,6 +370,10 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({
         error: { message: 'Missing required fields: title, categoryId, pricePaisa, quantity, unitId', code: 'VALIDATION_ERROR' },
       });
+    }
+
+    if (req.user.isVerified === false) {
+      return res.status(403).json({ error: { message: 'Phone verification is required to create listings', code: 'PHONE_NOT_VERIFIED' } });
     }
 
     // Resolve geoZoneId: explicit id > cityName lookup > user's zone > first city
@@ -540,6 +578,12 @@ router.post('/:id/interest', authenticate, async (req, res) => {
   try {
     const listing = await prisma.listing.findUnique({ where: { id: req.params.id } });
     if (!listing) return res.status(404).json({ error: { message: 'Listing not found' } });
+    if (listing.sellerId === req.user.id) return res.status(400).json({ error: { message: 'Cannot make offer on your own listing', code: 'SELF_OFFER_NOT_ALLOWED' } });
+
+    const activeDeposit = await getActiveDeposit(req.params.id, req.user.id);
+    if (!activeDeposit) {
+      return res.status(402).json({ error: { message: 'A held buyer deposit is required before making an offer', code: 'DEPOSIT_REQUIRED' } });
+    }
 
     const { offerPricePaisa, quantity, notes } = req.body;
 

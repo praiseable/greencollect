@@ -10,7 +10,10 @@
     "migrate:dev": "npx prisma migrate dev",
     "generate": "npx prisma generate",
     "seed": "node prisma/seed.js",
-    "studio": "npx prisma studio"
+    "studio": "npx prisma studio",
+    "test": "NODE_ENV=test ALLOW_TEST_TOPUP=true ALLOW_TEST_HANDSHAKE_OTP=true jest --runInBand",
+    "test:integration": "NODE_ENV=test ALLOW_TEST_TOPUP=true ALLOW_TEST_HANDSHAKE_OTP=true jest tests/integration --runInBand",
+    "smoke-test": "NODE_ENV=smoke ALLOW_TEST_TOPUP=true ALLOW_TEST_HANDSHAKE_OTP=true node tests/smoke-test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
@@ -34,6 +37,15 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
-    "prisma": "^5.10.0"
+    "prisma": "^5.10.0",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/integration/**/*.test.js"
+    ],
+    "testTimeout": 30000
   }
 }
