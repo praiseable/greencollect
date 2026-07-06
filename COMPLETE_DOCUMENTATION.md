@@ -760,6 +760,8 @@ created_at    timestamp DEFAULT now()
 INDEX(user_id, is_read, created_at)
 ```
 
+
+
 ### 1.27 broadcast_notifications
 ```sql
 id               uuid PRIMARY KEY DEFAULT gen_random_uuid()
