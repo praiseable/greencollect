@@ -322,9 +322,16 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     if (!listing) return res.status(404).json({ error: { message: 'Listing not found' } });
 
-    // Check geo-fencing (admins can view any listing)
+    // Contact unlock is a stronger explicit access grant than geo-fence browsing.
+    // A buyer who has paid/held a listing deposit must be able to reopen the exact
+    // listing detail to see the seller contact/address they paid to unlock, even if
+    // their profile geoZone is absent or no longer matches the listing zone.
+    const unlocked = await canUnlockListing(listing, req.user, prisma);
+
+    // Check geo-fencing for discovery views. Admins, owners, and deposit-unlocked buyers
+    // can view the exact listing detail regardless of geo-fence visibility.
     const isAdmin = req.user && ['SUPER_ADMIN', 'ADMIN', 'COLLECTION_MANAGER'].includes(req.user.role);
-    if (!isAdmin) {
+    if (!isAdmin && !unlocked) {
       const canView = await canUserViewListing(req.user, listing);
       if (!canView) {
         return res.status(403).json({
@@ -338,8 +345,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     // Increment view count
     await prisma.listing.update({ where: { id: req.params.id }, data: { viewCount: { increment: 1 } } });
-
-    const unlocked = await canUnlockListing(listing, req.user, prisma);
     const result = maskListingContact({
       ...listing,
       pricePaisa: listing.pricePaisa.toString(),
