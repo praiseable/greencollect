@@ -614,7 +614,7 @@ router.post('/admin/login', loginThrottle, [
     const user = await prisma.user.findFirst({
       where: {
         email: email || undefined,
-        role: { in: ['ADMIN', 'SUPER_ADMIN', 'ADMIN_VIEWER', 'COLLECTION_MANAGER'] },
+        role: { in: ['ADMIN', 'SUPER_ADMIN', 'COLLECTION_MANAGER'] },
       },
     });
     if (!user || !user.passwordHash) {
@@ -675,7 +675,7 @@ router.post('/customer/login', loginThrottle, idempotency(), [
 
     if (!user) return res.status(401).json({ error: { message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' } });
     if (!user.isActive) return res.status(403).json({ error: { message: 'Account is deactivated', code: 'ACCOUNT_INACTIVE' } });
-    if (!['CUSTOMER', 'PREMIUM_CUSTOMER'].includes(user.role)) {
+    if (!['CUSTOMER'].includes(user.role)) {
       return res.status(403).json({ error: { message: 'Access denied for this portal', code: 'FORBIDDEN' } });
     }
 
