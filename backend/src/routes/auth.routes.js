@@ -640,13 +640,14 @@ router.post('/admin/login', loginThrottle, [
     // Reset login throttle on successful login
     await resetLoginThrottle(email);
 
-    // Use DTO serializer to prevent sensitive field exposure
-    res.json(ok({ 
+    // Admin web portal expects accessToken and user at the top level.
+    // Keep refresh token in the HttpOnly cookie; do not return it in JSON.
+    res.json({
+      success: true,
       user: serializeUser(user),
-      accessToken: tokens.accessToken, // Only access token in response
+      accessToken: tokens.accessToken,
       expiresIn: 900,
-      // Note: refreshToken not in response - it's in HttpOnly cookie
-    }));
+    });
   } catch (err) {
     console.error('Admin portal login error:', err);
     res.status(500).json({ error: { message: 'Login failed', code: 'INTERNAL_ERROR' } });
