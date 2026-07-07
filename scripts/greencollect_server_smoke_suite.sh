@@ -187,8 +187,15 @@ LISTING_ID="$(extract_first_listing_id)"
 if [ -n "$LISTING_ID" ]; then
   pass "listing available for detail/contact-mask smoke: $LISTING_ID"
   http GET "$API_BASE/listings/$LISTING_ID"
-  expect_status 200 "GET /api/listings/:id anonymous"
-  json_true "(lambda l: not (l.get('sellerPhone') or l.get('contactNumber') or l.get('exactAddress') or ((l.get('seller') or {}).get('phone'))))(obj.get('listing') if isinstance(obj, dict) and obj.get('listing') else obj if isinstance(obj, dict) else {})" "anonymous listing detail does not expose phone/address/contact"
+  if [ "$STATUS" = "200" ]; then
+    pass "GET /api/listings/:id anonymous [200]"
+    json_true "(lambda l: not (l.get('sellerPhone') or l.get('contactNumber') or l.get('exactAddress') or ((l.get('seller') or {}).get('phone'))))(obj.get('listing') if isinstance(obj, dict) and obj.get('listing') else obj if isinstance(obj, dict) else {})" "anonymous listing detail does not expose phone/address/contact"
+  elif [ "$STATUS" = "403" ]; then
+    json_true "isinstance(obj, dict) and isinstance(obj.get('error'), dict) and obj.get('error').get('code') == 'GEO_FENCE_RESTRICTED'" "GET /api/listings/:id anonymous may be geo-fenced [403]"
+    json_true "not any(k in str(obj).lower() for k in ['sellerphone','seller_phone','contactnumber','contact_number','exactaddress','exact_address','phone_number'])" "geo-fenced listing detail error does not expose phone/address/contact"
+  else
+    fail "GET /api/listings/:id anonymous expected 200 or GEO_FENCE_RESTRICTED 403 got $STATUS"
+  fi
 else
   warn "no listing id found; contact masking detail check skipped"
 fi
