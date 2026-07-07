@@ -135,7 +135,6 @@ router.get('/:id', async (req, res) => {
             geoZone: true,
           },
         },
-        dealerRatings: true,
       },
     });
 
@@ -212,7 +211,9 @@ router.post(
       // Update listing status
       await prisma.listing.update({
         where: { id: listingId },
-        data: { status: 'COLLECTION_PENDING' },
+        // Keep this value aligned with the Prisma ListingStatus enum.
+        // COLLECTION_PENDING / COLLECTION_COMPLETED are not schema values.
+        data: { status: 'ASSIGNED_TO_DEALER' },
       });
 
       // Notify collector
@@ -298,7 +299,8 @@ router.patch(
 
       let listingStatus = null;
       if (status === 'EN_ROUTE') listingStatus = 'COLLECTION_IN_PROGRESS';
-      else if (['COLLECTED', 'DELIVERED_TO_CENTER'].includes(status)) listingStatus = 'COLLECTION_COMPLETED';
+      else if (status === 'COLLECTED') listingStatus = 'COLLECTED';
+      else if (status === 'DELIVERED_TO_CENTER') listingStatus = 'DELIVERED';
       if (listingStatus) {
         await prisma.listing.update({
           where: { id: collection.listingId },
