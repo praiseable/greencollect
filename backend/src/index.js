@@ -51,7 +51,14 @@ app.use(cors({
 }));
 app.use(morgan('dev'));
 app.use(cookieParser()); // Parse cookies (required for refresh token cookies)
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => {
+    if (req.originalUrl && req.originalUrl.includes('/payments/webhook')) {
+      req.rawBody = buf.toString('utf8');
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Static uploads

@@ -850,6 +850,10 @@ model Payment {
   transactions Transaction[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
+
+  @@unique([gateway, gatewayRef])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Wallet {
