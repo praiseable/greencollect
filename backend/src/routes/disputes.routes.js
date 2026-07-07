@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate } = require('../middleware/auth');
-const { ensureWallet, writeLedger } = require('../services/wallet.service');
+const { releaseDepositInTx, reverseCommissionInTx } = require('../services/wallet.service');
 
 router.use(authenticate);
 
@@ -36,85 +36,26 @@ function serializeDispute(dispute) {
 
 async function releaseHeldDepositInTx(tx, deposit, disputeId) {
   if (!deposit || deposit.status !== 'HELD') return { releasedPaisa: 0n, ledgerId: null };
-
-  const wallet = await ensureWallet(deposit.buyerId, tx);
-  const available = wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n;
-  const escrowed = wallet.escrowedBalancePaisa ?? 0n;
-  if (escrowed < deposit.amountPaisa) {
-    throw Object.assign(new Error('Wallet escrow is inconsistent'), { code: 'ESCROW_INCONSISTENT', status: 500 });
-  }
-
-  const updatedWallet = await tx.wallet.update({
-    where: { id: wallet.id },
-    data: {
-      availableBalancePaisa: available + deposit.amountPaisa,
-      escrowedBalancePaisa: escrowed - deposit.amountPaisa,
-      balancePaisa: available + deposit.amountPaisa,
-    },
-  });
-
-  await tx.listingDeposit.update({
-    where: { id: deposit.id },
-    data: { status: 'RELEASED', releasedAt: new Date() },
-  });
-
-  const ledger = await writeLedger(tx, updatedWallet, {
-    type: 'ESCROW_RELEASE',
-    amountPaisa: deposit.amountPaisa,
+  const result = await releaseDepositInTx(tx, deposit, {
     referenceType: 'DEPOSIT_REFUND',
     referenceId: deposit.id,
     note: 'Dispute resolution released held buyer deposit',
     metadata: { disputeId, listingId: deposit.listingId, buyerId: deposit.buyerId },
   });
-
-  return { releasedPaisa: deposit.amountPaisa, ledgerId: ledger.id };
+  return { releasedPaisa: result.releasedPaisa || 0n, ledgerId: result.ledger?.id || null };
 }
 
 async function reverseCapturedCommissionInTx(tx, transaction, disputeId) {
-  const wallet = await ensureWallet(transaction.buyerId, tx);
-
-  const existingReversal = await tx.walletLedger.findFirst({
-    where: { walletId: wallet.id, referenceType: 'REVERSAL', referenceId: disputeId },
-  });
-  if (existingReversal) return { reversalPaisa: 0n, ledgerId: existingReversal.id, alreadyReversed: true };
-
-  const commissionRows = await tx.walletLedger.findMany({
-    where: {
-      walletId: wallet.id,
-      referenceType: 'COMMISSION_CAPTURE',
-      referenceId: transaction.id,
-    },
-  });
-
-  // captureCommissionForTransaction writes the total commission as ESCROW_CAPTURE.
-  // A separate DEBIT row may exist for shortfall; do not double-count it.
-  const capturedPaisa = commissionRows
-    .filter((row) => row.type === 'ESCROW_CAPTURE')
-    .reduce((sum, row) => sum + row.amountPaisa, 0n);
-
-  if (capturedPaisa <= 0n) return { reversalPaisa: 0n, ledgerId: null, alreadyReversed: false };
-
-  const available = wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n;
-  const escrowed = wallet.escrowedBalancePaisa ?? 0n;
-  const updatedWallet = await tx.wallet.update({
-    where: { id: wallet.id },
-    data: {
-      availableBalancePaisa: available + capturedPaisa,
-      balancePaisa: available + capturedPaisa,
-      escrowedBalancePaisa: escrowed,
-    },
-  });
-
-  const ledger = await writeLedger(tx, updatedWallet, {
-    type: 'CREDIT',
-    amountPaisa: capturedPaisa,
-    referenceType: 'REVERSAL',
+  const result = await reverseCommissionInTx(tx, transaction, {
     referenceId: disputeId,
     note: 'Dispute resolution reversed buyer-funded platform commission',
     metadata: { transactionId: transaction.id, buyerId: transaction.buyerId, sellerId: transaction.sellerId },
   });
-
-  return { reversalPaisa: capturedPaisa, ledgerId: ledger.id, alreadyReversed: false };
+  return {
+    reversalPaisa: result.reversalPaisa || 0n,
+    ledgerId: result.ledger?.id || null,
+    alreadyReversed: !!result.alreadyReversed,
+  };
 }
 
 // GET /disputes — participants see their disputes; admins see all

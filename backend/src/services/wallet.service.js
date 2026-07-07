@@ -130,6 +130,105 @@ async function creditWalletWithClient(client, userId, amountPaisa, options = {})
   });
   return updated;
 }
+async function creditWalletInTx(client, userId, amountPaisa, options = {}) {
+  const amount = toBigIntPaisa(amountPaisa);
+  if (amount <= 0n) throw new WalletError('Credit amount must be greater than zero', 'INVALID_AMOUNT', 400);
+
+  const wallet = await ensureWallet(userId, client);
+  const available = (wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n) + amount;
+  const updated = await client.wallet.update({
+    where: { id: wallet.id },
+    data: { availableBalancePaisa: available, balancePaisa: available },
+  });
+
+  const ledger = await writeLedger(client, updated, {
+    type: options.type || 'CREDIT',
+    amountPaisa: amount,
+    referenceType: options.referenceType || 'TOPUP',
+    referenceId: options.referenceId || null,
+    note: options.note || 'Wallet credit',
+    metadata: options.metadata || null,
+  });
+
+  return { wallet: updated, ledger };
+}
+
+async function releaseDepositInTx(client, depositInput, options = {}) {
+  const deposit = typeof depositInput === 'string'
+    ? await client.listingDeposit.findUnique({ where: { id: depositInput } })
+    : depositInput;
+
+  if (!deposit) throw new WalletError('Deposit not found', 'DEPOSIT_NOT_FOUND', 404);
+  if (deposit.status !== 'HELD') return { deposit, released: false, releasedPaisa: 0n, ledger: null };
+
+  const wallet = await ensureWallet(deposit.buyerId, client);
+  const available = wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n;
+  const escrowed = wallet.escrowedBalancePaisa ?? 0n;
+  if (escrowed < deposit.amountPaisa) throw new WalletError('Wallet escrow is inconsistent', 'ESCROW_INCONSISTENT', 500);
+
+  const updatedWallet = await client.wallet.update({
+    where: { id: wallet.id },
+    data: {
+      availableBalancePaisa: available + deposit.amountPaisa,
+      escrowedBalancePaisa: escrowed - deposit.amountPaisa,
+      balancePaisa: available + deposit.amountPaisa,
+    },
+  });
+
+  const updatedDeposit = await client.listingDeposit.update({
+    where: { id: deposit.id },
+    data: {
+      status: 'RELEASED',
+      releasedAt: new Date(),
+    },
+  });
+
+  const ledger = await writeLedger(client, updatedWallet, {
+    type: options.type || 'ESCROW_RELEASE',
+    amountPaisa: deposit.amountPaisa,
+    referenceType: options.referenceType || 'DEPOSIT_REFUND',
+    referenceId: options.referenceId || deposit.id,
+    note: options.note || 'Deposit refunded',
+    metadata: options.metadata || { listingId: deposit.listingId, buyerId: deposit.buyerId },
+  });
+
+  return { deposit: updatedDeposit, wallet: updatedWallet, released: true, releasedPaisa: deposit.amountPaisa, ledger };
+}
+
+async function reverseCommissionInTx(client, transaction, options = {}) {
+  const wallet = await ensureWallet(transaction.buyerId, client);
+  const referenceId = options.referenceId || options.disputeId || transaction.id;
+
+  const existingReversal = await client.walletLedger.findFirst({
+    where: { walletId: wallet.id, referenceType: 'REVERSAL', referenceId },
+  });
+  if (existingReversal) return { reversalPaisa: 0n, ledger: existingReversal, alreadyReversed: true, wallet };
+
+  const commissionRows = await client.walletLedger.findMany({
+    where: {
+      walletId: wallet.id,
+      referenceType: 'COMMISSION_CAPTURE',
+      referenceId: transaction.id,
+    },
+  });
+
+  const capturedPaisa = commissionRows
+    .filter((row) => row.type === 'ESCROW_CAPTURE')
+    .reduce((sum, row) => sum + row.amountPaisa, 0n);
+
+  if (capturedPaisa <= 0n) return { reversalPaisa: 0n, ledger: null, alreadyReversed: false, wallet };
+
+  const { wallet: updatedWallet, ledger } = await creditWalletInTx(client, transaction.buyerId, capturedPaisa, {
+    type: 'CREDIT',
+    referenceType: 'REVERSAL',
+    referenceId,
+    note: options.note || 'Dispute resolution reversed buyer-funded platform commission',
+    metadata: options.metadata || { transactionId: transaction.id, buyerId: transaction.buyerId, sellerId: transaction.sellerId },
+  });
+
+  return { reversalPaisa: capturedPaisa, ledger, alreadyReversed: false, wallet: updatedWallet };
+}
+
 async function creditWallet(userId, amountPaisa, options = {}) {
   const amount = toBigIntPaisa(amountPaisa);
   if (amount <= 0n) throw new WalletError('Top-up amount must be greater than zero', 'INVALID_AMOUNT', 400);
@@ -572,6 +671,7 @@ module.exports = {
   getMoneySettings,
   ensureWallet,
   creditWallet,
+  creditWalletInTx,
   creditWalletWithClient,
   debitWallet,
   debitWalletWithClient,
@@ -586,9 +686,11 @@ module.exports = {
   maskListingContact,
   placeListingDeposit,
   releaseDeposit,
+  releaseDepositInTx,
   getSettlementPrice,
   getCommissionCoverage,
   captureCommissionForTransaction,
+  reverseCommissionInTx,
   writeLedger,
   serializeWallet,
   serializeDeposit,

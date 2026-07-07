@@ -9,6 +9,7 @@ const {
   serializeWallet,
   toBigIntPaisa,
   WalletError,
+  creditWalletInTx,
 } = require('../services/wallet.service');
 
 const VALID_GATEWAYS = new Set(['JAZZCASH', 'EASYPAISA', 'STRIPE', 'BANK_TRANSFER', 'WALLET']);
@@ -243,17 +244,8 @@ async function creditWalletFromVerifiedPayment(normalized) {
         },
       });
     }
-
-    const wallet = await ensureWallet(normalized.userId, tx);
-    const available = (wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n) + amount;
-    const updatedWallet = await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { availableBalancePaisa: available, balancePaisa: available },
-    });
-
-    await writeLedger(tx, updatedWallet, {
+    const { wallet: updatedWallet } = await creditWalletInTx(tx, normalized.userId, amount, {
       type: 'CREDIT',
-      amountPaisa: amount,
       referenceType: 'TOPUP',
       referenceId: payment.id,
       note: `Verified ${normalized.gateway} wallet top-up webhook`,
