@@ -85,7 +85,7 @@ async function expireDueSubscriptionForUser(userId, client = prisma) {
         type: 'SUBSCRIPTION_EXPIRED',
         title: 'Subscription expired',
         body: 'Your buyer premium subscription expired. Your account has reverted to the Basic deposit tier.',
-        data: { subscriptionId: expired.id, planId: expired.planId },
+        data: { event: 'SUBSCRIPTION_EXPIRED', subscriptionId: expired.id, planId: expired.planId },
       },
     }).catch(() => null);
     return expired;
@@ -173,7 +173,7 @@ router.post('/subscribe', authenticate, async (req, res) => {
           type: 'SYSTEM',
           title: 'Buyer premium activated',
           body: `${plan.name} is active. New deposits will use your buyer premium deposit tier.`,
-          data: { subscriptionId: sub.id, planId: plan.id, interval: price.interval, amountPaisa: amountPaisa.toString() },
+          data: { event: 'SUBSCRIPTION_ACTIVATED', subscriptionId: sub.id, planId: plan.id, interval: price.interval, amountPaisa: amountPaisa.toString() },
         },
       }).catch(() => null);
 
@@ -194,6 +194,46 @@ router.post('/subscribe', authenticate, async (req, res) => {
     }
     console.error('POST /subscriptions/subscribe error:', err);
     res.status(500).json({ error: { message: 'Failed to subscribe' } });
+  }
+});
+
+// POST /subscriptions/maintenance/warn-expiring — Admin-triggerable 7d/1d warning sweep.
+router.post('/maintenance/warn-expiring', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(30, Number(req.body?.days || req.query?.days || 7) || 7));
+    const now = new Date();
+    const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const due = await prisma.userSubscription.findMany({
+      where: { status: { in: ['ACTIVE', 'GRACE_PERIOD'] }, expiresAt: { gt: now, lte: until } },
+      include: { plan: true },
+      take: 500,
+    });
+
+    const notifications = [];
+    for (const sub of due) {
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId: sub.userId,
+          type: 'SUBSCRIPTION_EXPIRING',
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        select: { id: true },
+      });
+      if (existing) continue;
+      notifications.push({
+        userId: sub.userId,
+        type: 'SUBSCRIPTION_EXPIRING',
+        title: 'Subscription expiring',
+        body: `Your buyer premium subscription expires on ${sub.expiresAt.toISOString().slice(0, 10)}.`,
+        data: { event: 'SUBSCRIPTION_EXPIRING', subscriptionId: sub.id, planId: sub.planId, expiresAt: sub.expiresAt.toISOString(), days },
+      });
+    }
+
+    if (notifications.length) await prisma.notification.createMany({ data: notifications });
+    res.json({ warningCount: notifications.length, checkedCount: due.length, days });
+  } catch (err) {
+    console.error('POST /subscriptions/maintenance/warn-expiring error:', err);
+    res.status(500).json({ error: { message: 'Failed to warn expiring subscriptions' } });
   }
 });
 

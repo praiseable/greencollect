@@ -694,6 +694,16 @@ router.post('/admin/:userId/approve',
         });
       }
 
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: 'SYSTEM',
+          title: 'KYC approved',
+          body: 'Your KYC has been approved. Seller/pro activation is free under the Kabariya v3 model.',
+          data: { event: 'KYC_STATUS', status: 'APPROVED' },
+        },
+      }).catch(() => null);
+
       res.json({
         success: true,
         message: 'KYC approved. Account is now active. No seller-side deposit is required.',
@@ -731,6 +741,16 @@ router.post('/admin/:userId/reject',
           isActive: false,
         },
       });
+
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: 'SYSTEM',
+          title: 'KYC rejected',
+          body: `Your KYC was rejected: ${reason}`,
+          data: { event: 'KYC_STATUS', status: 'REJECTED' },
+        },
+      }).catch(() => null);
 
       res.json({
         success: true,

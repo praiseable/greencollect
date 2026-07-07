@@ -1,6 +1,12 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate } = require('../middleware/auth');
+const { enrichNotification, getNotificationCatalog } = require('../services/notificationCatalog.service');
+
+// GET /notifications/catalog — supported event catalog + deep-link contract
+router.get('/catalog', authenticate, (req, res) => {
+  res.json({ success: true, data: getNotificationCatalog() });
+});
 
 // GET /notifications/unread-count — spec 2.9
 router.get('/unread-count', authenticate, async (req, res) => {
@@ -32,7 +38,14 @@ router.get('/', authenticate, async (req, res) => {
       prisma.notification.count({ where: { userId: req.user.id, isRead: false } }),
     ]);
 
-    res.json({ data: notifications, total, unreadCount, page: parseInt(page) });
+    res.json({
+      data: notifications.map(enrichNotification),
+      total,
+      unreadCount,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit || 20)),
+    });
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to fetch notifications' } });
   }
@@ -41,8 +54,21 @@ router.get('/', authenticate, async (req, res) => {
 // Mark single as read (PUT and PATCH so app PATCH calls succeed)
 const markOneRead = async (req, res) => {
   try {
-    await prisma.notification.update({ where: { id: req.params.id }, data: { isRead: true } });
-    res.json({ message: 'Marked as read' });
+    const notification = await prisma.notification.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+
+    if (!notification) {
+      return res.status(404).json({ error: { message: 'Notification not found', code: 'NOTIFICATION_NOT_FOUND' } });
+    }
+
+    const updated = await prisma.notification.update({
+      where: { id: notification.id },
+      data: { isRead: true },
+    });
+    const unreadCount = await prisma.notification.count({ where: { userId: req.user.id, isRead: false } });
+
+    res.json({ success: true, message: 'Marked as read', data: enrichNotification(updated), unreadCount });
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to mark as read' } });
   }
@@ -53,8 +79,8 @@ router.patch('/:id/read', authenticate, markOneRead);
 // Mark all as read (PUT and PATCH)
 const markAllRead = async (req, res) => {
   try {
-    await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });
-    res.json({ message: 'All marked as read' });
+    const result = await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });
+    res.json({ success: true, message: 'All marked as read', updatedCount: result.count, unreadCount: 0 });
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to mark all as read' } });
   }

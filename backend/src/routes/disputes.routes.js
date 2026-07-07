@@ -185,8 +185,8 @@ router.post('/', async (req, res) => {
       await tx.transaction.update({ where: { id: transactionId }, data: { status: 'DISPUTED' } }).catch(() => null);
       await tx.notification.createMany({
         data: [
-          { userId: transaction.buyerId, type: 'SYSTEM', title: 'Dispute opened', body: 'A dispute has been opened for your transaction.', data: { disputeId: created.id, transactionId } },
-          { userId: transaction.sellerId, type: 'SYSTEM', title: 'Dispute opened', body: 'A dispute has been opened for your transaction.', data: { disputeId: created.id, transactionId } },
+          { userId: transaction.buyerId, type: 'SYSTEM', title: 'Dispute opened', body: 'A dispute has been opened for your transaction.', data: { event: 'DISPUTE_OPENED', disputeId: created.id, transactionId } },
+          { userId: transaction.sellerId, type: 'SYSTEM', title: 'Dispute opened', body: 'A dispute has been opened for your transaction.', data: { event: 'DISPUTE_OPENED', disputeId: created.id, transactionId } },
         ],
       }).catch(() => null);
 
@@ -287,8 +287,8 @@ router.patch('/:id/resolve', async (req, res) => {
 
       await tx.notification.createMany({
         data: [
-          { userId: dispute.buyerId, type: 'SYSTEM', title: 'Dispute resolved', body: `Resolution: ${resolution}`, data: { disputeId: dispute.id, transactionId: dispute.transactionId, reversalAmountPaisa: (reversalAmountPaisa + releasedDepositPaisa).toString() } },
-          { userId: dispute.sellerId, type: 'SYSTEM', title: 'Dispute resolved', body: `Resolution: ${resolution}`, data: { disputeId: dispute.id, transactionId: dispute.transactionId } },
+          { userId: dispute.buyerId, type: 'SYSTEM', title: 'Dispute resolved', body: `Resolution: ${resolution}`, data: { event: 'DISPUTE_RESOLVED', disputeId: dispute.id, transactionId: dispute.transactionId, reversalAmountPaisa: (reversalAmountPaisa + releasedDepositPaisa).toString() } },
+          { userId: dispute.sellerId, type: 'SYSTEM', title: 'Dispute resolved', body: `Resolution: ${resolution}`, data: { event: 'DISPUTE_RESOLVED', disputeId: dispute.id, transactionId: dispute.transactionId } },
         ],
       }).catch(() => null);
 

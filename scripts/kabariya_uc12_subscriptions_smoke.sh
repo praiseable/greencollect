@@ -229,6 +229,6 @@ http GET /wallet "$SELLER_TOKEN"
 expect 200 "seller wallet readable for seller-free subscription check"
 json_assert "(()=>{const ledger=obj.ledger||[]; return !ledger.some(x => x.referenceType==='SUBSCRIPTION_PURCHASE' || x.referenceType==='COMMISSION_CAPTURE' || x.type==='ESCROW_CAPTURE' || x.type==='DEBIT');})()" "seller wallet has no subscription purchase or platform debit rows"
 
-printf '----------------------------------------------------------------\n'
+line
 printf 'UC-12 summary: PASSED=%s FAILED=%s WARNINGS=%s\n' "$PASS" "$FAIL" "$WARN"
 [ "$FAIL" -eq 0 ]

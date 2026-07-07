@@ -189,7 +189,7 @@ router.post('/', async (req, res) => {
         type: 'OFFER_RECEIVED',
         title: 'New offer received',
         body: `A funded buyer made an offer on your listing "${listing.title}"`,
-        data: { listingId, transactionId: transaction.id },
+        data: { event: 'OFFER_RECEIVED', listingId, transactionId: transaction.id },
       },
     }).catch(() => null);
 
@@ -236,7 +236,7 @@ router.put('/:id/accept', async (req, res) => {
     });
 
     await prisma.notification.create({
-      data: { userId: transaction.buyerId, type: 'OFFER_ACCEPTED', title: 'Offer accepted', body: 'Your funded offer was accepted.', data: { transactionId: transaction.id } },
+      data: { userId: transaction.buyerId, type: 'OFFER_ACCEPTED', title: 'Offer accepted', body: 'Your funded offer was accepted.', data: { event: 'OFFER_ACCEPTED', transactionId: transaction.id } },
     }).catch(() => null);
 
     res.json({ transaction: serializeTransaction(transaction) });
@@ -253,6 +253,15 @@ router.put('/:id/reject', async (req, res) => {
     if (!assertParticipant(existing, req.user, res)) return;
     if (existing.sellerId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: { message: 'Only the seller can reject an offer', code: 'SELLER_ONLY' } });
     const transaction = await prisma.transaction.update({ where: { id: req.params.id }, data: { status: 'REJECTED' } });
+    await prisma.notification.create({
+      data: {
+        userId: transaction.buyerId,
+        type: 'OFFER_REJECTED',
+        title: 'Offer rejected',
+        body: 'Your funded offer was rejected by the seller.',
+        data: { event: 'OFFER_REJECTED', transactionId: transaction.id, listingId: transaction.listingId },
+      },
+    }).catch(() => null);
     res.json({ transaction: serializeTransaction(transaction) });
   } catch (err) {
     console.error('PUT /transactions/:id/reject error:', err);
@@ -292,6 +301,13 @@ router.put('/:id/cancel', async (req, res) => {
     let refund = null;
     if (deposit && deposit.status === 'HELD') refund = await releaseDeposit(deposit.id, { note: 'Transaction cancelled before finalization' });
 
+    await prisma.notification.createMany({
+      data: [
+        { userId: existing.buyerId, type: 'SYSTEM', title: 'Transaction cancelled', body: 'The transaction was cancelled before finalization.', data: { event: 'TRANSACTION_CANCELLED', transactionId: existing.id, listingId: existing.listingId } },
+        { userId: existing.sellerId, type: 'SYSTEM', title: 'Transaction cancelled', body: 'The transaction was cancelled before finalization.', data: { event: 'TRANSACTION_CANCELLED', transactionId: existing.id, listingId: existing.listingId } },
+      ],
+    }).catch(() => null);
+
     res.json({ transaction: serializeTransaction(transaction), refund: refund ? { released: refund.released } : null });
   } catch (err) {
     console.error('PUT /transactions/:id/cancel error:', err);
@@ -323,7 +339,7 @@ router.post('/:id/amend-weight', async (req, res) => {
     });
 
     await prisma.notification.create({
-      data: { userId: transaction.sellerId, type: 'SYSTEM', title: 'Weight amendment submitted', body: 'Buyer submitted actual weighed quantity/price. Please acknowledge before handshake.', data: { transactionId: transaction.id } },
+      data: { userId: transaction.sellerId, type: 'SYSTEM', title: 'Weight amendment submitted', body: 'Buyer submitted actual weighed quantity/price. Please acknowledge before handshake.', data: { event: 'WEIGHT_AMENDMENT', transactionId: transaction.id } },
     }).catch(() => null);
 
     try {
@@ -399,7 +415,7 @@ router.post('/:id/handshake/generate', async (req, res) => {
         type: 'SYSTEM',
         title: 'Secure Handshake OTP',
         body: `Your pickup OTP is ${otp}. Share it with the buyer only at physical pickup.`,
-        data: { transactionId: existing.id, expiresAt: expiresAt.toISOString() },
+        data: { event: 'SECURE_HANDSHAKE_OTP', transactionId: existing.id, expiresAt: expiresAt.toISOString() },
       },
     }).catch(() => null);
 
@@ -514,8 +530,10 @@ router.post('/:id/verify-handshake', async (req, res) => {
 
       await tx.notification.createMany({
         data: [
-          { userId: latest.buyerId, type: 'SYSTEM', title: 'Deal finalized', body: 'Secure handshake verified. Commission captured from buyer deposit.', data: { transactionId: latest.id, bondId: bond.id } },
-          { userId: latest.sellerId, type: 'SYSTEM', title: 'Deal finalized', body: 'Secure handshake verified. Seller wallet was not charged.', data: { transactionId: latest.id, bondId: bond.id } },
+          { userId: latest.buyerId, type: 'SYSTEM', title: 'Deal finalized', body: 'Secure handshake verified. Commission captured from buyer deposit.', data: { event: 'DEAL_FINALIZED', transactionId: latest.id, bondId: bond.id } },
+          { userId: latest.sellerId, type: 'SYSTEM', title: 'Deal finalized', body: 'Secure handshake verified. Seller wallet was not charged.', data: { event: 'DEAL_FINALIZED', transactionId: latest.id, bondId: bond.id } },
+          { userId: latest.buyerId, type: 'SYSTEM', title: 'Bond ready', body: 'Your finalized deal bond is ready.', data: { event: 'BOND_READY', transactionId: latest.id, bondId: bond.id } },
+          { userId: latest.sellerId, type: 'SYSTEM', title: 'Bond ready', body: 'Your finalized deal bond is ready.', data: { event: 'BOND_READY', transactionId: latest.id, bondId: bond.id } },
         ],
       }).catch(() => null);
 
@@ -571,6 +589,12 @@ router.post('/:id/dispute', async (req, res) => {
         },
       });
       await tx.transaction.update({ where: { id: transaction.id }, data: { status: 'DISPUTED' } }).catch(() => null);
+      await tx.notification.createMany({
+        data: [
+          { userId: transaction.buyerId, type: 'SYSTEM', title: 'Dispute opened', body: 'A dispute has been opened for your transaction.', data: { event: 'DISPUTE_OPENED', disputeId: created.id, transactionId: transaction.id } },
+          { userId: transaction.sellerId, type: 'SYSTEM', title: 'Dispute opened', body: 'A dispute has been opened for your transaction.', data: { event: 'DISPUTE_OPENED', disputeId: created.id, transactionId: transaction.id } },
+        ],
+      }).catch(() => null);
       return created;
     });
     res.status(201).json({ dispute: { ...dispute, reversalAmountPaisa: dispute.reversalAmountPaisa?.toString?.() || '0' } });

@@ -371,7 +371,7 @@ async function placeListingDeposit(listingId, buyerId) {
         type: 'SYSTEM',
         title: 'Buyer deposit placed',
         body: 'A funded buyer unlocked your listing contact details.',
-        data: { listingId, buyerId, depositId: deposit.id },
+        data: { event: 'DEPOSIT_PLACED', listingId, buyerId, depositId: deposit.id, amountPaisa: amount.toString() },
       },
     }).catch(() => null);
 
@@ -408,6 +408,22 @@ async function releaseDeposit(depositId, options = {}) {
       note: options.note || 'Deposit refunded',
       metadata: { listingId: deposit.listingId, buyerId: deposit.buyerId },
     });
+
+    await tx.notification.create({
+      data: {
+        userId: deposit.buyerId,
+        type: 'SYSTEM',
+        title: 'Deposit refunded',
+        body: 'Your listing deposit has been released back to your wallet.',
+        data: {
+          event: 'DEPOSIT_REFUNDED',
+          listingId: deposit.listingId,
+          depositId: deposit.id,
+          amountPaisa: deposit.amountPaisa.toString(),
+        },
+      },
+    }).catch(() => null);
+
     return { deposit: updatedDeposit, released: true };
   });
 }
