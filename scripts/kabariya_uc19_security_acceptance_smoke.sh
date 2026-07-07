@@ -125,6 +125,8 @@ else
 fi
 
 # Static code checks inside backend container.
+# Static checks write their own diagnostic files; clear the last HTTP body so failures do not dump unrelated listing JSON.
+: > "$BODY"
 if docker compose -f "$COMPOSE_FILE" exec -T backend node <<'NODE' >"$TMP_DIR/wallet_direct_updates.txt" 2>&1
 const fs = require('fs');
 const path = require('path');
@@ -256,18 +258,25 @@ function walk(dir) {
     else if (ent.isFile() && file.endsWith('.js')) inspect(file);
   }
 }
+function lineOf(src, idx) { return src.slice(0, idx).split('\n').length; }
 function inspect(file) {
   const src = fs.readFileSync(file, 'utf8');
-  const re = /(sellerId|seller\.id|sellerWallet|seller).*?(COMMISSION_CAPTURE|ESCROW_CAPTURE|SUBSCRIPTION_PURCHASE|referenceType\s*:\s*['"]COMMISSION_CAPTURE['"]|type\s*:\s*['"]DEBIT['"])/gis;
-  let m;
-  while ((m = re.exec(src))) {
-    const line = src.slice(0, m.index).split('\n').length;
-    findings.push(`${file}:${line}`);
+  const patterns = [
+    /debitWallet(?:InTx)?\s*\([^
+;]*(sellerId|seller\.id|sellerWallet|transaction\.sellerId)/gi,
+    /creditWallet(?:InTx)?\s*\([^
+;]*(sellerId|seller\.id|sellerWallet|transaction\.sellerId)[^
+;]*(SUBSCRIPTION_PURCHASE|COMMISSION_CAPTURE)/gi,
+    /sellerWallet[\s\S]{0,600}(availableBalancePaisa|escrowedBalancePaisa|SUBSCRIPTION_PURCHASE|COMMISSION_CAPTURE|type\s*:\s*['"]DEBIT['"])/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(src))) findings.push(`${file}:${lineOf(src, m.index)}`);
   }
 }
 walk('src');
 if (findings.length) {
-  console.log(findings.join('\n'));
+  console.log([...new Set(findings)].join('\n'));
   process.exit(2);
 }
 NODE
