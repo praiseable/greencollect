@@ -106,7 +106,10 @@ fi
 
 # Verify wallet amountFormatted now follows integer-paisa formatting for API consumers.
 BUYER_EMAIL="uc15-buyer-${TS}@example.test"
-BUYER_BODY="{\"email\":\"${BUYER_EMAIL}\",\"password\":\"Buyer@12345\",\"phone\":\"+92315${TS:0:7}\",\"firstName\":\"UC15\",\"lastName\":\"Buyer\",\"role\":\"CUSTOMER\"}"
+# Use a nanosecond-derived suffix. The previous smoke script used ${TS:0:7},
+# which stays constant for a long time and makes reruns fail with DUPLICATE_PHONE.
+PHONE_SUFFIX="$(printf "%07d" $(( (10#${TS} % 9000000) + 1000000 )))"
+BUYER_BODY="{\"email\":\"${BUYER_EMAIL}\",\"password\":\"Buyer@12345\",\"phone\":\"+92315${PHONE_SUFFIX}\",\"firstName\":\"UC15\",\"lastName\":\"Buyer\",\"role\":\"CUSTOMER\"}"
 code=$(request POST /auth/register '' "$BUYER_BODY")
 assert_code "$code" 201 'register UC15 buyer'
 BUYER_TOKEN="$(extract_token)"
