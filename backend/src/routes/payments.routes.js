@@ -128,7 +128,17 @@ function normalizeWebhookPayload(gateway, body = {}) {
   const purposeRaw = String(pick(body.purpose, metadata.purpose, 'WALLET_TOPUP')).toUpperCase();
   const purpose = VALID_PURPOSES.has(purposeRaw) ? purposeRaw : 'WALLET_TOPUP';
   const status = normalizeStatus(gateway, body, object);
-  const exchangeRateSnapshot = pick(body.exchangeRateSnapshot, body.exchange_rate_snapshot, body.exchangeRate, metadata.exchangeRate, object.exchange_rate);
+  const exchangeRateSnapshot = pick(
+    body.exchangeRateSnapshot,
+    body.exchange_rate_snapshot,
+    body.exchangeRate,
+    metadata.exchangeRateSnapshot,
+    metadata.exchange_rate_snapshot,
+    metadata.exchangeRate,
+    object.exchangeRateSnapshot,
+    object.exchange_rate_snapshot,
+    object.exchange_rate,
+  );
 
   return {
     gateway,

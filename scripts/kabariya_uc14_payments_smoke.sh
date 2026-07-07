@@ -75,18 +75,43 @@ webhook_post(){
 }
 
 make_payload(){
-  local file="$1" gateway_ref="$2" user_id="$3" amount="$4" gateway="$5" extra_json="${6:-{}}"
-  node - <<NODE > "$file"
-const extra = $extra_json;
-console.log(JSON.stringify({
-  gatewayRef: '$gateway_ref',
-  userId: '$user_id',
-  amountPaisa: '$amount',
+  local file="$1" gateway_ref="$2" user_id="$3" amount="$4" gateway="$5" exchange_snapshot="${6:-}"
+  GATEWAY_REF="$gateway_ref" \
+  USER_ID="$user_id" \
+  AMOUNT_PAISA="$amount" \
+  GATEWAY_NAME="$gateway" \
+  EXCHANGE_SNAPSHOT="$exchange_snapshot" \
+  node - <<'NODE' > "$file"
+const snapshotRaw = process.env.EXCHANGE_SNAPSHOT || '';
+let exchangeRateSnapshot = null;
+if (snapshotRaw) {
+  try {
+    exchangeRateSnapshot = JSON.parse(snapshotRaw);
+  } catch (err) {
+    console.error(`Invalid EXCHANGE_SNAPSHOT JSON: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+const payload = {
+  gatewayRef: process.env.GATEWAY_REF,
+  userId: process.env.USER_ID,
+  amountPaisa: process.env.AMOUNT_PAISA,
   currencyId: 'PKR',
   purpose: 'WALLET_TOPUP',
   status: 'COMPLETED',
-  metadata: { source: 'uc14-smoke', gateway: '$gateway', ...extra }
-}));
+  metadata: {
+    source: 'uc14-smoke',
+    gateway: process.env.GATEWAY_NAME,
+  },
+};
+
+if (exchangeRateSnapshot) {
+  payload.exchangeRateSnapshot = exchangeRateSnapshot;
+  payload.metadata.exchangeRateSnapshot = exchangeRateSnapshot;
+}
+
+console.log(JSON.stringify(payload));
 NODE
 }
 
@@ -178,7 +203,8 @@ json_assert "obj.success===true && obj.status==='COMPLETED' && obj.credited===tr
 STRIPE_AMOUNT=333333
 STRIPE_REF="uc14-stripe-$TS"
 STRIPE_PAYLOAD="$TMP_DIR/stripe.json"
-make_payload "$STRIPE_PAYLOAD" "$STRIPE_REF" "$BUYER_ID" "$STRIPE_AMOUNT" "STRIPE" "{ exchangeRateSnapshot: { source: 'uc14-smoke', from: 'USD', to: 'PKR', rate: '278.50' } }"
+STRIPE_EXCHANGE_SNAPSHOT='{"source":"uc14-smoke","from":"USD","to":"PKR","rate":"278.50"}'
+make_payload "$STRIPE_PAYLOAD" "$STRIPE_REF" "$BUYER_ID" "$STRIPE_AMOUNT" "STRIPE" "$STRIPE_EXCHANGE_SNAPSHOT"
 STRIPE_SIG="$(sign_payload "$STRIPE_PAYLOAD" "$WEBHOOK_SECRET")"
 webhook_post stripe "$STRIPE_PAYLOAD" "$STRIPE_SIG"
 expect 200 "UC-PAY-02 signed Stripe fallback webhook accepted"
