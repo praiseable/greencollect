@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../services/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
+const { formatCurrency, toBigIntPaisa } = require('../services/currency.service');
 
 // GET /currencies — List active currencies
 router.get('/', async (req, res) => {
@@ -12,6 +13,34 @@ router.get('/', async (req, res) => {
     res.json(currencies);
   } catch (err) {
     res.status(500).json({ error: { message: 'Failed to fetch currencies' } });
+  }
+});
+
+
+// GET /currencies/:id/format?amountPaisa=150000&lang=ur — Exact integer-paisa formatter
+router.get('/:id/format', async (req, res) => {
+  try {
+    const { amountPaisa, lang = 'en' } = req.query;
+    if (amountPaisa === undefined || !/^-?\d+$/.test(String(amountPaisa))) {
+      return res.status(400).json({ error: { message: 'amountPaisa must be an integer paisa value', code: 'INVALID_AMOUNT' } });
+    }
+
+    const currency = await prisma.currency.findUnique({ where: { id: req.params.id } });
+    if (!currency || !currency.isActive) {
+      return res.status(404).json({ error: { message: 'Currency not found', code: 'NOT_FOUND' } });
+    }
+
+    const raw = toBigIntPaisa(String(amountPaisa));
+    res.json({
+      currencyId: currency.id,
+      amountPaisa: raw.toString(),
+      amountFormatted: formatCurrency(raw, currency, lang),
+      lang,
+      integerPaisa: true,
+    });
+  } catch (err) {
+    console.error('Format currency error:', err);
+    res.status(500).json({ error: { message: 'Failed to format currency' } });
   }
 });
 

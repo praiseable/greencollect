@@ -1,4 +1,5 @@
-﻿const prisma = require('./prisma');
+const prisma = require('./prisma');
+const { formatCurrency } = require('./currency.service');
 
 class WalletError extends Error {
   constructor(message, code, status = 400, details = {}) {
@@ -551,7 +552,7 @@ function serializeWallet(wallet) {
     escrowedBalancePaisa: escrowed.toString(),
     balancePaisa: (wallet.balancePaisa ?? available).toString(),
     totalBalancePaisa: (available + escrowed).toString(),
-    amountFormatted: `â‚¨ ${Number(available).toLocaleString('en-PK')}`,
+    amountFormatted: formatCurrency(available, wallet.currency || wallet.currencyId || 'PKR', 'en'),
   };
 }
 
