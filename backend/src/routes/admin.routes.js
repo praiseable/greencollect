@@ -195,4 +195,145 @@ router.patch('/flagged-users/:id', async (req, res) => {
   }
 });
 
+// GET /admin/reconciliation-report — UC-ADM-07 ledger-backed financial reconciliation
+router.get('/reconciliation-report', async (req, res) => {
+  try {
+    const { from, to, format } = req.query;
+    const createdAt = {};
+    if (from) createdAt.gte = new Date(from);
+    if (to) createdAt.lte = new Date(to);
+    const ledgerWhere = Object.keys(createdAt).length ? { createdAt } : {};
+
+    const [ledgerRows, wallets, heldDeposits, payments] = await Promise.all([
+      prisma.walletLedger.findMany({
+        where: ledgerWhere,
+        select: {
+          id: true,
+          walletId: true,
+          type: true,
+          amountPaisa: true,
+          referenceType: true,
+          referenceId: true,
+          availableAfterPaisa: true,
+          escrowedAfterPaisa: true,
+          balanceAfterPaisa: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.wallet.findMany({
+        select: {
+          id: true,
+          userId: true,
+          availableBalancePaisa: true,
+          escrowedBalancePaisa: true,
+          balancePaisa: true,
+          currencyId: true,
+        },
+      }),
+      prisma.listingDeposit.findMany({
+        where: { status: 'HELD' },
+        select: { id: true, amountPaisa: true, buyerId: true, listingId: true },
+      }),
+      prisma.payment.findMany({
+        where: Object.keys(createdAt).length ? { createdAt } : {},
+        select: { id: true, amountPaisa: true, gateway: true, gatewayRef: true, status: true, purpose: true, createdAt: true },
+      }).catch(() => []),
+    ]);
+
+    const big = (value) => BigInt(value || 0);
+    const str = (value) => big(value).toString();
+    const sum = (rows, predicate = () => true, field = 'amountPaisa') => rows.reduce((acc, row) => predicate(row) ? acc + big(row[field]) : acc, 0n);
+
+    const totals = {
+      topUpsPaisa: sum(ledgerRows, r => r.type === 'CREDIT' && r.referenceType === 'TOPUP').toString(),
+      commissionCapturedPaisa: sum(ledgerRows, r => r.type === 'ESCROW_CAPTURE' && r.referenceType === 'COMMISSION_CAPTURE').toString(),
+      refundsPaisa: sum(ledgerRows, r => r.type === 'ESCROW_RELEASE' && r.referenceType === 'DEPOSIT_REFUND').toString(),
+      reversalsPaisa: sum(ledgerRows, r => r.referenceType === 'REVERSAL').toString(),
+      withdrawalsPaisa: sum(ledgerRows, r => r.type === 'DEBIT' && r.referenceType === 'WITHDRAWAL').toString(),
+      forfeituresPaisa: sum(ledgerRows, r => r.referenceType === 'FORFEITURE').toString(),
+      manualAdjustmentsPaisa: sum(ledgerRows, r => r.referenceType === 'MANUAL_ADJUSTMENT').toString(),
+      heldDepositsPaisa: sum(heldDeposits).toString(),
+      walletAvailablePaisa: wallets.reduce((acc, w) => acc + big(w.availableBalancePaisa), 0n).toString(),
+      walletEscrowedPaisa: wallets.reduce((acc, w) => acc + big(w.escrowedBalancePaisa), 0n).toString(),
+      walletTotalPaisa: wallets.reduce((acc, w) => acc + big(w.availableBalancePaisa) + big(w.escrowedBalancePaisa), 0n).toString(),
+      completedPaymentTopUpsPaisa: sum(payments, p => p.status === 'COMPLETED' && p.purpose === 'WALLET_TOPUP').toString(),
+      ledgerRowCount: String(ledgerRows.length),
+      walletCount: String(wallets.length),
+      heldDepositCount: String(heldDeposits.length),
+      completedPaymentCount: String(payments.filter(p => p.status === 'COMPLETED').length),
+    };
+
+    const latestLedgerByWallet = new Map();
+    for (const row of ledgerRows) {
+      if (!latestLedgerByWallet.has(row.walletId)) latestLedgerByWallet.set(row.walletId, row);
+    }
+
+    const latestLedgerWalletMismatches = [];
+    for (const wallet of wallets) {
+      const latest = latestLedgerByWallet.get(wallet.id);
+      if (!latest) continue;
+      const availableMatches = big(wallet.availableBalancePaisa) === big(latest.availableAfterPaisa);
+      const escrowMatches = big(wallet.escrowedBalancePaisa) === big(latest.escrowedAfterPaisa);
+      if (!availableMatches || !escrowMatches) {
+        latestLedgerWalletMismatches.push({
+          walletId: wallet.id,
+          userId: wallet.userId,
+          walletAvailablePaisa: str(wallet.availableBalancePaisa),
+          latestAvailableAfterPaisa: str(latest.availableAfterPaisa),
+          walletEscrowedPaisa: str(wallet.escrowedBalancePaisa),
+          latestEscrowedAfterPaisa: str(latest.escrowedAfterPaisa),
+        });
+      }
+    }
+
+    const heldDepositEscrowDelta = big(totals.walletEscrowedPaisa) - big(totals.heldDepositsPaisa);
+    const discrepancies = [];
+    if (latestLedgerWalletMismatches.length > 0) {
+      discrepancies.push({
+        code: 'LATEST_LEDGER_WALLET_MISMATCH',
+        count: latestLedgerWalletMismatches.length,
+        sample: latestLedgerWalletMismatches.slice(0, 10),
+      });
+    }
+    if (heldDepositEscrowDelta !== 0n) {
+      discrepancies.push({
+        code: 'HELD_DEPOSIT_ESCROW_DELTA',
+        deltaPaisa: heldDepositEscrowDelta.toString(),
+        walletEscrowedPaisa: totals.walletEscrowedPaisa,
+        heldDepositsPaisa: totals.heldDepositsPaisa,
+      });
+    }
+
+    const report = {
+      success: true,
+      generatedAt: new Date().toISOString(),
+      period: { from: from || null, to: to || null },
+      currencyId: 'PKR',
+      totals,
+      reconciliation: {
+        balanced: discrepancies.length === 0,
+        discrepancyCount: discrepancies.length,
+        discrepancies,
+      },
+    };
+
+    if (String(format || '').toLowerCase() === 'csv') {
+      const lines = ['metric,amountPaisa'];
+      for (const [key, value] of Object.entries(totals)) {
+        lines.push(`${key},${String(value).replace(/,/g, '')}`);
+      }
+      lines.push(`balanced,${report.reconciliation.balanced}`);
+      lines.push(`discrepancyCount,${report.reconciliation.discrepancyCount}`);
+      res.type('text/csv').send(lines.join('\n'));
+      return;
+    }
+
+    res.json(report);
+  } catch (err) {
+    console.error('GET /admin/reconciliation-report error:', err);
+    res.status(500).json({ error: { message: 'Failed to build reconciliation report', code: 'INTERNAL_ERROR' } });
+  }
+});
+
 module.exports = router;
