@@ -485,6 +485,7 @@ module.exports = {
   getSettlementPrice,
   getCommissionCoverage,
   captureCommissionForTransaction,
+  writeLedger,
   serializeWallet,
   serializeDeposit,
 };

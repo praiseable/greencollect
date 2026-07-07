@@ -544,6 +544,42 @@ router.put('/:id/finalize', async (req, res) => {
   res.status(409).json({ error: { message: 'Direct finalization is disabled. Use Secure Handshake OTP verification.', code: 'HANDSHAKE_REQUIRED' } });
 });
 
+
+// POST /transactions/:id/dispute — participant raises dispute; delegates to /api/disputes contract
+router.post('/:id/dispute', async (req, res) => {
+  try {
+    const transaction = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+    if (!assertParticipant(transaction, req.user, res)) return;
+    req.body = { ...req.body, transactionId: req.params.id };
+    // Mirror the public disputes contract for legacy clients.
+    const open = await prisma.dispute.findFirst({ where: { transactionId: req.params.id, status: { in: ['OPEN', 'UNDER_REVIEW'] } } });
+    if (open) return res.status(409).json({ error: { message: 'An open dispute already exists for this transaction', code: 'DISPUTE_ALREADY_OPEN', disputeId: open.id } });
+    if (!req.body.reason) return res.status(400).json({ error: { message: 'reason is required', code: 'VALIDATION_ERROR' } });
+    if (['CANCELLED', 'REJECTED', 'OFFER_REJECTED'].includes(transaction.status)) return res.status(409).json({ error: { message: 'Closed/cancelled transactions cannot be disputed', code: 'INVALID_STATUS' } });
+
+    const dispute = await prisma.$transaction(async (tx) => {
+      const created = await tx.dispute.create({
+        data: {
+          transactionId: transaction.id,
+          raisedById: req.user.id,
+          buyerId: transaction.buyerId,
+          sellerId: transaction.sellerId,
+          reason: String(req.body.reason).slice(0, 120),
+          description: req.body.description ? String(req.body.description).slice(0, 2000) : null,
+          evidence: req.body.evidence || null,
+          transactionStatusAtOpen: transaction.status,
+        },
+      });
+      await tx.transaction.update({ where: { id: transaction.id }, data: { status: 'DISPUTED' } }).catch(() => null);
+      return created;
+    });
+    res.status(201).json({ dispute: { ...dispute, reversalAmountPaisa: dispute.reversalAmountPaisa?.toString?.() || '0' } });
+  } catch (err) {
+    console.error('POST /transactions/:id/dispute error:', err);
+    res.status(500).json({ error: { message: 'Failed to create dispute', code: 'INTERNAL_ERROR' } });
+  }
+});
+
 // GET /transactions/:id/bond — Get bond for finalized transaction, restricted to parties/admin
 router.get('/:id/bond', async (req, res) => {
   try {

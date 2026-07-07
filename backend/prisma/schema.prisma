@@ -421,6 +421,10 @@ model User {
   listingDeposits ListingDeposit[] @relation("BuyerListingDeposits")
   adminFlags     AdminFlaggedUser[] @relation("FlaggedUser")
   reviewedFlags  AdminFlaggedUser[] @relation("ReviewedAdminFlags")
+  disputesRaised Dispute[] @relation("DisputesRaised")
+  disputesAsBuyer Dispute[] @relation("DisputesAsBuyer")
+  disputesAsSeller Dispute[] @relation("DisputesAsSeller")
+  disputesResolved Dispute[] @relation("DisputesResolved")
   notifications Notification[]
   wallet        Wallet?
   subscription  UserSubscription?
@@ -722,6 +726,7 @@ model Transaction {
   finalizedAt       DateTime?
   message           String?          // offer/counter message
   bond              Bond?
+  disputes          Dispute[]
   paymentId         String?
   payment           Payment?          @relation(fields: [paymentId], references: [id])
   notes             String?
@@ -777,6 +782,55 @@ enum VerificationStatus {
   HANDSHAKE_PENDING
   HANDSHAKE_VERIFIED
   FINALIZED
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// DISPUTES
+// ═══════════════════════════════════════════════════════════
+
+model Dispute {
+  id                    String             @id @default(uuid())
+  transactionId         String
+  transaction           Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  raisedById            String
+  raisedBy              User               @relation("DisputesRaised", fields: [raisedById], references: [id])
+  buyerId               String
+  buyer                 User               @relation("DisputesAsBuyer", fields: [buyerId], references: [id])
+  sellerId              String
+  seller                User               @relation("DisputesAsSeller", fields: [sellerId], references: [id])
+  reason                String
+  description           String?
+  evidence              Json?
+  status                DisputeStatus      @default(OPEN)
+  resolution            DisputeResolution?
+  resolutionNote        String?
+  reversalAmountPaisa   BigInt             @default(0)
+  reversalLedgerId      String?
+  transactionStatusAtOpen TransactionStatus?
+  resolvedById          String?
+  resolvedBy            User?              @relation("DisputesResolved", fields: [resolvedById], references: [id])
+  resolvedAt            DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([transactionId])
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([status, createdAt])
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum DisputeResolution {
+  AWARD_BUYER
+  AWARD_SELLER
+  MUTUAL_CANCELLATION
 }
 
 // ═══════════════════════════════════════════════════════════

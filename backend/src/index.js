@@ -83,6 +83,7 @@ app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/admin/dealers', require('./routes/dealers.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/collections', require('./routes/collections.routes'));
+app.use('/api/disputes', require('./routes/disputes.routes'));
 app.use('/api/kyc', require('./routes/kyc.routes'));
 
 // ── Mobile-specific routes (v1 prefix — spec /api/v1) ──
@@ -98,6 +99,7 @@ app.use('/v1/geo-zones', require('./routes/geoZones.routes'));
 app.use('/v1/notifications', require('./routes/notifications.routes'));
 app.use('/v1/territories', require('./routes/territories.routes'));
 app.use('/v1/collections', require('./routes/collections.routes'));
+app.use('/v1/disputes', require('./routes/disputes.routes'));
 app.use('/v1/kyc', require('./routes/kyc.routes'));
 app.use('/v1/payments', require('./routes/payments.routes'));
 app.use('/v1/wallet', require('./routes/wallet.routes'));
