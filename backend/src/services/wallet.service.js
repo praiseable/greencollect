@@ -1,4 +1,4 @@
-const prisma = require('./prisma');
+﻿const prisma = require('./prisma');
 
 class WalletError extends Error {
   constructor(message, code, status = 400, details = {}) {
@@ -109,6 +109,26 @@ async function writeLedger(client, wallet, { type, amountPaisa, referenceType, r
   });
 }
 
+async function creditWalletWithClient(client, userId, amountPaisa, options = {}) {
+  const amount = toBigIntPaisa(amountPaisa);
+  if (amount <= 0n) throw new WalletError('Credit amount must be greater than zero', 'INVALID_AMOUNT', 400);
+
+  const wallet = await ensureWallet(userId, client);
+  const available = (wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n) + amount;
+  const updated = await client.wallet.update({
+    where: { id: wallet.id },
+    data: { availableBalancePaisa: available, balancePaisa: available },
+  });
+  await writeLedger(client, updated, {
+    type: options.type || 'CREDIT',
+    amountPaisa: amount,
+    referenceType: options.referenceType || 'TOPUP',
+    referenceId: options.referenceId || null,
+    note: options.note || 'Wallet credit',
+    metadata: options.metadata || null,
+  });
+  return updated;
+}
 async function creditWallet(userId, amountPaisa, options = {}) {
   const amount = toBigIntPaisa(amountPaisa);
   if (amount <= 0n) throw new WalletError('Top-up amount must be greater than zero', 'INVALID_AMOUNT', 400);
@@ -162,13 +182,75 @@ async function debitWallet(userId, amountPaisa, options = {}) {
   });
 }
 
-async function computeDepositAmount(listingPricePaisa, buyerId = null, client = prisma) {
-  const settings = await getMoneySettings(client);
-  // Base tier deposit is configurable; future buyer subscription overrides can be layered here.
-  const percentAmount = roundPercentOf(listingPricePaisa, settings.depositPercent, '5');
-  return percentAmount > settings.depositMinFlatPaisa ? percentAmount : settings.depositMinFlatPaisa;
+async function debitWalletWithClient(client, userId, amountPaisa, options = {}) {
+  const amount = toBigIntPaisa(amountPaisa);
+  if (amount <= 0n) throw new WalletError('Debit amount must be greater than zero', 'INVALID_AMOUNT', 400);
+
+  const wallet = await ensureWallet(userId, client);
+  const available = wallet.availableBalancePaisa ?? wallet.balancePaisa ?? 0n;
+  if (available < amount) {
+    throw new WalletError('Insufficient available balance', 'INSUFFICIENT_FUNDS', 402, {
+      amountPaisa: amount.toString(),
+      availableBalancePaisa: available.toString(),
+    });
+  }
+
+  const nextAvailable = available - amount;
+  const updated = await client.wallet.update({
+    where: { id: wallet.id },
+    data: { availableBalancePaisa: nextAvailable, balancePaisa: nextAvailable },
+  });
+  await writeLedger(client, updated, {
+    type: options.type || 'DEBIT',
+    amountPaisa: amount,
+    referenceType: options.referenceType || 'MANUAL_ADJUSTMENT',
+    referenceId: options.referenceId || null,
+    note: options.note || 'Wallet debit',
+    metadata: options.metadata || null,
+  });
+  return updated;
+}
+function extractPlanDepositPercent(plan) {
+  const features = plan && plan.features && typeof plan.features === 'object' && !Array.isArray(plan.features)
+    ? plan.features
+    : {};
+  const raw = features.depositPercent
+    ?? features.deposit_percent
+    ?? features.depositPercentOverride
+    ?? features.deposit_rate_percent;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const value = String(raw).trim();
+  if (!/^\d+(\.\d{1,4})?$/.test(value)) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 100) return null;
+  return value;
 }
 
+async function getActiveBuyerSubscription(userId, client = prisma) {
+  if (!userId) return null;
+  const sub = await client.userSubscription.findUnique({
+    where: { userId },
+    include: { plan: { include: { prices: { include: { currency: true } } } } },
+  }).catch(() => null);
+  if (!sub || sub.status !== 'ACTIVE') return null;
+  if (sub.expiresAt && sub.expiresAt <= new Date()) return null;
+  const features = sub.plan?.features && typeof sub.plan.features === 'object' ? sub.plan.features : {};
+  if (features.buyerPremium !== true && features.buyerPlan !== true && !String(sub.plan?.slug || '').includes('buyer')) return null;
+  return sub;
+}
+
+async function getBuyerDepositPercent(userId, client = prisma) {
+  const settings = await getMoneySettings(client);
+  const activeSub = await getActiveBuyerSubscription(userId, client);
+  const override = extractPlanDepositPercent(activeSub?.plan);
+  return { depositPercent: override || settings.depositPercent, settings, activeSubscription: activeSub };
+}
+
+async function computeDepositAmount(listingPricePaisa, buyerId = null, client = prisma) {
+  const { depositPercent, settings } = await getBuyerDepositPercent(buyerId, client);
+  const percentAmount = roundPercentOf(listingPricePaisa, depositPercent, settings.depositPercent || '5');
+  return percentAmount > settings.depositMinFlatPaisa ? percentAmount : settings.depositMinFlatPaisa;
+}
 async function computeCommissionAmount(settlementPricePaisa, client = prisma) {
   const settings = await getMoneySettings(client);
   return roundPercentOf(settlementPricePaisa, settings.commissionRatePercent, '5');
@@ -453,7 +535,7 @@ function serializeWallet(wallet) {
     escrowedBalancePaisa: escrowed.toString(),
     balancePaisa: (wallet.balancePaisa ?? available).toString(),
     totalBalancePaisa: (available + escrowed).toString(),
-    amountFormatted: `₨ ${Number(available).toLocaleString('en-PK')}`,
+    amountFormatted: `â‚¨ ${Number(available).toLocaleString('en-PK')}`,
   };
 }
 
@@ -473,7 +555,12 @@ module.exports = {
   getMoneySettings,
   ensureWallet,
   creditWallet,
+  creditWalletWithClient,
   debitWallet,
+  debitWalletWithClient,
+  extractPlanDepositPercent,
+  getActiveBuyerSubscription,
+  getBuyerDepositPercent,
   computeDepositAmount,
   computeCommissionAmount,
   getActiveDeposit,

@@ -385,26 +385,94 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════════
-  // 10. SUBSCRIPTION PLANS (PKR)
+  // 10. BUYER PREMIUM SUBSCRIPTION PLANS (PKR)
   // ═══════════════════════════════════════════════
-  console.log('  10/17 Subscription Plans...');
+  console.log('  10/17 Buyer Premium Subscription Plans...');
+  // v3: subscriptions are buyer-side only. They reduce the deposit percent for
+  // future deposits and are never seller listing gates.
+  await prisma.subscriptionPlan.updateMany({
+    where: { slug: { in: ['free', 'basic-dealer', 'pro-dealer', 'franchise', 'enterprise'] } },
+    data: { isActive: false },
+  }).catch(() => null);
+
   const plans = [
-    { name: 'Free', slug: 'free', description: 'Basic free plan', maxListings: 3, maxZones: 1, price: 0 },
-    { name: 'Basic Dealer', slug: 'basic-dealer', description: 'For small dealers', maxListings: 20, maxZones: 3, price: 500 },
-    { name: 'Pro Dealer', slug: 'pro-dealer', description: 'For active dealers', maxListings: 100, maxZones: 10, price: 2000 },
-    { name: 'Franchise', slug: 'franchise', description: 'Franchise package', maxListings: 500, maxZones: 50, price: 10000 },
-    { name: 'Enterprise', slug: 'enterprise', description: 'Unlimited access', maxListings: 9999, maxZones: 9999, price: 50000 },
+    {
+      name: 'Basic Buyer',
+      slug: 'basic-buyer',
+      description: 'Free buyer tier with standard deposit rate',
+      maxListings: 0,
+      maxZones: 0,
+      pricePaisa: 0,
+      features: {
+        buyerPremium: true,
+        sellerVisible: false,
+        depositPercent: 5,
+        concurrentDepositCap: 3,
+        priorityOffers: false,
+        analyticsTier: 'basic',
+      },
+    },
+    {
+      name: 'Pro Buyer',
+      slug: 'pro-buyer',
+      description: 'Reduced deposit rate and higher concurrent sourcing cap',
+      maxListings: 0,
+      maxZones: 0,
+      pricePaisa: 99900,
+      features: {
+        buyerPremium: true,
+        sellerVisible: false,
+        depositPercent: 3,
+        concurrentDepositCap: 10,
+        priorityOffers: true,
+        analyticsTier: 'pro',
+      },
+    },
+    {
+      name: 'Enterprise Buyer',
+      slug: 'enterprise-buyer',
+      description: 'Bulk sourcing tier for wholesale buyers',
+      maxListings: 0,
+      maxZones: 0,
+      pricePaisa: 299900,
+      features: {
+        buyerPremium: true,
+        sellerVisible: false,
+        depositPercent: 2,
+        concurrentDepositCap: 50,
+        priorityOffers: true,
+        bulkDepositTools: true,
+        analyticsTier: 'enterprise',
+      },
+    },
   ];
+
   for (const p of plans) {
     const plan = await prisma.subscriptionPlan.upsert({
       where: { slug: p.slug },
-      update: { name: p.name, description: p.description, maxListings: p.maxListings, maxZones: p.maxZones },
-      create: { name: p.name, slug: p.slug, description: p.description, maxListings: p.maxListings, maxZones: p.maxZones, countryId: 'PK' },
+      update: {
+        name: p.name,
+        description: p.description,
+        maxListings: p.maxListings,
+        maxZones: p.maxZones,
+        features: p.features,
+        isActive: true,
+      },
+      create: {
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+        maxListings: p.maxListings,
+        maxZones: p.maxZones,
+        countryId: 'PK',
+        features: p.features,
+        isActive: true,
+      },
     });
     await prisma.subscriptionPrice.upsert({
       where: { planId_currencyId_interval: { planId: plan.id, currencyId: 'PKR', interval: 'MONTHLY' } },
-      update: { pricePaisa: BigInt(p.price) },
-      create: { planId: plan.id, currencyId: 'PKR', pricePaisa: BigInt(p.price), interval: 'MONTHLY' },
+      update: { pricePaisa: BigInt(p.pricePaisa) },
+      create: { planId: plan.id, currencyId: 'PKR', pricePaisa: BigInt(p.pricePaisa), interval: 'MONTHLY' },
     });
   }
 
