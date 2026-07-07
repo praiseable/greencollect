@@ -37,9 +37,10 @@ function assertParticipant(transaction, user, res) {
 
 function serializeTransaction(t) {
   if (!t) return null;
+  const { handshakeOtpHash, ...safeTransaction } = t;
   const settlement = t.actualPricePaisa ?? t.totalPaisa ?? t.finalPricePaisa ?? t.amountPaisa;
   return {
-    ...t,
+    ...safeTransaction,
     amountPaisa: t.amountPaisa?.toString(),
     offeredPricePaisa: t.offeredPricePaisa?.toString() || null,
     counterPricePaisa: t.counterPricePaisa?.toString() || null,

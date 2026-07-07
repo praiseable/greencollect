@@ -738,7 +738,9 @@ router.post('/admin/:userId/reject',
         data: {
           accountStatus: 'REJECTED',
           kycRejectionReason: reason,
-          isActive: false,
+          // KYC rejection is not an account suspension. Keep the user active so
+          // they can read the rejection notification/reason and resubmit.
+          isActive: true,
         },
       });
 

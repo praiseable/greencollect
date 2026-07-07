@@ -78,6 +78,23 @@ first_notification_id(){
   json_value "(obj.data||obj.notifications||[])[0]?.id"
 }
 
+extract_seller_handshake_otp(){
+  local token="$1" txn_id="$2"
+  http GET "/notifications?limit=100" "$token"
+  if [ "$STATUS" != "200" ]; then return; fi
+  node - <<NODE 2>/dev/null || true
+const fs = require('fs');
+const obj = JSON.parse(fs.readFileSync('$BODY','utf8'));
+const list = obj.data || obj.notifications || [];
+const row = list.find((n) => {
+  const data = n.data || {};
+  return data.transactionId === '$txn_id' && (data.event === 'SECURE_HANDSHAKE_OTP' || /pickup OTP/i.test(n.body || ''));
+});
+const match = row && String(row.body || '').match(/\b(\d{6})\b/);
+if (match) console.log(match[1]);
+NODE
+}
+
 printf 'Kabariya UC-13 notifications/event-center smoke\n'
 printf 'API_BASE=%s COMPOSE_FILE=%s\n' "$API_BASE" "$COMPOSE_FILE"
 line
@@ -234,7 +251,13 @@ expect 200 "seller acknowledges amendment before notification finalization"
 http POST "/transactions/$TXN_ID/handshake/generate" "$SELLER_TOKEN" "{}"
 expect 200 "seller generates handshake OTP for notification finalization"
 OTP="$(json_value "obj.otp")"
-[ -n "$OTP" ] && pass "seller-side OTP obtained for notification smoke" || fail "OTP missing; set ALLOW_TEST_HANDSHAKE_OTP=true in backend smoke env"
+if [ -z "$OTP" ]; then
+  # Production correctly does not return OTP in the API payload. For smoke, read
+  # it as the seller from the seller-only notification center. This preserves the
+  # buyer-side security invariant while keeping the runtime test deterministic.
+  OTP="$(extract_seller_handshake_otp "$SELLER_TOKEN" "$TXN_ID")"
+fi
+[ -n "$OTP" ] && pass "seller-side OTP obtained for notification smoke" || fail "OTP missing from seller-only delivery channel"
 http POST "/transactions/$TXN_ID/verify-handshake" "$BUYER_TOKEN" "{\"otp\":\"$OTP\"}"
 expect 200 "buyer verifies handshake and finalizes notification transaction"
 BOND_ID="$(json_value "obj.bond?.id")"

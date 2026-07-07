@@ -198,10 +198,12 @@ router.post('/otp/send', [
     const { phone, purpose = 'LOGIN' } = req.body;
     const normalizedPhone = phone.startsWith('0') ? `+92${phone.substring(1)}` : phone.startsWith('+92') ? phone : `+92${phone}`;
 
-    // Suspended/banned user gets 403 immediately (spec 2.4)
+    // Suspended/banned user gets 403 immediately (spec 2.4). A rejected KYC
+    // review must not block login/OTP because the user needs to read the
+    // rejection reason and resubmit documents.
     const existingUser = await prisma.user.findUnique({ where: { phone: normalizedPhone } });
-    if (existingUser && ['SUSPENDED', 'REJECTED'].includes(existingUser.accountStatus)) {
-      return res.status(403).json({ error: { message: 'Account is suspended or rejected', code: 'ACCOUNT_SUSPENDED' } });
+    if (existingUser && existingUser.accountStatus === 'SUSPENDED') {
+      return res.status(403).json({ error: { message: 'Account is suspended', code: 'ACCOUNT_SUSPENDED' } });
     }
 
     const lockedUntil = otpStore.getLockout(normalizedPhone);
