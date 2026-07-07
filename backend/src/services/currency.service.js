@@ -15,15 +15,25 @@ function normalizeCurrency(currency) {
       symbol: id === 'PKR' ? '₨' : id,
       symbolNative: id === 'PKR' ? '₨' : id,
       symbolPosition: 'PREFIX',
-      decimalDigits: id === 'PKR' ? 2 : 2,
+      decimalDigits: 2,
     };
   }
+
+  const id = currency.id || 'PKR';
+  const rawDigits = Number.isInteger(currency.decimalDigits) ? currency.decimalDigits : undefined;
+
+  // The API contract uses amountPaisa as integer minor units. Some seeded/legacy
+  // PKR rows have decimalDigits=0 because rupees do not commonly display cents,
+  // but the backend still stores PKR in paisa. Force a 2-digit paisa scale so
+  // 150000 paisa formats as ₨ 1,500 rather than ₨ 150,000.
+  const decimalDigits = id === 'PKR' ? 2 : (rawDigits ?? 2);
+
   return {
-    id: currency.id || 'PKR',
+    id,
     symbol: currency.symbol || currency.symbolNative || currency.id || 'PKR',
     symbolNative: currency.symbolNative || currency.symbol || currency.id || 'PKR',
     symbolPosition: currency.symbolPosition || 'PREFIX',
-    decimalDigits: Number.isInteger(currency.decimalDigits) ? currency.decimalDigits : 2,
+    decimalDigits,
   };
 }
 
