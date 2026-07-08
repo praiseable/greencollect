@@ -1,9 +1,9 @@
 const prisma = require('./prisma');
 
-const urduNumerals = ['Û°', 'Û±', 'Û²', 'Û³', 'Û´', 'Ûµ', 'Û¶', 'Û·', 'Û¸', 'Û¹'];
+const URDU_DIGITS = Object.freeze(['\u06F0', '\u06F1', '\u06F2', '\u06F3', '\u06F4', '\u06F5', '\u06F6', '\u06F7', '\u06F8', '\u06F9']);
 
 function toUrduNumerals(value) {
-  return String(value).replace(/[0-9]/g, (d) => urduNumerals[Number(d)]);
+  return String(value ?? '').replace(/[0-9]/g, (digit) => URDU_DIGITS[Number(digit)] || digit);
 }
 
 function toBigIntRupees(value) {

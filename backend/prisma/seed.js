@@ -23,7 +23,7 @@ async function main() {
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  2/17 Currencies...');
   const currencies = [
-    { id: 'PKR', name: 'Pakistani Rupee', nativeName: 'Ø±ÙˆÙ¾ÛŒÛ', symbol: 'â‚¨', symbolNative: 'Ø±', symbolPosition: 'PREFIX', decimalDigits: 0, isDefault: true, isActive: true },
+    { id: 'PKR', name: 'Pakistani Rupee', nativeName: '\u0631\u0648\u067E\u06CC\u06C1', symbol: '\u20A8', symbolNative: '\u20A8', symbolPosition: 'PREFIX', decimalDigits: 0, isDefault: true, isActive: true },
     { id: 'USD', name: 'US Dollar', nativeName: 'Ø§Ù…Ø±ÛŒÚ©ÛŒ ÚˆØ§Ù„Ø±', symbol: '$', symbolNative: '$', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
     { id: 'AED', name: 'UAE Dirham', nativeName: 'Ø¯Ø±ÛÙ…', symbol: 'Ø¯.Ø¥', symbolNative: 'Ø¯.Ø¥', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
     { id: 'SAR', name: 'Saudi Riyal', nativeName: 'Ø±ÛŒØ§Ù„', symbol: 'ï·¼', symbolNative: 'ï·¼', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
