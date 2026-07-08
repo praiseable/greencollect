@@ -4,14 +4,22 @@ set -euo pipefail
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 SQL_FILE="${SQL_FILE:-scripts/kabariya_money_rupees_phase1_migration.sql}"
 
-cd "$(dirname "$0")/.."
+cd "${APP_DIR:-$HOME/gc-app}"
 
-echo "Kabariya money base-unit migration: paisa -> PKR rupees"
+echo "Kabariya rupees-base DB migration v2"
 echo "COMPOSE_FILE=$COMPOSE_FILE SQL_FILE=$SQL_FILE"
+echo "----------------------------------------------------------------"
 
-test -f "$SQL_FILE" || { echo "Missing SQL file: $SQL_FILE" >&2; exit 1; }
+echo "Creating DB backup..."
+mkdir -p backups
+docker exec -t gc-app-db-1 sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "backups/pre_money_rupees_v2_$(date +%Y%m%d_%H%M%S).dump"
+ls -lh backups/pre_money_rupees_v2_*.dump | tail -1
 
-docker compose -f "$COMPOSE_FILE" exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 < "$SQL_FILE"
+echo "Stopping backend to avoid mixed money-base writes..."
+docker compose -f "$COMPOSE_FILE" stop backend
 
-echo "Migration status:"
-docker compose -f "$COMPOSE_FILE" exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT key, value FROM \"PlatformConfig\" WHERE key IN ('money_base_unit','deposit_min_flat_paisa') ORDER BY key;"
+echo "Applying schema-adaptive rupees migration..."
+cat "$SQL_FILE" | docker exec -i gc-app-db-1 sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1'
+
+echo "Migration applied. Backend remains stopped until rupees-aware code is deployed."
