@@ -1,161 +1,125 @@
 const prisma = require('./prisma');
 
-// Urdu numerals
-const urduNumerals = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+const urduNumerals = ['Û°', 'Û±', 'Û²', 'Û³', 'Û´', 'Ûµ', 'Û¶', 'Û·', 'Û¸', 'Û¹'];
 
 function toUrduNumerals(value) {
   return String(value).replace(/[0-9]/g, (d) => urduNumerals[Number(d)]);
 }
 
-function normalizeCurrency(currency) {
-  if (!currency || typeof currency === 'string') {
-    const id = currency || 'PKR';
+function toBigIntRupees(value) {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value)) throw new Error('Money amount must be an integer rupee value');
+    return BigInt(value);
+  }
+  const text = String(value ?? '').trim();
+  if (!/^-?\d+$/.test(text)) throw new Error('Money amount must be an integer rupee value');
+  return BigInt(text);
+}
+
+// Backward-compatible alias: the application base unit is rupees now.
+const toBigIntPaisa = toBigIntRupees;
+
+function normalizeCurrency(currency = 'PKR') {
+  if (typeof currency === 'string') {
     return {
-      id,
-      symbol: id === 'PKR' ? '₨' : id,
-      symbolNative: id === 'PKR' ? '₨' : id,
+      id: currency,
+      symbol: currency === 'PKR' ? 'â‚¨' : currency,
+      symbolNative: currency === 'PKR' ? 'â‚¨' : currency,
       symbolPosition: 'PREFIX',
-      decimalDigits: 2,
+      decimalDigits: 0,
     };
   }
-
-  const id = currency.id || 'PKR';
-  const rawDigits = Number.isInteger(currency.decimalDigits) ? currency.decimalDigits : undefined;
-
-  // The API contract uses amountPaisa as integer minor units. Some seeded/legacy
-  // PKR rows have decimalDigits=0 because rupees do not commonly display cents,
-  // but the backend still stores PKR in paisa. Force a 2-digit paisa scale so
-  // 150000 paisa formats as ₨ 1,500 rather than ₨ 150,000.
-  const decimalDigits = id === 'PKR' ? 2 : (rawDigits ?? 2);
-
   return {
-    id,
-    symbol: currency.symbol || currency.symbolNative || currency.id || 'PKR',
-    symbolNative: currency.symbolNative || currency.symbol || currency.id || 'PKR',
+    id: currency.id || 'PKR',
+    symbol: currency.symbol || currency.symbolNative || 'â‚¨',
+    symbolNative: currency.symbolNative || currency.symbol || 'â‚¨',
     symbolPosition: currency.symbolPosition || 'PREFIX',
-    decimalDigits,
+    decimalDigits: 0,
   };
 }
 
-function toBigIntPaisa(amountPaisa) {
-  if (typeof amountPaisa === 'bigint') return amountPaisa;
-  if (amountPaisa && typeof amountPaisa === 'object' && typeof amountPaisa.toString === 'function') {
-    return BigInt(amountPaisa.toString());
-  }
-  if (typeof amountPaisa === 'number') {
-    if (!Number.isSafeInteger(amountPaisa)) {
-      throw new Error('Money values must be safe integer paisa values');
-    }
-    return BigInt(amountPaisa);
-  }
-  if (typeof amountPaisa === 'string' && /^-?\d+$/.test(amountPaisa.trim())) {
-    return BigInt(amountPaisa.trim());
-  }
-  throw new Error('Money values must be integer paisa values');
+function groupThousands(value) {
+  const s = String(value);
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-function groupThousands(digits) {
-  return String(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function decimalPower(decimalDigits) {
-  return 10n ** BigInt(Math.max(0, decimalDigits));
-}
-
-function formatPaisaNumber(amountPaisa, decimalDigits = 2, lang = 'en') {
-  const raw = toBigIntPaisa(amountPaisa);
-  const negative = raw < 0n;
-  const n = negative ? -raw : raw;
-  const scale = decimalPower(decimalDigits);
-  const whole = decimalDigits > 0 ? n / scale : n;
-  const fractional = decimalDigits > 0 ? n % scale : 0n;
-  let formatted = groupThousands(whole.toString());
-
-  if (decimalDigits > 0 && fractional > 0n) {
-    let fraction = fractional.toString().padStart(decimalDigits, '0');
-    fraction = fraction.replace(/0+$/, '');
-    if (fraction) formatted += `.${fraction}`;
-  }
-
+function formatRupeesNumber(amountRupees, _decimalDigits = 0, lang = 'en') {
+  let amount = toBigIntRupees(amountRupees);
+  const negative = amount < 0n;
+  if (negative) amount = -amount;
+  let formatted = groupThousands(amount.toString());
   if (negative) formatted = `-${formatted}`;
   return lang === 'ur' ? toUrduNumerals(formatted) : formatted;
 }
 
-// Format amount from integer paisa to display string. This function intentionally
-// avoids floating point math so PKR/foreign-currency values stay paisa-exact.
-function formatCurrency(amountPaisa, currency = 'PKR', lang = 'en') {
+// Backward-compatible alias: raw values are rupees now.
+const formatPaisaNumber = formatRupeesNumber;
+
+function formatCurrency(amountRupees, currency = 'PKR', lang = 'en') {
   const c = normalizeCurrency(currency);
-  const formatted = formatPaisaNumber(amountPaisa, c.decimalDigits, lang);
-  const symbol = lang === 'ur' ? (c.symbolNative || c.symbol) : c.symbol;
-  if (c.symbolPosition === 'SUFFIX') {
-    return `${formatted} ${symbol}`;
-  }
-  return `${symbol} ${formatted}`;
+  const symbol = c.symbolNative || c.symbol || c.id || 'PKR';
+  const formatted = formatRupeesNumber(amountRupees, 0, lang);
+  return c.symbolPosition === 'SUFFIX' ? `${formatted} ${symbol}` : `${symbol} ${formatted}`;
 }
 
-// Convert between currencies using integer paisa and Decimal exchange rates.
-async function convertCurrency(amountPaisa, fromCurrencyId, toCurrencyId) {
-  const amount = toBigIntPaisa(amountPaisa);
-  if (fromCurrencyId === toCurrencyId) return amount;
-
-  const rate = await prisma.exchangeRate.findUnique({
-    where: {
-      baseCurrencyId_targetCurrencyId: {
-        baseCurrencyId: fromCurrencyId,
-        targetCurrencyId: toCurrencyId,
-      },
-    },
-  });
-
-  if (!rate) return amount;
-  const scaledRate = BigInt(Math.round(Number(rate.rate) * 1_000_000));
-  return (amount * scaledRate) / 1_000_000n;
+async function getCurrency(currencyId = 'PKR') {
+  const currency = await prisma.currency.findUnique({ where: { id: currencyId } });
+  return currency || normalizeCurrency(currencyId);
 }
 
-// Get default currency for country
-async function getDefaultCurrency(countryId = 'PK') {
-  const country = await prisma.country.findUnique({
-    where: { id: countryId },
-    include: { defaultCurrency: true },
-  });
-  return country?.defaultCurrency || null;
-}
-
-// Backward-compatible helper: if called with a primitive amount, return a string;
-// if called with an object, add formatted fields in-place and return that object.
-function addFormattedPrice(itemOrAmount, currency = 'PKR', lang = 'en') {
+function formatMoneyFields(itemOrAmount, currency = 'PKR', lang = 'en') {
   if (itemOrAmount === null || itemOrAmount === undefined) return itemOrAmount;
-
-  const primitiveMoney = ['bigint', 'number', 'string'].includes(typeof itemOrAmount);
-  const decimalMoney = itemOrAmount && typeof itemOrAmount === 'object'
-    && itemOrAmount.constructor
-    && ['Decimal', 'DecimalJsLike'].includes(itemOrAmount.constructor.name);
-  if (primitiveMoney || decimalMoney) {
+  if (typeof itemOrAmount === 'bigint' || typeof itemOrAmount === 'number' || typeof itemOrAmount === 'string') {
     return formatCurrency(itemOrAmount, currency, lang);
   }
-
   const item = itemOrAmount;
-  if (item.pricePaisa !== undefined && item.pricePaisa !== null) {
-    item.priceFormatted = formatCurrency(item.pricePaisa, item.currency || currency, lang);
-  }
-  if (item.amountPaisa !== undefined && item.amountPaisa !== null) {
-    item.amountFormatted = formatCurrency(item.amountPaisa, item.currency || currency, lang);
-  }
-  if (item.totalPaisa !== undefined && item.totalPaisa !== null) {
-    item.totalFormatted = formatCurrency(item.totalPaisa, item.currency || currency, lang);
-  }
-  if (item.actualPricePaisa !== undefined && item.actualPricePaisa !== null) {
-    item.actualPriceFormatted = formatCurrency(item.actualPricePaisa, item.currency || currency, lang);
-  }
+  const c = item.currency || currency;
+
+  const pairs = [
+    ['pricePaisa', 'priceFormatted'],
+    ['priceRupees', 'priceFormatted'],
+    ['amountPaisa', 'amountFormatted'],
+    ['amountRupees', 'amountFormatted'],
+    ['offeredPricePaisa', 'offeredPriceFormatted'],
+    ['offeredPriceRupees', 'offeredPriceFormatted'],
+    ['counterPricePaisa', 'counterPriceFormatted'],
+    ['counterPriceRupees', 'counterPriceFormatted'],
+    ['finalPricePaisa', 'finalPriceFormatted'],
+    ['finalPriceRupees', 'finalPriceFormatted'],
+    ['actualPricePaisa', 'actualPriceFormatted'],
+    ['actualPriceRupees', 'actualPriceFormatted'],
+    ['settlementPricePaisa', 'settlementPriceFormatted'],
+    ['settlementPriceRupees', 'settlementPriceFormatted'],
+    ['commissionPaisa', 'commissionFormatted'],
+    ['commissionRupees', 'commissionFormatted'],
+    ['totalPaisa', 'totalFormatted'],
+    ['totalRupees', 'totalFormatted'],
+    ['availableBalancePaisa', 'availableBalanceFormatted'],
+    ['availableBalanceRupees', 'availableBalanceFormatted'],
+    ['escrowedBalancePaisa', 'escrowedBalanceFormatted'],
+    ['escrowedBalanceRupees', 'escrowedBalanceFormatted'],
+    ['balancePaisa', 'balanceFormatted'],
+    ['balanceRupees', 'balanceFormatted'],
+  ];
+
+  pairs.forEach(([rawKey, formattedKey]) => {
+    if (item[rawKey] !== undefined && item[rawKey] !== null) {
+      item[formattedKey] = formatCurrency(item[rawKey], c, lang);
+    }
+  });
+
+  item.moneyBaseUnit = 'rupees';
   return item;
 }
 
 module.exports = {
-  formatCurrency,
-  formatPaisaNumber,
-  convertCurrency,
-  getDefaultCurrency,
-  addFormattedPrice,
   toUrduNumerals,
+  toBigIntRupees,
   toBigIntPaisa,
+  formatRupeesNumber,
+  formatPaisaNumber,
+  formatCurrency,
+  formatMoneyFields,
+  getCurrency,
 };

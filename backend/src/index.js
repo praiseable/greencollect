@@ -14,6 +14,7 @@ validateConfig();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const { moneyUnitRequestAliasMiddleware, moneyUnitResponseAliasMiddleware } = require('./middleware/moneyUnitRupees');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const path = require('path');
@@ -67,7 +68,11 @@ const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
 
-// ── API Routes ─────────────────────────────────────────────
+// â”€â”€ API Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Money base unit is PKR rupees. Accept *Rupees aliases and expose *Rupees response fields.
+app.use(moneyUnitRequestAliasMiddleware);
+app.use(moneyUnitResponseAliasMiddleware);
+
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/users', require('./routes/users.routes'));
 app.use('/api/categories', require('./routes/categories.routes'));
@@ -93,7 +98,7 @@ app.use('/api/collections', require('./routes/collections.routes'));
 app.use('/api/disputes', require('./routes/disputes.routes'));
 app.use('/api/kyc', require('./routes/kyc.routes'));
 
-// ── Mobile-specific routes (v1 prefix — spec /api/v1) ──
+// â”€â”€ Mobile-specific routes (v1 prefix â€” spec /api/v1) â”€â”€
 app.use('/v1/auth', require('./routes/auth.routes'));
 app.use('/v1/users', require('./routes/users.routes'));
 app.use('/v1/listings', require('./routes/listings.routes'));
@@ -112,7 +117,7 @@ app.use('/v1/payments', require('./routes/payments.routes'));
 app.use('/v1/wallet', require('./routes/wallet.routes'));
 app.use('/v1/subscriptions', require('./routes/subscriptions.routes'));
 
-// Config (app version for force-update) — before auth
+// Config (app version for force-update) â€” before auth
 app.use('/api/config', require('./routes/config.routes'));
 app.use('/v1/config', require('./routes/config.routes'));
 
@@ -179,15 +184,15 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found', code: 'NOT_FOUND' } });
 });
 
-// ── Escalation Cron Jobs ──────────────────────────────────
+// â”€â”€ Escalation Cron Jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const { runEscalation, runCollectionEscalation } = require('./services/escalation.service');
 
 function startEscalationCron() {
-  const LISTING_INTERVAL = 60 * 60 * 1000;     // 1 hour — listing visibility
-  const COLLECTION_INTERVAL = 15 * 60 * 1000;  // 15 min — collection deadline checks
+  const LISTING_INTERVAL = 60 * 60 * 1000;     // 1 hour â€” listing visibility
+  const COLLECTION_INTERVAL = 15 * 60 * 1000;  // 15 min â€” collection deadline checks
 
-  console.log(`⏰ Listing escalation cron: every ${LISTING_INTERVAL / 60000} min`);
-  console.log(`⏰ Collection escalation cron: every ${COLLECTION_INTERVAL / 60000} min`);
+  console.log(`â° Listing escalation cron: every ${LISTING_INTERVAL / 60000} min`);
+  console.log(`â° Collection escalation cron: every ${COLLECTION_INTERVAL / 60000} min`);
   
   // Run once on startup (after 30s delay to let DB settle)
   setTimeout(() => {
@@ -204,7 +209,7 @@ const PORT = process.env.PORT || 4000;
 
 function startServer() {
   return server.listen(PORT, () => {
-    console.log(`🚀 Geo-Franchise Marketplace API running on port ${PORT}`);
+    console.log(`ðŸš€ Geo-Franchise Marketplace API running on port ${PORT}`);
     console.log(`   Health: http://localhost:${PORT}/health`);
     console.log(`   Country: Pakistan (PKR, +92)`);
 
