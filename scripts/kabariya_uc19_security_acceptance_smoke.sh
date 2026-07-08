@@ -20,7 +20,7 @@ trap cleanup EXIT
 
 line(){ printf '%s\n' '----------------------------------------------------------------'; }
 pass(){ PASS=$((PASS+1)); printf '✅ PASS  %s\n' "$1"; }
-fail(){ FAIL=$((FAIL+1)); printf '❌ FAIL  %s\n' "$1"; [ -s "$BODY" ] && { printf '%s\n' '---- body ----'; head -c 1800 "$BODY"; printf '\n'; }; }
+fail(){ FAIL=$((FAIL+1)); printf '❌ FAIL  %s\n' "$1"; [ -s "$BODY" ] && { printf '%s\n' '---- body ----'; head -c 1200 "$BODY"; printf '\n'; }; }
 warn(){ WARN=$((WARN+1)); printf '⚠️  WARN  %s\n' "$1"; }
 
 http(){
@@ -34,11 +34,6 @@ http(){
 expect(){
   local expected="$1" msg="$2"
   if [ "$STATUS" = "$expected" ]; then pass "$msg [$STATUS]"; else fail "$msg expected $expected got $STATUS"; fi
-}
-
-expect_any(){
-  local allowed="$1" msg="$2"
-  case " $allowed " in *" $STATUS "*) pass "$msg [$STATUS]" ;; *) fail "$msg expected one of {$allowed} got $STATUS" ;; esac
 }
 
 json_value(){
@@ -56,10 +51,6 @@ json_assert(){
 }
 
 extract_token(){ json_value "obj.accessToken || obj.token || obj?.data?.accessToken || obj?.data?.token"; }
-
-container_node(){
-  docker compose -f "$COMPOSE_FILE" exec -T backend node "$@"
-}
 
 printf 'Kabariya UC-19 security acceptance smoke\n'
 printf 'API_BASE=%s COMPOSE_FILE=%s\n' "$API_BASE" "$COMPOSE_FILE"
@@ -102,7 +93,6 @@ expect 200 "admin portal login"
 ADMIN_TOKEN="$(extract_token)"
 [ -n "$ADMIN_TOKEN" ] && pass "admin token present" || fail "admin token missing"
 
-# Contact leak boundary: 200 with masked values is pass; 403 geofence is also pass if no contact data is leaked.
 http GET '/listings?limit=5'
 expect 200 "public listings available for contact-leak boundary"
 LISTING_ID="$(json_value "(()=>{let rows=obj.data||obj.listings||obj; if(!Array.isArray(rows)&&rows) rows=rows.items||rows.data||[]; return Array.isArray(rows)&&rows[0] ? rows[0].id : '';})()")"
@@ -113,27 +103,21 @@ else
   if [ "$STATUS" = "200" ]; then
     pass "anonymous listing detail returned 200 for contact-leak boundary"
     json_assert "(()=>{const l=obj.listing||obj.data||obj; const vals=[l.contactNumber,l.sellerPhone,l.seller_phone,l.exactAddress,l.exact_address,l.address,l.latitude,l.longitude,l.seller&&l.seller.phone]; return vals.every(v=>v===null||v===undefined||v==='');})()" "anonymous listing detail has no non-empty contact/address/precise coordinate leak"
-  elif [ "$STATUS" = "403" ]; then
-    if grep -q 'GEO_FENCE_RESTRICTED' "$BODY"; then
-      pass "anonymous listing detail may be geo-fenced before deposit without contact leak"
-    else
-      fail "anonymous listing detail returned unexpected 403"
-    fi
+  elif [ "$STATUS" = "403" ] && grep -q 'GEO_FENCE_RESTRICTED' "$BODY"; then
+    pass "anonymous listing detail may be geo-fenced before deposit without contact leak"
   else
     fail "anonymous listing detail expected 200 or geo-fence 403 got $STATUS"
   fi
 fi
 
-# Static code checks inside backend container.
-# Static checks write their own diagnostic files; clear the last HTTP body so failures do not dump unrelated listing JSON.
+# Static checks write their own diagnostic files; clear last HTTP body so static failures do not dump listing JSON.
 : > "$BODY"
+
 if docker compose -f "$COMPOSE_FILE" exec -T backend node <<'NODE' >"$TMP_DIR/wallet_direct_updates.txt" 2>&1
 const fs = require('fs');
 const path = require('path');
 const findings = [];
-const allowed = new Set([
-  path.normalize('src/services/wallet.service.js'),
-]);
+const allowed = new Set([path.normalize('src/services/wallet.service.js')]);
 function walk(dir) {
   if (!fs.existsSync(dir)) return;
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -182,10 +166,7 @@ function inspect(file) {
   while ((m = re.exec(src))) {
     const context = src.slice(Math.max(0, m.index - 3500), Math.min(src.length, m.index + 3500)).toLowerCase();
     const allowed = context.includes('verify-handshake') || context.includes('handshakeverifiedat') || context.includes('handshake_verified') || context.includes('handshake otp') || context.includes('verifyhandshake');
-    if (!allowed) {
-      const line = src.slice(0, m.index).split('\n').length;
-      findings.push(`${file}:${line}: ${m[0]}`);
-    }
+    if (!allowed) findings.push(`${file}:${src.slice(0, m.index).split('\n').length}: ${m[0]}`);
   }
 }
 walk('src/routes');
@@ -225,6 +206,7 @@ const required = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
 const weak = required.filter((k) => !process.env[k] || process.env[k].length < 64);
 if (weak.length) {
   console.log(`weak/missing secrets: ${weak.join(', ')}`);
+  console.log(`lengths: ${required.map(k => `${k}=${process.env[k] ? process.env[k].length : 0}`).join(', ')}`);
   process.exit(2);
 }
 NODE
@@ -262,12 +244,9 @@ function lineOf(src, idx) { return src.slice(0, idx).split('\n').length; }
 function inspect(file) {
   const src = fs.readFileSync(file, 'utf8');
   const patterns = [
-    /debitWallet(?:InTx)?\s*\([^
-;]*(sellerId|seller\.id|sellerWallet|transaction\.sellerId)/gi,
-    /creditWallet(?:InTx)?\s*\([^
-;]*(sellerId|seller\.id|sellerWallet|transaction\.sellerId)[^
-;]*(SUBSCRIPTION_PURCHASE|COMMISSION_CAPTURE)/gi,
-    /sellerWallet[\s\S]{0,600}(availableBalancePaisa|escrowedBalancePaisa|SUBSCRIPTION_PURCHASE|COMMISSION_CAPTURE|type\s*:\s*['"]DEBIT['"])/gi,
+    new RegExp('debitWallet(?:InTx)?\\s*\\([^;]*(sellerId|seller\\.id|sellerWallet|transaction\\.sellerId)', 'gi'),
+    new RegExp('creditWallet(?:InTx)?\\s*\\([^;]*(sellerId|seller\\.id|sellerWallet|transaction\\.sellerId)[^;]*(SUBSCRIPTION_PURCHASE|COMMISSION_CAPTURE)', 'gi'),
+    new RegExp('sellerWallet[\\s\\S]{0,600}(availableBalancePaisa|escrowedBalancePaisa|SUBSCRIPTION_PURCHASE|COMMISSION_CAPTURE|type\\s*:\\s*[\'\"]DEBIT[\'\"])', 'gi'),
   ];
   for (const re of patterns) {
     let m;
