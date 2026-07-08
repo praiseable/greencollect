@@ -3,52 +3,52 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Seeding Geo-Franchise Marketplace (Pakistan-first)...\n');
+  console.log('ðŸŒ± Seeding Geo-Franchise Marketplace (Pakistan-first)...\n');
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 1. LANGUAGES
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  1/17 Languages...');
   const languages = [
-    { id: 'en', name: 'English', nativeName: 'English', direction: 'LTR', isDefault: false, isActive: true, flagEmoji: '🇬🇧' },
-    { id: 'ur', name: 'Urdu', nativeName: 'اردو', direction: 'RTL', isDefault: true, isActive: true, flagEmoji: '🇵🇰' },
-    { id: 'ar', name: 'Arabic', nativeName: 'العربية', direction: 'RTL', isDefault: false, isActive: false, flagEmoji: '🇸🇦' },
+    { id: 'en', name: 'English', nativeName: 'English', direction: 'LTR', isDefault: false, isActive: true, flagEmoji: 'ðŸ‡¬ðŸ‡§' },
+    { id: 'ur', name: 'Urdu', nativeName: 'Ø§Ø±Ø¯Ùˆ', direction: 'RTL', isDefault: true, isActive: true, flagEmoji: 'ðŸ‡µðŸ‡°' },
+    { id: 'ar', name: 'Arabic', nativeName: 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©', direction: 'RTL', isDefault: false, isActive: false, flagEmoji: 'ðŸ‡¸ðŸ‡¦' },
   ];
   for (const l of languages) {
     await prisma.language.upsert({ where: { id: l.id }, update: l, create: l });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 2. CURRENCIES
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  2/17 Currencies...');
   const currencies = [
-    { id: 'PKR', name: 'Pakistani Rupee', nativeName: 'روپیہ', symbol: '₨', symbolNative: 'ر', symbolPosition: 'PREFIX', decimalDigits: 0, isDefault: true, isActive: true },
-    { id: 'USD', name: 'US Dollar', nativeName: 'امریکی ڈالر', symbol: '$', symbolNative: '$', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
-    { id: 'AED', name: 'UAE Dirham', nativeName: 'درہم', symbol: 'د.إ', symbolNative: 'د.إ', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
-    { id: 'SAR', name: 'Saudi Riyal', nativeName: 'ریال', symbol: '﷼', symbolNative: '﷼', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
-    { id: 'GBP', name: 'British Pound', nativeName: 'پاؤنڈ', symbol: '£', symbolNative: '£', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
+    { id: 'PKR', name: 'Pakistani Rupee', nativeName: 'Ø±ÙˆÙ¾ÛŒÛ', symbol: 'â‚¨', symbolNative: 'Ø±', symbolPosition: 'PREFIX', decimalDigits: 0, isDefault: true, isActive: true },
+    { id: 'USD', name: 'US Dollar', nativeName: 'Ø§Ù…Ø±ÛŒÚ©ÛŒ ÚˆØ§Ù„Ø±', symbol: '$', symbolNative: '$', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
+    { id: 'AED', name: 'UAE Dirham', nativeName: 'Ø¯Ø±ÛÙ…', symbol: 'Ø¯.Ø¥', symbolNative: 'Ø¯.Ø¥', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
+    { id: 'SAR', name: 'Saudi Riyal', nativeName: 'Ø±ÛŒØ§Ù„', symbol: 'ï·¼', symbolNative: 'ï·¼', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
+    { id: 'GBP', name: 'British Pound', nativeName: 'Ù¾Ø§Ø¤Ù†Úˆ', symbol: 'Â£', symbolNative: 'Â£', symbolPosition: 'PREFIX', decimalDigits: 2, isDefault: false, isActive: false },
   ];
   for (const c of currencies) {
     await prisma.currency.upsert({ where: { id: c.id }, update: c, create: c });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 3. COUNTRIES
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  3/17 Countries...');
   const countries = [
-    { id: 'PK', name: 'Pakistan', nativeName: 'پاکستان', phoneCode: '+92', phoneFormat: '3XX-XXXXXXX', defaultCurrencyId: 'PKR', defaultLanguageId: 'ur', timezone: 'Asia/Karachi', isDefault: true, isActive: true },
-    { id: 'AE', name: 'UAE', nativeName: 'الإمارات', phoneCode: '+971', phoneFormat: 'XX-XXXXXXX', defaultCurrencyId: 'AED', defaultLanguageId: 'ar', timezone: 'Asia/Dubai', isDefault: false, isActive: false },
-    { id: 'SA', name: 'Saudi Arabia', nativeName: 'السعودية', phoneCode: '+966', phoneFormat: 'XX-XXXXXXX', defaultCurrencyId: 'SAR', defaultLanguageId: 'ar', timezone: 'Asia/Riyadh', isDefault: false, isActive: false },
+    { id: 'PK', name: 'Pakistan', nativeName: 'Ù¾Ø§Ú©Ø³ØªØ§Ù†', phoneCode: '+92', phoneFormat: '3XX-XXXXXXX', defaultCurrencyId: 'PKR', defaultLanguageId: 'ur', timezone: 'Asia/Karachi', isDefault: true, isActive: true },
+    { id: 'AE', name: 'UAE', nativeName: 'Ø§Ù„Ø¥Ù…Ø§Ø±Ø§Øª', phoneCode: '+971', phoneFormat: 'XX-XXXXXXX', defaultCurrencyId: 'AED', defaultLanguageId: 'ar', timezone: 'Asia/Dubai', isDefault: false, isActive: false },
+    { id: 'SA', name: 'Saudi Arabia', nativeName: 'Ø§Ù„Ø³Ø¹ÙˆØ¯ÙŠØ©', phoneCode: '+966', phoneFormat: 'XX-XXXXXXX', defaultCurrencyId: 'SAR', defaultLanguageId: 'ar', timezone: 'Asia/Riyadh', isDefault: false, isActive: false },
   ];
   for (const c of countries) {
     await prisma.country.upsert({ where: { id: c.id }, update: c, create: c });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 4. COUNTRY-CURRENCY + COUNTRY-LANGUAGE LINKS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  4/17 Country links...');
   const ccLinks = [
     { countryId: 'PK', currencyId: 'PKR', isPrimary: true },
@@ -71,19 +71,19 @@ async function main() {
     });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 5. UNITS + TRANSLATIONS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  5/17 Units...');
   const unitsSeed = [
-    { slug: 'kg', type: 'WEIGHT', isBaseUnit: true, en: { name: 'Kilogram', abbr: 'kg' }, ur: { name: 'کلوگرام', abbr: 'کلو' } },
-    { slug: 'ton', type: 'WEIGHT', en: { name: 'Ton', abbr: 't' }, ur: { name: 'ٹن', abbr: 'ٹن' } },
-    { slug: 'gram', type: 'WEIGHT', en: { name: 'Gram', abbr: 'g' }, ur: { name: 'گرام', abbr: 'گرام' } },
-    { slug: 'piece', type: 'COUNT', en: { name: 'Piece', abbr: 'pcs' }, ur: { name: 'عدد', abbr: 'عدد' } },
-    { slug: 'liter', type: 'VOLUME', en: { name: 'Liter', abbr: 'L' }, ur: { name: 'لیٹر', abbr: 'لٹر' } },
-    { slug: 'bundle', type: 'COUNT', en: { name: 'Bundle', abbr: 'bdl' }, ur: { name: 'گٹھا', abbr: 'گٹھا' } },
-    { slug: 'bag', type: 'COUNT', en: { name: 'Bag', abbr: 'bag' }, ur: { name: 'بوری', abbr: 'بوری' } },
-    { slug: 'truck-load', type: 'COUNT', en: { name: 'Truck Load', abbr: 'truck' }, ur: { name: 'ٹرک بھر', abbr: 'ٹرک' } },
+    { slug: 'kg', type: 'WEIGHT', isBaseUnit: true, en: { name: 'Kilogram', abbr: 'kg' }, ur: { name: 'Ú©Ù„ÙˆÚ¯Ø±Ø§Ù…', abbr: 'Ú©Ù„Ùˆ' } },
+    { slug: 'ton', type: 'WEIGHT', en: { name: 'Ton', abbr: 't' }, ur: { name: 'Ù¹Ù†', abbr: 'Ù¹Ù†' } },
+    { slug: 'gram', type: 'WEIGHT', en: { name: 'Gram', abbr: 'g' }, ur: { name: 'Ú¯Ø±Ø§Ù…', abbr: 'Ú¯Ø±Ø§Ù…' } },
+    { slug: 'piece', type: 'COUNT', en: { name: 'Piece', abbr: 'pcs' }, ur: { name: 'Ø¹Ø¯Ø¯', abbr: 'Ø¹Ø¯Ø¯' } },
+    { slug: 'liter', type: 'VOLUME', en: { name: 'Liter', abbr: 'L' }, ur: { name: 'Ù„ÛŒÙ¹Ø±', abbr: 'Ù„Ù¹Ø±' } },
+    { slug: 'bundle', type: 'COUNT', en: { name: 'Bundle', abbr: 'bdl' }, ur: { name: 'Ú¯Ù¹Ú¾Ø§', abbr: 'Ú¯Ù¹Ú¾Ø§' } },
+    { slug: 'bag', type: 'COUNT', en: { name: 'Bag', abbr: 'bag' }, ur: { name: 'Ø¨ÙˆØ±ÛŒ', abbr: 'Ø¨ÙˆØ±ÛŒ' } },
+    { slug: 'truck-load', type: 'COUNT', en: { name: 'Truck Load', abbr: 'truck' }, ur: { name: 'Ù¹Ø±Ú© Ø¨Ú¾Ø±', abbr: 'Ù¹Ø±Ú©' } },
   ];
   const unitIds = {};
   for (const u of unitsSeed) {
@@ -105,51 +105,51 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 6. CATEGORIES + TRANSLATIONS (Pakistan Catalog)
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  6/17 Categories...');
   const catalogSeed = [
-    { slug: 'metals', en: 'Metals', ur: 'دھاتیں', colorHex: '#F59E0B', children: [
-      { slug: 'copper', en: 'Copper', ur: 'تانبا', types: [
-        { slug: 'copper-wire', en: 'Copper Wire', ur: 'تانبے کی تار' },
-        { slug: 'copper-sheet', en: 'Copper Sheet', ur: 'تانبے کی چادر' },
+    { slug: 'metals', en: 'Metals', ur: 'Ø¯Ú¾Ø§ØªÛŒÚº', colorHex: '#F59E0B', children: [
+      { slug: 'copper', en: 'Copper', ur: 'ØªØ§Ù†Ø¨Ø§', types: [
+        { slug: 'copper-wire', en: 'Copper Wire', ur: 'ØªØ§Ù†Ø¨Û’ Ú©ÛŒ ØªØ§Ø±' },
+        { slug: 'copper-sheet', en: 'Copper Sheet', ur: 'ØªØ§Ù†Ø¨Û’ Ú©ÛŒ Ú†Ø§Ø¯Ø±' },
       ]},
-      { slug: 'silver', en: 'Silver', ur: 'چاندی' },
-      { slug: 'iron', en: 'Iron', ur: 'لوہا', types: [
-        { slug: 'iron-scrap', en: 'Iron Scrap', ur: 'لوہے کا کباڑ' },
-        { slug: 'steel-rods', en: 'Steel Rods', ur: 'سریا' },
+      { slug: 'silver', en: 'Silver', ur: 'Ú†Ø§Ù†Ø¯ÛŒ' },
+      { slug: 'iron', en: 'Iron', ur: 'Ù„ÙˆÛØ§', types: [
+        { slug: 'iron-scrap', en: 'Iron Scrap', ur: 'Ù„ÙˆÛÛ’ Ú©Ø§ Ú©Ø¨Ø§Ú‘' },
+        { slug: 'steel-rods', en: 'Steel Rods', ur: 'Ø³Ø±ÛŒØ§' },
       ]},
-      { slug: 'aluminum', en: 'Aluminum', ur: 'ایلومینیم' },
-      { slug: 'brass', en: 'Brass', ur: 'پیتل' },
+      { slug: 'aluminum', en: 'Aluminum', ur: 'Ø§ÛŒÙ„ÙˆÙ…ÛŒÙ†ÛŒÙ…' },
+      { slug: 'brass', en: 'Brass', ur: 'Ù¾ÛŒØªÙ„' },
     ]},
-    { slug: 'plastics', en: 'Plastics', ur: 'پلاسٹک', colorHex: '#3B82F6', children: [
-      { slug: 'plastic-bags', en: 'Plastic Bags', ur: 'پلاسٹک کے تھیلے' },
-      { slug: 'plastic-bottles', en: 'Plastic Bottles', ur: 'پلاسٹک کی بوتلیں' },
-      { slug: 'plastic-scrap', en: 'Plastic Scrap', ur: 'پلاسٹک کا کچرا' },
+    { slug: 'plastics', en: 'Plastics', ur: 'Ù¾Ù„Ø§Ø³Ù¹Ú©', colorHex: '#3B82F6', children: [
+      { slug: 'plastic-bags', en: 'Plastic Bags', ur: 'Ù¾Ù„Ø§Ø³Ù¹Ú© Ú©Û’ ØªÚ¾ÛŒÙ„Û’' },
+      { slug: 'plastic-bottles', en: 'Plastic Bottles', ur: 'Ù¾Ù„Ø§Ø³Ù¹Ú© Ú©ÛŒ Ø¨ÙˆØªÙ„ÛŒÚº' },
+      { slug: 'plastic-scrap', en: 'Plastic Scrap', ur: 'Ù¾Ù„Ø§Ø³Ù¹Ú© Ú©Ø§ Ú©Ú†Ø±Ø§' },
     ]},
-    { slug: 'paper', en: 'Paper & Cardboard', ur: 'کاغذ اور گتہ', colorHex: '#10B981', children: [
-      { slug: 'paper-waste', en: 'Paper Waste', ur: 'ردی کاغذ' },
-      { slug: 'hardboard', en: 'Hardboard', ur: 'گتہ' },
-      { slug: 'newspapers', en: 'Newspapers', ur: 'اخبارات' },
+    { slug: 'paper', en: 'Paper & Cardboard', ur: 'Ú©Ø§ØºØ° Ø§ÙˆØ± Ú¯ØªÛ', colorHex: '#10B981', children: [
+      { slug: 'paper-waste', en: 'Paper Waste', ur: 'Ø±Ø¯ÛŒ Ú©Ø§ØºØ°' },
+      { slug: 'hardboard', en: 'Hardboard', ur: 'Ú¯ØªÛ' },
+      { slug: 'newspapers', en: 'Newspapers', ur: 'Ø§Ø®Ø¨Ø§Ø±Ø§Øª' },
     ]},
-    { slug: 'electronics', en: 'Electronics', ur: 'الیکٹرانکس', colorHex: '#8B5CF6', children: [
-      { slug: 'electronic-scrap', en: 'Electronic Scrap', ur: 'الیکٹرانک کباڑ' },
-      { slug: 'waste-wires', en: 'Waste Wires', ur: 'بیکار تاریں' },
-      { slug: 'batteries', en: 'Batteries', ur: 'بیٹریاں' },
+    { slug: 'electronics', en: 'Electronics', ur: 'Ø§Ù„ÛŒÚ©Ù¹Ø±Ø§Ù†Ú©Ø³', colorHex: '#8B5CF6', children: [
+      { slug: 'electronic-scrap', en: 'Electronic Scrap', ur: 'Ø§Ù„ÛŒÚ©Ù¹Ø±Ø§Ù†Ú© Ú©Ø¨Ø§Ú‘' },
+      { slug: 'waste-wires', en: 'Waste Wires', ur: 'Ø¨ÛŒÚ©Ø§Ø± ØªØ§Ø±ÛŒÚº' },
+      { slug: 'batteries', en: 'Batteries', ur: 'Ø¨ÛŒÙ¹Ø±ÛŒØ§Úº' },
     ]},
-    { slug: 'organic', en: 'Organic', ur: 'نامیاتی', colorHex: '#EF4444', children: [
-      { slug: 'bones', en: 'Bones', ur: 'ہڈیاں' },
-      { slug: 'hairs', en: 'Hair', ur: 'بال' },
+    { slug: 'organic', en: 'Organic', ur: 'Ù†Ø§Ù…ÛŒØ§ØªÛŒ', colorHex: '#EF4444', children: [
+      { slug: 'bones', en: 'Bones', ur: 'ÛÚˆÛŒØ§Úº' },
+      { slug: 'hairs', en: 'Hair', ur: 'Ø¨Ø§Ù„' },
     ]},
-    { slug: 'furniture', en: 'Furniture', ur: 'فرنیچر', colorHex: '#F97316' },
-    { slug: 'household', en: 'Household Items', ur: 'گھریلو اشیاء', colorHex: '#06B6D4', children: [
-      { slug: 'home-items', en: 'Home Items', ur: 'گھر کی اشیاء' },
-      { slug: 'office-items', en: 'Office Items', ur: 'دفتری اشیاء' },
+    { slug: 'furniture', en: 'Furniture', ur: 'ÙØ±Ù†ÛŒÚ†Ø±', colorHex: '#F97316' },
+    { slug: 'household', en: 'Household Items', ur: 'Ú¯Ú¾Ø±ÛŒÙ„Ùˆ Ø§Ø´ÛŒØ§Ø¡', colorHex: '#06B6D4', children: [
+      { slug: 'home-items', en: 'Home Items', ur: 'Ú¯Ú¾Ø± Ú©ÛŒ Ø§Ø´ÛŒØ§Ø¡' },
+      { slug: 'office-items', en: 'Office Items', ur: 'Ø¯ÙØªØ±ÛŒ Ø§Ø´ÛŒØ§Ø¡' },
     ]},
-    { slug: 'glass', en: 'Glass', ur: 'شیشہ', colorHex: '#64748B' },
-    { slug: 'rubber', en: 'Rubber & Tires', ur: 'ربڑ اور ٹائر', colorHex: '#78716C' },
-    { slug: 'textiles', en: 'Textiles & Fabric', ur: 'کپڑے اور تانے بانے', colorHex: '#EC4899' },
+    { slug: 'glass', en: 'Glass', ur: 'Ø´ÛŒØ´Û', colorHex: '#64748B' },
+    { slug: 'rubber', en: 'Rubber & Tires', ur: 'Ø±Ø¨Ú‘ Ø§ÙˆØ± Ù¹Ø§Ø¦Ø±', colorHex: '#78716C' },
+    { slug: 'textiles', en: 'Textiles & Fabric', ur: 'Ú©Ù¾Ú‘Û’ Ø§ÙˆØ± ØªØ§Ù†Û’ Ø¨Ø§Ù†Û’', colorHex: '#EC4899' },
   ];
 
   const categoryIds = {};
@@ -206,9 +206,9 @@ async function main() {
     await seedCategory(catalogSeed[i], null, i);
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 7. GEO-ZONES (Pakistan)
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  7/17 Geo-Zones (Pakistan)...');
   const provinces = {
     'Punjab': { lat: 31.1704, lng: 72.7097, cities: [
@@ -279,9 +279,9 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 8. PLATFORM CONFIG
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  8/17 Platform Config...');
   const configs = {
     default_country: 'PK', default_currency: 'PKR', default_language: 'ur',
@@ -325,50 +325,50 @@ async function main() {
     });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 9. TRANSLATION STRINGS (EN + UR)
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  9/17 Translation Strings...');
   const translationData = {
     common: {
-      'app.name': { en: 'Marketplace', ur: 'مارکیٹ پلیس' },
-      'app.tagline': { en: 'Trade Recyclables', ur: 'ری سائیکل تجارت' },
-      'nav.home': { en: 'Home', ur: 'ہوم' },
-      'nav.listings': { en: 'Listings', ur: 'فہرستیں' },
-      'nav.categories': { en: 'Categories', ur: 'زمرے' },
-      'nav.profile': { en: 'Profile', ur: 'پروفائل' },
-      'nav.notifications': { en: 'Notifications', ur: 'اطلاعات' },
-      'action.save': { en: 'Save', ur: 'محفوظ کریں' },
-      'action.cancel': { en: 'Cancel', ur: 'منسوخ' },
-      'action.delete': { en: 'Delete', ur: 'حذف کریں' },
-      'action.edit': { en: 'Edit', ur: 'ترمیم' },
-      'action.search': { en: 'Search', ur: 'تلاش' },
-      'action.filter': { en: 'Filter', ur: 'فلٹر' },
+      'app.name': { en: 'Marketplace', ur: 'Ù…Ø§Ø±Ú©ÛŒÙ¹ Ù¾Ù„ÛŒØ³' },
+      'app.tagline': { en: 'Trade Recyclables', ur: 'Ø±ÛŒ Ø³Ø§Ø¦ÛŒÚ©Ù„ ØªØ¬Ø§Ø±Øª' },
+      'nav.home': { en: 'Home', ur: 'ÛÙˆÙ…' },
+      'nav.listings': { en: 'Listings', ur: 'ÙÛØ±Ø³ØªÛŒÚº' },
+      'nav.categories': { en: 'Categories', ur: 'Ø²Ù…Ø±Û’' },
+      'nav.profile': { en: 'Profile', ur: 'Ù¾Ø±ÙˆÙØ§Ø¦Ù„' },
+      'nav.notifications': { en: 'Notifications', ur: 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª' },
+      'action.save': { en: 'Save', ur: 'Ù…Ø­ÙÙˆØ¸ Ú©Ø±ÛŒÚº' },
+      'action.cancel': { en: 'Cancel', ur: 'Ù…Ù†Ø³ÙˆØ®' },
+      'action.delete': { en: 'Delete', ur: 'Ø­Ø°Ù Ú©Ø±ÛŒÚº' },
+      'action.edit': { en: 'Edit', ur: 'ØªØ±Ù…ÛŒÙ…' },
+      'action.search': { en: 'Search', ur: 'ØªÙ„Ø§Ø´' },
+      'action.filter': { en: 'Filter', ur: 'ÙÙ„Ù¹Ø±' },
     },
     auth: {
-      'auth.login': { en: 'Login', ur: 'لاگ ان' },
-      'auth.register': { en: 'Register', ur: 'رجسٹر کریں' },
-      'auth.phone': { en: 'Phone Number', ur: 'فون نمبر' },
-      'auth.email': { en: 'Email', ur: 'ای میل' },
-      'auth.password': { en: 'Password', ur: 'پاسورڈ' },
-      'auth.logout': { en: 'Logout', ur: 'لاگ آؤٹ' },
-      'auth.otp': { en: 'Enter OTP', ur: 'OTP درج کریں' },
+      'auth.login': { en: 'Login', ur: 'Ù„Ø§Ú¯ Ø§Ù†' },
+      'auth.register': { en: 'Register', ur: 'Ø±Ø¬Ø³Ù¹Ø± Ú©Ø±ÛŒÚº' },
+      'auth.phone': { en: 'Phone Number', ur: 'ÙÙˆÙ† Ù†Ù…Ø¨Ø±' },
+      'auth.email': { en: 'Email', ur: 'Ø§ÛŒ Ù…ÛŒÙ„' },
+      'auth.password': { en: 'Password', ur: 'Ù¾Ø§Ø³ÙˆØ±Úˆ' },
+      'auth.logout': { en: 'Logout', ur: 'Ù„Ø§Ú¯ Ø¢Ø¤Ù¹' },
+      'auth.otp': { en: 'Enter OTP', ur: 'OTP Ø¯Ø±Ø¬ Ú©Ø±ÛŒÚº' },
     },
     listings: {
-      'listing.create': { en: 'Create Listing', ur: 'فہرست بنائیں' },
-      'listing.price': { en: 'Price', ur: 'قیمت' },
-      'listing.quantity': { en: 'Quantity', ur: 'مقدار' },
-      'listing.category': { en: 'Category', ur: 'زمرہ' },
-      'listing.description': { en: 'Description', ur: 'تفصیل' },
-      'listing.location': { en: 'Location', ur: 'مقام' },
-      'listing.contact': { en: 'Contact', ur: 'رابطہ' },
-      'listing.negotiable': { en: 'Negotiable', ur: 'گفت و شنید' },
+      'listing.create': { en: 'Create Listing', ur: 'ÙÛØ±Ø³Øª Ø¨Ù†Ø§Ø¦ÛŒÚº' },
+      'listing.price': { en: 'Price', ur: 'Ù‚ÛŒÙ…Øª' },
+      'listing.quantity': { en: 'Quantity', ur: 'Ù…Ù‚Ø¯Ø§Ø±' },
+      'listing.category': { en: 'Category', ur: 'Ø²Ù…Ø±Û' },
+      'listing.description': { en: 'Description', ur: 'ØªÙØµÛŒÙ„' },
+      'listing.location': { en: 'Location', ur: 'Ù…Ù‚Ø§Ù…' },
+      'listing.contact': { en: 'Contact', ur: 'Ø±Ø§Ø¨Ø·Û' },
+      'listing.negotiable': { en: 'Negotiable', ur: 'Ú¯ÙØª Ùˆ Ø´Ù†ÛŒØ¯' },
     },
     notifications: {
-      'notification.new_listing': { en: 'New Listing Posted', ur: 'نئی فہرست شائع ہوئی' },
-      'notification.offer_received': { en: 'Offer Received', ur: 'پیشکش موصول ہوئی' },
-      'notification.offer_accepted': { en: 'Offer Accepted', ur: 'پیشکش قبول ہوئی' },
-      'notification.payment': { en: 'Payment Update', ur: 'ادائیگی اپ ڈیٹ' },
+      'notification.new_listing': { en: 'New Listing Posted', ur: 'Ù†Ø¦ÛŒ ÙÛØ±Ø³Øª Ø´Ø§Ø¦Ø¹ ÛÙˆØ¦ÛŒ' },
+      'notification.offer_received': { en: 'Offer Received', ur: 'Ù¾ÛŒØ´Ú©Ø´ Ù…ÙˆØµÙˆÙ„ ÛÙˆØ¦ÛŒ' },
+      'notification.offer_accepted': { en: 'Offer Accepted', ur: 'Ù¾ÛŒØ´Ú©Ø´ Ù‚Ø¨ÙˆÙ„ ÛÙˆØ¦ÛŒ' },
+      'notification.payment': { en: 'Payment Update', ur: 'Ø§Ø¯Ø§Ø¦ÛŒÚ¯ÛŒ Ø§Ù¾ ÚˆÛŒÙ¹' },
     },
   };
 
@@ -384,9 +384,9 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 10. BUYER PREMIUM SUBSCRIPTION PLANS (PKR)
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  10/17 Buyer Premium Subscription Plans...');
   // v3: subscriptions are buyer-side only. They reduce the deposit percent for
   // future deposits and are never seller listing gates.
@@ -418,7 +418,7 @@ async function main() {
       description: 'Reduced deposit rate and higher concurrent sourcing cap',
       maxListings: 0,
       maxZones: 0,
-      pricePaisa: 99900,
+      pricePaisa: 999,
       features: {
         buyerPremium: true,
         sellerVisible: false,
@@ -434,7 +434,7 @@ async function main() {
       description: 'Bulk sourcing tier for wholesale buyers',
       maxListings: 0,
       maxZones: 0,
-      pricePaisa: 299900,
+      pricePaisa: 2999,
       features: {
         buyerPremium: true,
         sellerVisible: false,
@@ -476,9 +476,9 @@ async function main() {
     });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 11. PAYMENT GATEWAYS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  11/17 Payment Gateways...');
   const gateways = [
     { gateway: 'JAZZCASH', displayName: 'JazzCash', sortOrder: 0 },
@@ -498,9 +498,9 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 12. EXCHANGE RATES
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  12/17 Exchange Rates...');
   const rates = [
     { base: 'PKR', target: 'USD', rate: 0.0036 },
@@ -517,9 +517,9 @@ async function main() {
     });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 13. USERS (Admin + Test accounts)
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  13/17 Users...');
   // Get Karachi zone for sample users
   const karachiZone = await prisma.geoZone.findUnique({ where: { slug: 'karachi' } });
@@ -534,7 +534,7 @@ async function main() {
     { email: 'franchise@marketplace.pk', phone: '+929999990005', firstName: 'Ali', lastName: 'Franchise', role: 'FRANCHISE_OWNER', password: 'Franchise@123', city: 'Lahore', geoZoneId: lahoreZone?.id },
     { email: 'customer@marketplace.pk', phone: '+929999990006', firstName: 'Muhammad', lastName: 'Customer', role: 'CUSTOMER', password: 'Customer@123', city: 'Islamabad', geoZoneId: islamabadZone?.id },
     { email: 'wholesale@marketplace.pk', phone: '+929999990007', firstName: 'Imran', lastName: 'Wholesale', role: 'WHOLESALE_BUYER', password: 'Wholesale@123', city: 'Faisalabad' },
-    // ── Islamabad Test Accounts (4 bounded area dealers) ──
+    // â”€â”€ Islamabad Test Accounts (4 bounded area dealers) â”€â”€
     { email: 'barakahu@marketplace.pk', phone: '+923001110001', firstName: 'Usman', lastName: 'BaraKahu', role: 'DEALER', password: 'BaraKahu@123', city: 'Islamabad', geoZoneId: null },  // Will be set below
     { email: 'g6dealer@marketplace.pk', phone: '+923001110002', firstName: 'Tariq', lastName: 'G6-Dealer', role: 'DEALER', password: 'G6Dealer@123', city: 'Islamabad', geoZoneId: null },
     { email: 'g8dealer@marketplace.pk', phone: '+923001110003', firstName: 'Kashif', lastName: 'G8-Dealer', role: 'DEALER', password: 'G8Dealer@123', city: 'Islamabad', geoZoneId: null },
@@ -559,9 +559,9 @@ async function main() {
     userIds[u.email] = user.id;
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 14. SAMPLE LISTINGS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  14/17 Sample Listings...');
   const metalsCat = await prisma.category.findUnique({ where: { slug: 'metals' } });
   const copperCat = await prisma.category.findUnique({ where: { slug: 'copper' } });
@@ -582,7 +582,7 @@ async function main() {
     { title: 'Aluminum Cans - 50kg', desc: 'Crushed aluminum beverage cans ready for melting.', catId: metalsCat?.id, price: 18000, qty: 50, unit: 'kg', city: 'Lahore', lat: 31.5300, lng: 74.3600, zone: lahoreZone?.id, seller: userIds['dealer@marketplace.pk'] },
     { title: 'Cardboard Boxes - Truckload', desc: 'Large quantity of used cardboard boxes in good condition.', catId: paperCat?.id, price: 12000, qty: 1, unit: 'truck-load', city: 'Faisalabad', lat: 31.4504, lng: 73.1350, zone: null, seller: userIds['franchise@marketplace.pk'] },
     { title: 'Used Tires - 200 Pieces', desc: 'Mixed size used tires suitable for recycling or retreading.', catId: metalsCat?.id, price: 40000, qty: 200, unit: 'piece', city: 'Karachi', lat: 24.8800, lng: 67.0100, zone: karachiZone?.id, seller: userIds['wholesale@marketplace.pk'] || userIds['dealer@marketplace.pk'] },
-    // ── Islamabad Area-Specific Listings (for testing area-bounded dealers) ──
+    // â”€â”€ Islamabad Area-Specific Listings (for testing area-bounded dealers) â”€â”€
     { title: 'Copper Cable Waste - Bara Kahu', desc: 'Old copper cables from telecom tower maintenance in Bara Kahu.', catId: copperCat?.id || metalsCat?.id, price: 78000, qty: 120, unit: 'kg', city: 'Islamabad', lat: 33.7632, lng: 73.1217, zone: null, seller: userIds['customer@marketplace.pk'], areaSlug: 'islamabad-bara-kahu' },
     { title: 'Office Furniture Scrap - G-6', desc: 'Used office furniture from a government building in G-6.', catId: furnitureCat?.id, price: 10000, qty: 50, unit: 'piece', city: 'Islamabad', lat: 33.7215, lng: 73.0578, zone: null, seller: userIds['customer@marketplace.pk'], areaSlug: 'islamabad-g-6' },
     { title: 'Electronic Waste PCBs - G-8', desc: 'PCB boards and old computer parts from IT office in G-8.', catId: electronicsCat?.id, price: 36000, qty: 80, unit: 'kg', city: 'Islamabad', lat: 33.6960, lng: 73.0478, zone: null, seller: userIds['regional@marketplace.pk'], areaSlug: 'islamabad-g-8' },
@@ -597,7 +597,7 @@ async function main() {
     const unitRecord = await prisma.unit.findUnique({ where: { slug: l.unit } });
     if (!unitRecord) continue;
 
-    // Resolve geoZoneId — use areaSlug if provided, otherwise use zone
+    // Resolve geoZoneId â€” use areaSlug if provided, otherwise use zone
     let resolvedZone = l.zone;
     if (l.areaSlug) {
       const areaZone = await prisma.geoZone.findUnique({ where: { slug: l.areaSlug } });
@@ -629,9 +629,9 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 15. WALLETS FOR DEALERS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  15/17 Wallets...');
   for (const email of ['dealer@marketplace.pk', 'franchise@marketplace.pk', 'barakahu@marketplace.pk', 'g6dealer@marketplace.pk', 'g8dealer@marketplace.pk', 'isb.franchise@marketplace.pk']) {
     if (userIds[email]) {
@@ -643,9 +643,9 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 16. SAMPLE NOTIFICATIONS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  16/17 Sample Notifications...');
   if (userIds['admin@marketplace.pk']) {
     await prisma.notification.createMany({
@@ -657,9 +657,9 @@ async function main() {
     });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 17. PRODUCT ATTRIBUTES (Sample for Copper Wire)
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  17/17 Product Attributes...');
   const copperWireType = await prisma.productType.findUnique({ where: { slug: 'copper-wire' } });
   if (copperWireType) {
@@ -676,20 +676,20 @@ async function main() {
           sortOrder: 0,
           translations: { create: [
             { languageId: 'en', label: 'Purity' },
-            { languageId: 'ur', label: 'خلوص' },
+            { languageId: 'ur', label: 'Ø®Ù„ÙˆØµ' },
           ]},
           options: { create: [
             { slug: 'high-purity', sortOrder: 0, translations: { create: [
               { languageId: 'en', label: 'High Purity (99%+)' },
-              { languageId: 'ur', label: 'اعلی خلوص (99%+)' },
+              { languageId: 'ur', label: 'Ø§Ø¹Ù„ÛŒ Ø®Ù„ÙˆØµ (99%+)' },
             ]}},
             { slug: 'medium-purity', sortOrder: 1, translations: { create: [
               { languageId: 'en', label: 'Medium Purity (90-99%)' },
-              { languageId: 'ur', label: 'درمیانی خلوص (90-99%)' },
+              { languageId: 'ur', label: 'Ø¯Ø±Ù…ÛŒØ§Ù†ÛŒ Ø®Ù„ÙˆØµ (90-99%)' },
             ]}},
             { slug: 'low-purity', sortOrder: 2, translations: { create: [
               { languageId: 'en', label: 'Low Purity (<90%)' },
-              { languageId: 'ur', label: 'کم خلوص (<90%)' },
+              { languageId: 'ur', label: 'Ú©Ù… Ø®Ù„ÙˆØµ (<90%)' },
             ]}},
           ]},
         },
@@ -708,21 +708,21 @@ async function main() {
           sortOrder: 1,
           translations: { create: [
             { languageId: 'en', label: 'Condition' },
-            { languageId: 'ur', label: 'حالت' },
+            { languageId: 'ur', label: 'Ø­Ø§Ù„Øª' },
           ]},
           options: { create: [
-            { slug: 'new', sortOrder: 0, translations: { create: [{ languageId: 'en', label: 'New' }, { languageId: 'ur', label: 'نیا' }]}},
-            { slug: 'used-good', sortOrder: 1, translations: { create: [{ languageId: 'en', label: 'Used - Good' }, { languageId: 'ur', label: 'استعمال شدہ - اچھا' }]}},
-            { slug: 'scrap', sortOrder: 2, translations: { create: [{ languageId: 'en', label: 'Scrap' }, { languageId: 'ur', label: 'کباڑ' }]}},
+            { slug: 'new', sortOrder: 0, translations: { create: [{ languageId: 'en', label: 'New' }, { languageId: 'ur', label: 'Ù†ÛŒØ§' }]}},
+            { slug: 'used-good', sortOrder: 1, translations: { create: [{ languageId: 'en', label: 'Used - Good' }, { languageId: 'ur', label: 'Ø§Ø³ØªØ¹Ù…Ø§Ù„ Ø´Ø¯Û - Ø§Ú†Ú¾Ø§' }]}},
+            { slug: 'scrap', sortOrder: 2, translations: { create: [{ languageId: 'en', label: 'Scrap' }, { languageId: 'ur', label: 'Ú©Ø¨Ø§Ú‘' }]}},
           ]},
         },
       });
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 18. ESCALATION RULES
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  18/20 Escalation Rules...');
   const escalationRules = [
     {
@@ -754,9 +754,9 @@ async function main() {
     });
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 19. DEALER TERRITORY ASSIGNMENTS
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  19/20 Dealer Territories...');
 
   // Fetch area zones for Karachi
@@ -781,7 +781,7 @@ async function main() {
   const regionalUserId = userIds['regional@marketplace.pk'];
   const wholesaleUserId = userIds['wholesale@marketplace.pk'];
 
-  // Ahmed Dealer (DEALER role) → assigned to Korangi, SITE local areas in Karachi
+  // Ahmed Dealer (DEALER role) â†’ assigned to Korangi, SITE local areas in Karachi
   const dealerZones = [korangiZone, siteZone, lyariZone].filter(Boolean);
   for (const zone of dealerZones) {
     if (dealerUserId && zone) {
@@ -793,7 +793,7 @@ async function main() {
     }
   }
 
-  // Ali Franchise (FRANCHISE_OWNER) → assigned to Lahore city + some Lahore areas
+  // Ali Franchise (FRANCHISE_OWNER) â†’ assigned to Lahore city + some Lahore areas
   if (franchiseUserId && lahoreZone) {
     await prisma.dealerTerritory.upsert({
       where: { userId_geoZoneId: { userId: franchiseUserId, geoZoneId: lahoreZone.id } },
@@ -812,7 +812,7 @@ async function main() {
     }
   }
 
-  // Regional Manager → assigned to Islamabad Capital province
+  // Regional Manager â†’ assigned to Islamabad Capital province
   const icpZone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-capital' } });
   if (regionalUserId && icpZone) {
     await prisma.dealerTerritory.upsert({
@@ -822,7 +822,7 @@ async function main() {
     });
   }
 
-  // Wholesale Buyer → assigned to Punjab province (wider reach)
+  // Wholesale Buyer â†’ assigned to Punjab province (wider reach)
   if (wholesaleUserId && punjabZone) {
     await prisma.dealerTerritory.upsert({
       where: { userId_geoZoneId: { userId: wholesaleUserId, geoZoneId: punjabZone.id } },
@@ -831,7 +831,7 @@ async function main() {
     });
   }
 
-  // ── Islamabad Area Dealers + City Franchise ──
+  // â”€â”€ Islamabad Area Dealers + City Franchise â”€â”€
   const baraKahuZone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-bara-kahu' } });
   const g6Zone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-g-6' } });
   const g8Zone = await prisma.geoZone.findUnique({ where: { slug: 'islamabad-g-8' } });
@@ -852,7 +852,7 @@ async function main() {
     await prisma.user.update({ where: { id: g8UserId }, data: { geoZoneId: g8Zone.id } });
   }
 
-  // Usman BaraKahu (DEALER) → exclusive territory: Bara Kahu
+  // Usman BaraKahu (DEALER) â†’ exclusive territory: Bara Kahu
   if (baraKahuUserId && baraKahuZone) {
     await prisma.dealerTerritory.upsert({
       where: { userId_geoZoneId: { userId: baraKahuUserId, geoZoneId: baraKahuZone.id } },
@@ -861,7 +861,7 @@ async function main() {
     });
   }
 
-  // Tariq G6-Dealer (DEALER) → exclusive territory: G-6
+  // Tariq G6-Dealer (DEALER) â†’ exclusive territory: G-6
   if (g6UserId && g6Zone) {
     await prisma.dealerTerritory.upsert({
       where: { userId_geoZoneId: { userId: g6UserId, geoZoneId: g6Zone.id } },
@@ -870,7 +870,7 @@ async function main() {
     });
   }
 
-  // Kashif G8-Dealer (DEALER) → exclusive territory: G-8
+  // Kashif G8-Dealer (DEALER) â†’ exclusive territory: G-8
   if (g8UserId && g8Zone) {
     await prisma.dealerTerritory.upsert({
       where: { userId_geoZoneId: { userId: g8UserId, geoZoneId: g8Zone.id } },
@@ -879,7 +879,7 @@ async function main() {
     });
   }
 
-  // Zubair Islamabad-Franchise (FRANCHISE_OWNER) → city-level: Islamabad + all Islamabad areas
+  // Zubair Islamabad-Franchise (FRANCHISE_OWNER) â†’ city-level: Islamabad + all Islamabad areas
   if (isbFranchiseUserId && islamabadZone) {
     await prisma.dealerTerritory.upsert({
       where: { userId_geoZoneId: { userId: isbFranchiseUserId, geoZoneId: islamabadZone.id } },
@@ -899,9 +899,9 @@ async function main() {
     }
   }
 
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // 20. TERRITORY NOTIFICATIONS SAMPLE
-  // ═══════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   console.log('  20/20 Territory Notifications...');
   if (dealerUserId) {
     const existingTerritoryNotif = await prisma.notification.findFirst({
@@ -946,7 +946,7 @@ async function main() {
     }
   }
 
-  console.log('\n✅ Seeding complete! Pakistan marketplace is ready.\n');
+  console.log('\nâœ… Seeding complete! Pakistan marketplace is ready.\n');
   console.log('  Default Logins:');
   console.log('    Admin:         admin@marketplace.pk / Admin@123456');
   console.log('    Manager:       manager@marketplace.pk / Manager@123');
@@ -956,24 +956,24 @@ async function main() {
   console.log('    Customer:      customer@marketplace.pk / Customer@123');
   console.log('    Wholesale:     wholesale@marketplace.pk / Wholesale@123');
   console.log('');
-  console.log('  ── Islamabad Test Accounts ──');
+  console.log('  â”€â”€ Islamabad Test Accounts â”€â”€');
   console.log('    Bara Kahu Dealer:   barakahu@marketplace.pk / BaraKahu@123   (Ph: +923001110001)');
   console.log('    G-6 Dealer:         g6dealer@marketplace.pk / G6Dealer@123   (Ph: +923001110002)');
   console.log('    G-8 Dealer:         g8dealer@marketplace.pk / G8Dealer@123   (Ph: +923001110003)');
   console.log('    ISB Franchise:      isb.franchise@marketplace.pk / IsbFranchise@123 (Ph: +923001110004)');
   console.log('');
   console.log('  Escalation Timeline:');
-  console.log('    LOCAL → 24h → NEIGHBOR → 48h → CITY → 72h → PROVINCE → 120h → NATIONAL → 168h → PUBLIC');
+  console.log('    LOCAL â†’ 24h â†’ NEIGHBOR â†’ 48h â†’ CITY â†’ 72h â†’ PROVINCE â†’ 120h â†’ NATIONAL â†’ 168h â†’ PUBLIC');
   console.log('');
   console.log('  Territory Assignments:');
-  console.log('    Ahmed Dealer     → Korangi, SITE, Lyari (Karachi LOCAL_AREA)');
-  console.log('    Ali Franchise    → Lahore (CITY) + Johar Town, Gulberg, Model Town');
-  console.log('    Regional Mgr     → Islamabad Capital (PROVINCE)');
-  console.log('    Wholesale        → Punjab (PROVINCE)');
-  console.log('    Usman BaraKahu   → Bara Kahu (Islamabad LOCAL_AREA) [EXCLUSIVE]');
-  console.log('    Tariq G6-Dealer  → G-6 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
-  console.log('    Kashif G8-Dealer → G-8 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
-  console.log('    Zubair ISB-Fran  → Islamabad (CITY) + Bara Kahu, G-6, G-8');
+  console.log('    Ahmed Dealer     â†’ Korangi, SITE, Lyari (Karachi LOCAL_AREA)');
+  console.log('    Ali Franchise    â†’ Lahore (CITY) + Johar Town, Gulberg, Model Town');
+  console.log('    Regional Mgr     â†’ Islamabad Capital (PROVINCE)');
+  console.log('    Wholesale        â†’ Punjab (PROVINCE)');
+  console.log('    Usman BaraKahu   â†’ Bara Kahu (Islamabad LOCAL_AREA) [EXCLUSIVE]');
+  console.log('    Tariq G6-Dealer  â†’ G-6 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
+  console.log('    Kashif G8-Dealer â†’ G-8 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
+  console.log('    Zubair ISB-Fran  â†’ Islamabad (CITY) + Bara Kahu, G-6, G-8');
   console.log('');
 }
 
