@@ -31,8 +31,6 @@ import '../../features/collections/dealer_rating_screen.dart';
 import '../../features/shell/shell_screen.dart';
 import '../../features/paywall/balance_gate_screen.dart';
 import '../providers/app_providers.dart';
-import '../config/app_variant.dart';
-import '../models/user.model.dart';
 import '../../services/api_service.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -51,31 +49,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
       final isSplash = state.matchedLocation == '/splash';
       final isOnboarding = state.matchedLocation == '/onboarding';
-      final isBalanceGate = state.matchedLocation == '/balance-gate';
-
       if (isSplash || isOnboarding) return null;
       if (!isLoggedIn && !isAuthRoute) return '/auth/login';
       if (isLoggedIn && isAuthRoute) return '/home';
 
-      // ── PRO APP: Balance-gate enforcement ──
-      // If user is logged in, this is the Pro app, and user has no balance
-      // or account is not active → redirect to balance-gate.
-      // Exception: allow /profile, /settings, /edit-profile, /balance-gate itself
-      if (isLoggedIn && AppVariant.isPro && !isBalanceGate) {
-        final user = auth!;
-        final isProUser = user.role != UserRole.customer;
-        final allowedPaths = [
-          '/profile', '/settings', '/edit-profile', '/balance-gate',
-          '/auth/login', '/auth/otp', '/auth/kyc',
-          '/chat', '/chat-inbox',
-        ];
-        final isAllowedPath = allowedPaths.any(
-            (p) => state.matchedLocation.startsWith(p));
+      // Pro flavor is role/KYC-aware only. Seller access, listing creation,
+      // seller analytics, and Pro dashboard viewing are never wallet-gated.
+      // Buyer balance checks belong inside buyer actions such as top-up,
+      // deposit, contact unlock, offer, and subscription purchase.
 
-        if (isProUser && !user.canAccessProFeatures && !isAllowedPath) {
-          return '/balance-gate';
-        }
-      }
 
       return null;
     },
@@ -109,7 +91,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const KycScreen(),
       ),
-      // Balance-gate for Pro users with no balance
+      // Informational only; the router never redirects here automatically.
       GoRoute(
         path: '/balance-gate',
         parentNavigatorKey: _rootNavigatorKey,

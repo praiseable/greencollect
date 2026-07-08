@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
+import '../../core/money/money_formatter.dart';
 
 // ✅ FIX: Removed MockData.listings. My listings from GET /v1/listings/my (real API).
 
@@ -155,8 +156,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                     listing['priceFormatted'] as String? ??
-                        (listing['pricePaisa'] != null
-                            ? 'PKR ${((listing['pricePaisa'] as int) / 100).toStringAsFixed(0)}'
+                        (MoneyFormatter.parseRupees(
+                                  listing,
+                                  preferredKeys: const ['priceRupees', 'pricePkr', 'price'],
+                                  legacyKeys: const ['pricePaisa'],
+                                ) >
+                                0
+                            ? MoneyFormatter.formatRupees(
+                                MoneyFormatter.parseRupees(
+                                  listing,
+                                  preferredKeys: const ['priceRupees', 'pricePkr', 'price'],
+                                  legacyKeys: const ['pricePaisa'],
+                                ),
+                              )
                             : '—'),
                     style: const TextStyle(color: Colors.green),
                   ),

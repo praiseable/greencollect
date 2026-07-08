@@ -1,3 +1,5 @@
+import '../money/money_formatter.dart';
+
 enum ListingStatus {
   active,
   underNegotiation,
@@ -21,7 +23,9 @@ class ListingModel {
   final String titleUrdu;
   final String description;
   final String? descUrdu;
-  final int pricePkr;
+  final int priceRupees;
+  @Deprecated('Use priceRupees. Backend is strict rupees mode.')
+  int get pricePkr => priceRupees;
   final String unit;
   final double quantity;
   final String categoryId;
@@ -47,12 +51,13 @@ class ListingModel {
     required this.titleUrdu,
     required this.description,
     this.descUrdu,
-    required this.pricePkr,
     required this.unit,
     required this.quantity,
     required this.categoryId,
     required this.categoryName,
     required this.categoryNameUr,
+    int? priceRupees,
+    @Deprecated('Use priceRupees.') int? pricePkr,
     required this.sellerName,
     required this.sellerPhone,
     this.sellerId,
@@ -65,7 +70,7 @@ class ListingModel {
     required this.images,
     required this.daysAgo,
     required this.interestedCount,
-  });
+  }) : priceRupees = priceRupees ?? pricePkr ?? 0;
 
   /// Parse from API JSON (e.g. GET /v1/listings, GET /v1/listings/:id)
   factory ListingModel.fromJson(Map<String, dynamic> json) {
@@ -82,7 +87,7 @@ class ListingModel {
       titleUrdu: json['titleUrdu'] as String? ?? json['titleUr'] as String? ?? '',
       description: json['description'] as String? ?? '',
       descUrdu: json['descUrdu'] as String? ?? json['descUr'] as String?,
-      pricePkr: _parsePricePkr(json),
+      priceRupees: _parsePriceRupees(json),
       unit: _parseUnit(json),
       quantity: _toDouble(json['quantity'], 1),
       categoryId: json['categoryId']?.toString() ?? '',
@@ -124,15 +129,14 @@ class ListingModel {
     return def;
   }
 
-  static int _parsePricePkr(Map<String, dynamic> json) {
-    final pricePaisa = json['pricePaisa'];
-    if (pricePaisa != null) {
-      final n = pricePaisa is int ? pricePaisa : int.tryParse(pricePaisa.toString());
-      if (n != null) return (n / 100).round();
-    }
-    final p = json['pricePkr'] ?? json['price'] ?? 0;
-    if (p is int) return p;
-    return ((p as num).toDouble()).round();
+  static int _parsePriceRupees(Map<String, dynamic> json) {
+    return MoneyFormatter.parseRupees(
+      json,
+      preferredKeys: const ['priceRupees', 'pricePkr', 'price'],
+      // Transitional fallback only: backend may still expose legacy key names,
+      // but values are rupees in strict rupees mode.
+      legacyKeys: const ['pricePaisa'],
+    );
   }
 
   static String _parseUnit(Map<String, dynamic> json) {

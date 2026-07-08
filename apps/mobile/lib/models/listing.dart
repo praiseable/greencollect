@@ -1,3 +1,5 @@
+import '../core/money/money_formatter.dart';
+
 class Listing {
   final String id;
   final String title;
@@ -6,7 +8,9 @@ class Listing {
   final String? productTypeName;
   final double? quantity;
   final String? unitName;
-  final int pricePaisa;
+  final int priceRupees;
+  @Deprecated('Use priceRupees. Backend is strict rupees mode.')
+  int get pricePaisa => priceRupees;
   final bool priceNegotiable;
   final String? condition;
   final String? cityName;
@@ -30,7 +34,8 @@ class Listing {
     this.productTypeName,
     this.quantity,
     this.unitName,
-    required this.pricePaisa,
+    int? priceRupees,
+    @Deprecated('Use priceRupees.') int? pricePaisa,
     this.priceNegotiable = false,
     this.condition,
     this.cityName,
@@ -45,9 +50,9 @@ class Listing {
     this.viewCount = 0,
     required this.createdAt,
     this.attributes,
-  });
+  }) : priceRupees = priceRupees ?? pricePaisa ?? 0;
 
-  String get priceFormatted => '₨ ${pricePaisa.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
+  String get priceFormatted => MoneyFormatter.formatRupees(priceRupees);
   String get location => geoZoneName ?? cityName ?? 'Pakistan';
   bool get hasLocation => latitude != null && longitude != null;
 
@@ -60,7 +65,11 @@ class Listing {
       productTypeName: json['productType']?['name'] ?? json['productTypeName'],
       quantity: (json['quantity'] as num?)?.toDouble(),
       unitName: json['unit']?['name'] ?? json['unitName'],
-      pricePaisa: (json['pricePaisa'] as num?)?.toInt() ?? 0,
+      priceRupees: MoneyFormatter.parseRupees(
+        json,
+        preferredKeys: const ['priceRupees', 'pricePkr', 'price'],
+        legacyKeys: const ['pricePaisa'],
+      ),
       priceNegotiable: json['priceNegotiable'] ?? false,
       condition: json['condition'],
       cityName: json['city']?['name'] ?? json['cityName'],

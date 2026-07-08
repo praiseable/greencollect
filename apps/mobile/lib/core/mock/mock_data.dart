@@ -271,7 +271,7 @@ class MockData {
         kycStep: 6,
       ),
     ),
-    // ── G-8 dealer with ZERO balance — should be LOCKED ──
+    // ── G-8 dealer with zero wallet balance — Pro access remains role/KYC based ──
     'g8_dealer': UserModel(
       id: 'u7',
       name: 'Kashif G-8 Dealer',
@@ -286,7 +286,7 @@ class MockData {
       subscriptionStatus: SubscriptionStatus.active,
       subscriptionDaysLeft: 15,
       accountStatus: AccountStatus.active,
-      balancePkr: 0, // ← ZERO balance = screens locked
+      balancePkr: 0, // zero wallet balance still allows seller/Pro screens
       verification: DealerVerification(
         cnicNumber: '61101-XXXXXXX-Z',
         cnicFrontImage: 'https://picsum.photos/seed/cnic-f-kashif/400/250',
@@ -499,7 +499,7 @@ class MockData {
       zone: 'F-10',
       subscriptionStatus: null,
       accountStatus: AccountStatus.active,
-      balancePkr: 0, // ← KYC approved but hasn't deposited yet
+      balancePkr: 0, // KYC approved; wallet needed only for buyer actions
       verification: DealerVerification(
         cnicNumber: '61101-5555555-5',
         cnicFrontImage: 'https://picsum.photos/seed/cnic-f-waqar/400/250',
@@ -714,7 +714,7 @@ class MockData {
       titleUrdu: 'تانبے کی کیبل کا فضلہ',
       description: 'Old copper cables from telecom tower maintenance in Bara Kahu.',
       descUrdu: 'بارہ کہو میں ٹیلی کام ٹاور کی دیکھ بھال سے پرانی تانبے کی کیبلیں',
-      pricePkr: 780,
+      priceRupees: 780,
       unit: 'kg',
       quantity: 120,
       categoryId: 'c1',
@@ -738,7 +738,7 @@ class MockData {
       titleUrdu: 'دفتری فرنیچر کا کباڑ',
       description: 'Used office furniture from a government building in G-6.',
       descUrdu: 'جی-6 میں سرکاری عمارت سے استعمال شدہ فرنیچر',
-      pricePkr: 200,
+      priceRupees: 200,
       unit: 'piece',
       quantity: 50,
       categoryId: 'c6',
@@ -762,7 +762,7 @@ class MockData {
       titleUrdu: 'الیکٹرانک کباڑ - پی سی بی',
       description: 'PCB boards and old computer parts from IT office in G-8.',
       descUrdu: 'جی-8 میں آئی ٹی دفتر سے پی سی بی بورڈز اور پرانے کمپیوٹر پارٹس',
-      pricePkr: 450,
+      priceRupees: 450,
       unit: 'kg',
       quantity: 80,
       categoryId: 'c4',
@@ -786,7 +786,7 @@ class MockData {
       titleUrdu: 'اخبارات اور رسالے کا بنڈل',
       description: 'Old newspapers and magazines from library in Islamabad.',
       descUrdu: 'اسلام آباد کی لائبریری سے پرانے اخبارات اور رسالے',
-      pricePkr: 35,
+      priceRupees: 35,
       unit: 'kg',
       quantity: 500,
       categoryId: 'c3',
@@ -902,7 +902,7 @@ class MockData {
       titleUrdu: 'تانبے کی تار کا کباڑ',
       description: '99% pure copper wire, collected from factory.',
       descUrdu: 'فیکٹری سے جمع کی گئی تانبے کی تار',
-      pricePkr: 850,
+      priceRupees: 850,
       unit: 'kg',
       quantity: 200,
       categoryId: 'c1',
@@ -926,7 +926,7 @@ class MockData {
       titleUrdu: 'لوہے کا کباڑ بڑی مقدار',
       description: 'Mixed iron scrap from demolition site, 2 truck loads.',
       descUrdu: 'توڑ پھوڑ سائٹ سے لوہے کا کباڑ',
-      pricePkr: 120,
+      priceRupees: 120,
       unit: 'kg',
       quantity: 5000,
       categoryId: 'c1',
@@ -949,7 +949,7 @@ class MockData {
       title: 'Electronic Scrap Mix',
       titleUrdu: 'الیکٹرانک کباڑ مکس',
       description: 'Old computers, PCBs, cables from office clearance.',
-      pricePkr: 300,
+      priceRupees: 300,
       unit: 'kg',
       quantity: 150,
       categoryId: 'c4',
@@ -973,7 +973,7 @@ class MockData {
       titleUrdu: 'دفتری ردی کاغذ',
       description: 'Clean white paper waste, well sorted. From bank branch clearance.',
       descUrdu: 'صاف سفید ردی کاغذ، اچھی ترتیب سے۔ بینک برانچ سے',
-      pricePkr: 45,
+      priceRupees: 45,
       unit: 'kg',
       quantity: 800,
       categoryId: 'c3',
@@ -997,7 +997,7 @@ class MockData {
       titleUrdu: 'پی ای ٹی پلاسٹک بوتلیں',
       description: 'Crushed PET plastic bottles, ready for recycling.',
       descUrdu: 'کچلی ہوئی پی ای ٹی بوتلیں، ری سائیکلنگ کے لیے تیار',
-      pricePkr: 75,
+      priceRupees: 75,
       unit: 'kg',
       quantity: 300,
       categoryId: 'c2',
@@ -1560,7 +1560,7 @@ class MockData {
   static final subscriptionPlans = [
     SubscriptionPlanModel(
       id: 'sp1',
-      name: 'Local Dealer Weekly',
+      name: 'Buyer Pro Monthly',
       nameUr: 'لوکل ڈیلر ہفتہ وار',
       role: 'local_dealer',
       priceWeekly: 500,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/money/money_formatter.dart';
 
 class WalletScreen extends ConsumerWidget {
   const WalletScreen({super.key});
@@ -60,7 +61,7 @@ class WalletScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '₨ ${user?.balancePkr.toStringAsFixed(0) ?? "0"}',
+                    MoneyFormatter.formatRupees(user?.balancePkr.round() ?? 0),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 36,
@@ -127,20 +128,20 @@ class WalletScreen extends ConsumerWidget {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             _transactionTile(
-              'Subscription Payment',
-              'Local Dealer Weekly',
-              '-₨ 1,500',
+              'Deposit Held',
+              'Buyer-funded contact unlock',
+              '-₨ 500',
               '2 days ago',
-              Colors.red,
-              Icons.payment,
+              Colors.orange,
+              Icons.lock,
             ),
             _transactionTile(
-              'Deal Payment Received',
-              'Copper Wire Scrap',
-              '+₨ 168,000',
+              'Deposit Released',
+              'No-deal refund',
+              '+₨ 500',
               '3 days ago',
               Colors.green,
-              Icons.arrow_downward,
+              Icons.lock_open,
             ),
             _transactionTile(
               'Wallet Recharge',

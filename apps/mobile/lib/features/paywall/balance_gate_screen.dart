@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/money/money_formatter.dart';
 import '../../core/models/user.model.dart';
 
 /// Full-screen overlay shown when a Pro user has zero balance.
@@ -77,7 +78,7 @@ class BalanceGateScreen extends ConsumerWidget {
                           color: Colors.white54, size: 36),
                       const SizedBox(height: 12),
                       Text(
-                        '₨ ${user?.balancePkr.toStringAsFixed(0) ?? "0"}',
+                        MoneyFormatter.formatRupees(user?.balancePkr.round() ?? 0),
                         style: const TextStyle(
                           fontSize: 36,
                           fontWeight: FontWeight.bold,

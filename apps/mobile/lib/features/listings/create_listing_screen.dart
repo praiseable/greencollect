@@ -162,7 +162,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
     setState(() { _submitting = true; _error = null; });
     try {
       final priceRaw = double.tryParse(_priceCtrl.text.trim()) ?? 0;
-      final pricePaisa = (priceRaw * 100).round();
+      final priceRupees = priceRaw.round();
 
       final quantity = double.tryParse(_quantityCtrl.text.trim());
       if (quantity == null || quantity <= 0) {
@@ -181,7 +181,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         'description': _descCtrl.text.trim(),
         'categoryId':  _selectedCategoryId,
         if (_selectedProductTypeId != null) 'productTypeId': _selectedProductTypeId,
-        'pricePaisa':  pricePaisa,
+        'priceRupees': priceRupees,
         'quantity':    quantity,
         'unitId':      _selectedUnitId,
         if (_selectedZoneId != null) 'geoZoneId': _selectedZoneId,

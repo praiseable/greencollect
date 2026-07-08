@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 import '../../config/api_config.dart';
+import '../../core/money/money_formatter.dart';
 
 class EditListingScreen extends ConsumerStatefulWidget {
   final String listingId;
@@ -88,9 +89,12 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
         // Pre-fill form with existing listing data
         _titleCtrl.text = listing['title'] as String? ?? '';
         _descCtrl.text = listing['description'] as String? ?? '';
-        _priceCtrl.text = listing['pricePaisa'] != null 
-            ? ((listing['pricePaisa'] is int ? listing['pricePaisa'] : int.tryParse(listing['pricePaisa'].toString()) ?? 0) / 100).toStringAsFixed(0)
-            : '';
+        final priceRupees = MoneyFormatter.parseRupees(
+          listing,
+          preferredKeys: const ['priceRupees', 'pricePkr', 'price'],
+          legacyKeys: const ['pricePaisa'],
+        );
+        _priceCtrl.text = priceRupees > 0 ? priceRupees.toString() : '';
         _quantityCtrl.text = (listing['quantity'] ?? 0).toString();
         _addressCtrl.text = listing['address'] as String? ?? '';
         _contactCtrl.text = listing['contactNumber'] as String? ?? '';
@@ -201,7 +205,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
     setState(() { _submitting = true; _error = null; });
     try {
       final priceRaw = double.tryParse(_priceCtrl.text.trim()) ?? 0;
-      final pricePaisa = (priceRaw * 100).round();
+      final priceRupees = priceRaw.round();
 
       final quantity = double.tryParse(_quantityCtrl.text.trim());
       if (quantity == null || quantity <= 0) {
@@ -219,7 +223,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       final body = {
         'title':       _titleCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
-        'pricePaisa':  pricePaisa,
+        'priceRupees': priceRupees,
         'quantity':    quantity,
         'unitId':      _selectedUnitId,
         if (_selectedProductTypeId != null) 'productTypeId': _selectedProductTypeId,

@@ -130,17 +130,19 @@ class UserModel {
 
   // ── Pro-only fields ──
   final AccountStatus accountStatus;      // Admin-controlled activation
-  final double balancePkr;                // Wallet balance (Rs.)
+  final double balancePkr;                // Deprecated alias for wallet balance in rupees.
+  double get balanceRupees => balancePkr;
   final DealerVerification? verification; // Full KYC details
 
   /// Whether this Pro user's account is fully active (approved + enabled by admin)
   bool get isProAccountActive => accountStatus == AccountStatus.active;
 
-  /// Whether this Pro user has sufficient balance to access features
+  /// Whether this user has a spendable wallet balance for buyer actions.
   bool get hasBalance => balancePkr > 0;
 
-  /// Whether all screens should be accessible (active account + balance > 0)
-  bool get canAccessProFeatures => isProAccountActive && hasBalance;
+  /// Pro account access is role/KYC based only. Wallet balance is checked at
+  /// buyer action points such as deposit, offer, top-up, or subscription.
+  bool get canAccessProFeatures => isProAccountActive;
 
   UserModel({
     required this.id,

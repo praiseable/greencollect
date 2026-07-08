@@ -33,7 +33,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       // Ensure +92 prefix
       final formattedPhone = phone.startsWith('+92') ? phone : '+92$phone';
-      await ApiService().post('/auth/send-otp', body: {'phone': formattedPhone});
+      await ApiService().post('/auth/send-otp', {'phone': formattedPhone});
       _isLoading = false;
       notifyListeners();
       return true;
@@ -52,7 +52,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final formattedPhone = phone.startsWith('+92') ? phone : '+92$phone';
-      final response = await ApiService().post('/auth/verify-otp', body: {
+      final response = await ApiService().post('/auth/verify-otp', {
         'phone': formattedPhone,
         'otp': otp,
       });
@@ -87,7 +87,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await ApiService().post('/auth/login', body: {
+      final response = await ApiService().post('/auth/login', {
         'email': email,
         'password': password,
       });
@@ -136,7 +136,7 @@ class AuthProvider extends ChangeNotifier {
       if (email != null) body['email'] = email;
       if (password != null) body['password'] = password;
 
-      await ApiService().post('/auth/register', body: body);
+      await ApiService().post('/auth/register', body);
       _isLoading = false;
       notifyListeners();
       return true;

@@ -266,7 +266,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
       'description': _descCtrl.text,
       'categoryId': _selectedCategory,
       'quantity': double.tryParse(_quantityCtrl.text) ?? 0,
-      'pricePaisa': int.tryParse(_priceCtrl.text) ?? 0,
+      'priceRupees': int.tryParse(_priceCtrl.text) ?? 0,
       'priceNegotiable': _negotiable,
       'condition': _condition,
       'latitude': _latitude,

@@ -1,17 +1,17 @@
-/// Two app variants built from the same codebase:
-///
-/// 1. **Pro** (dealer/franchise) — geo-fenced, territory-bounded,
-///    area-specific listings & notifications, subscription features.
-///
-/// 2. **Customer** (general public) — no area restrictions,
-///    sees all listings, simplified UI, no territory screen.
-///
-/// The variant is set at build time via `--dart-define=APP_VARIANT=pro`
-/// or `--dart-define=APP_VARIANT=customer`.
-///
-/// Build commands:
-///   flutter build apk --release --dart-define=APP_VARIANT=pro
-///   flutter build apk --release --dart-define=APP_VARIANT=customer
+// Two app variants built from the same codebase:
+//
+// 1. **Pro** (dealer/franchise) — geo-fenced, territory-bounded,
+//    area-specific listings & notifications, subscription features.
+//
+// 2. **Customer** (general public) — no area restrictions,
+//    sees all listings, simplified UI, no territory screen.
+//
+// The variant is set at build time via `--dart-define=APP_VARIANT=pro`
+// or `--dart-define=APP_VARIANT=customer`.
+//
+// Build commands:
+//   flutter build apk --release --dart-define=APP_VARIANT=pro
+//   flutter build apk --release --dart-define=APP_VARIANT=customer
 
 enum AppVariantType { pro, customer }
 
@@ -46,12 +46,17 @@ class AppVariant {
 
   // ── Feature flags ──
   static bool get showTerritoryScreen => isPro;
-  static bool get showAnalytics => isPro;
-  static bool get showSubscription => isPro;
+  // Seller-side features must never be wallet/subscription gated.
+  // Pro means role-aware professional UX, not paid seller access.
+  static bool get showAnalytics => true;
+  static bool get showSubscription => true; // buyer-side premium only
   static bool get enforceGeoFencing => isPro;
   static bool get showDealerRoles => isPro;
   static bool get showEscalationInfo => isPro;
-  static bool get showWallet => isPro;
-  static bool get requiresBalance => isPro; // Pro users need balance > 0
-  static bool get adminOnlyRegistration => isPro; // No self-registration
+  static bool get showWallet => true;
+  static bool get requiresBalance => false; // balance is needed only when acting as buyer
+  static bool get adminOnlyRegistration => false; // users may self-register then apply for Pro KYC
+
+  static String get packageName =>
+      isPro ? 'com.kabariya.app.pro' : 'com.kabariya.app';
 }

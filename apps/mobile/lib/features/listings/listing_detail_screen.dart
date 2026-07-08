@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/api_config.dart';
+import '../../core/money/money_formatter.dart';
 import '../../services/api_service.dart';
 import '../../core/providers/app_providers.dart';
 
@@ -188,10 +189,13 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
     final seller   = listing['seller']   as Map<String, dynamic>?;
     final unit     = listing['unit']     as Map<String, dynamic>?;
 
+    final priceRupees = MoneyFormatter.parseRupees(
+      listing,
+      preferredKeys: const ['priceRupees', 'pricePkr', 'price'],
+      legacyKeys: const ['pricePaisa'],
+    );
     final priceDisplay = listing['priceFormatted'] as String? ??
-        (listing['pricePaisa'] != null
-            ? 'PKR ${((listing['pricePaisa'] as int) / 100).toStringAsFixed(0)}'
-            : '—');
+        (priceRupees > 0 ? MoneyFormatter.formatRupees(priceRupees) : '—');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),

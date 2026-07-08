@@ -108,7 +108,7 @@ class ListingProvider extends ChangeNotifier {
 
   Future<bool> createListing(Map<String, dynamic> data) async {
     try {
-      await ApiService().post('/listings', body: data);
+      await ApiService().post('/listings', data);
       await fetchMyListings();
       return true;
     } catch (e) {

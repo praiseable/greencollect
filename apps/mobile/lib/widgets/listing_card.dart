@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/listing.dart';
 import '../core/models/listing.model.dart';
+import '../core/money/money_formatter.dart';
 
 /// Card for ListingModel (from ListingsProvider / real API)
 class ListingCard extends StatelessWidget {
@@ -12,8 +13,8 @@ class ListingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = listing.images.isNotEmpty ? listing.images.first : null;
-    final priceStr = listing.pricePkr > 0
-        ? '₨ ${listing.pricePkr.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}'
+    final priceStr = listing.priceRupees > 0
+        ? MoneyFormatter.formatRupees(listing.priceRupees)
         : '—';
     final location = listing.area ?? listing.city;
     return GestureDetector(
