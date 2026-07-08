@@ -285,7 +285,7 @@ async function main() {
   console.log('  8/17 Platform Config...');
   const configs = {
     default_country: 'PK', default_currency: 'PKR', default_language: 'ur',
-    default_timezone: 'Asia/Karachi', price_storage_unit: 'paisa',
+    default_timezone: 'Asia/Karachi', price_storage_unit: 'rupees', money_base_unit: 'rupees',
     primary_payment_gateway: 'JAZZCASH', secondary_payment_gateway: 'EASYPAISA',
     phone_country_code: '+92', kyc_document_type: 'CNIC',
     cnic_validation_enabled: 'true', supported_languages: 'ur,en',
@@ -296,7 +296,7 @@ async function main() {
     subscription_grace_days: '2', price_suggestion_enabled: 'true',
     catalog_version_hash: 'v1',
     deposit_percent: '5',
-    deposit_min_flat_paisa: '50000',
+    deposit_min_flat_paisa: '500',
     commission_rate_percent: '5',
     deposit_hold_expiry_days: '14',
     buyer_forfeit_enabled: 'false',
