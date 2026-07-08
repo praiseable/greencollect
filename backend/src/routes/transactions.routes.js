@@ -35,23 +35,51 @@ function assertParticipant(transaction, user, res) {
   return true;
 }
 
+function moneyString(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'number') return Number.isFinite(value) ? String(Math.trunc(value)) : null;
+  if (typeof value === 'string') return value;
+  if (value && typeof value.toString === 'function') return value.toString();
+  return null;
+}
+
+function formatRupeesScalar(value) {
+  const raw = moneyString(value);
+  if (raw === null || raw === '') return null;
+  const neg = raw.startsWith('-');
+  const digits = neg ? raw.slice(1) : raw;
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `â‚¨ ${neg ? '-' : ''}${grouped}`;
+}
+
 function serializeTransaction(t) {
   if (!t) return null;
-  const { handshakeOtpHash, ...safeTransaction } = t;
+  const { handshakeOtpHash, ...safe } = t;
   const settlement = t.actualPricePaisa ?? t.totalPaisa ?? t.finalPricePaisa ?? t.amountPaisa;
   return {
-    ...safeTransaction,
-    amountPaisa: t.amountPaisa?.toString(),
-    offeredPricePaisa: t.offeredPricePaisa?.toString() || null,
-    counterPricePaisa: t.counterPricePaisa?.toString() || null,
-    finalPricePaisa: t.finalPricePaisa?.toString() || null,
-    totalPaisa: t.totalPaisa?.toString() || null,
-    actualPricePaisa: t.actualPricePaisa?.toString() || null,
+    ...safe,
+    handshakeOtpHash: undefined,
+    amountPaisa: moneyString(t.amountPaisa),
+    amountRupees: moneyString(t.amountPaisa),
+    offeredPricePaisa: moneyString(t.offeredPricePaisa),
+    offeredPriceRupees: moneyString(t.offeredPricePaisa),
+    counterPricePaisa: moneyString(t.counterPricePaisa),
+    counterPriceRupees: moneyString(t.counterPricePaisa),
+    finalPricePaisa: moneyString(t.finalPricePaisa),
+    finalPriceRupees: moneyString(t.finalPricePaisa),
+    totalPaisa: moneyString(t.totalPaisa),
+    totalRupees: moneyString(t.totalPaisa),
+    actualPricePaisa: moneyString(t.actualPricePaisa),
+    actualPriceRupees: moneyString(t.actualPricePaisa),
+    settlementPricePaisa: moneyString(settlement),
+    settlementPriceRupees: moneyString(settlement),
     actualQuantity: t.actualQuantity?.toString?.() ?? t.actualQuantity ?? null,
     quantity: t.quantity?.toString?.() ?? t.quantity,
-    settlementPricePaisa: settlement?.toString?.() || null,
-    offeredPriceFormatted: t.offeredPricePaisa ? addFormattedPrice(t.offeredPricePaisa, t.currencyId || 'PKR') : null,
-    finalPriceFormatted: t.finalPricePaisa ? addFormattedPrice(t.finalPricePaisa, t.currencyId || 'PKR') : null,
+    offeredPriceFormatted: formatRupeesScalar(t.offeredPricePaisa),
+    finalPriceFormatted: formatRupeesScalar(t.finalPricePaisa),
+    settlementPriceFormatted: formatRupeesScalar(settlement),
+    moneyBaseUnit: 'rupees',
   };
 }
 
