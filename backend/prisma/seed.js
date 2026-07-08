@@ -975,6 +975,28 @@ async function main() {
   console.log('    Kashif G8-Dealer â†’ G-8 (Islamabad LOCAL_AREA) [EXCLUSIVE]');
   console.log('    Zubair ISB-Fran  â†’ Islamabad (CITY) + Bara Kahu, G-6, G-8');
   console.log('');
+
+  // Kabariya strict rupees config lock.
+  // This must run after the general PlatformConfig seed so production rows
+  // cannot remain at old paisa defaults after deployment.
+  await prisma.platformConfig.upsert({
+    where: { key: 'money_base_unit' },
+    update: { value: 'rupees' },
+    create: { id: 'money_base_unit', key: 'money_base_unit', value: 'rupees', label: 'Money Base Unit' },
+  });
+
+  await prisma.platformConfig.upsert({
+    where: { key: 'price_storage_unit' },
+    update: { value: 'rupees' },
+    create: { id: 'price_storage_unit', key: 'price_storage_unit', value: 'rupees', label: 'Price Storage Unit' },
+  });
+
+  await prisma.platformConfig.upsert({
+    where: { key: 'deposit_min_flat_paisa' },
+    update: { value: '500' },
+    create: { id: 'deposit_min_flat_paisa', key: 'deposit_min_flat_paisa', value: '500', label: 'Deposit Min Flat Paisa' },
+  });
+
 }
 
 main()
