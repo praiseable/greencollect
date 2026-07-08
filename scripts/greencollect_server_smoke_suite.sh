@@ -187,12 +187,64 @@ LISTING_ID="$(extract_first_listing_id)"
 if [ -n "$LISTING_ID" ]; then
   pass "listing available for detail/contact-mask smoke: $LISTING_ID"
   http GET "$API_BASE/listings/$LISTING_ID"
+
   if [ "$STATUS" = "200" ]; then
     pass "GET /api/listings/:id anonymous [200]"
-    json_true "(lambda l: not (l.get('sellerPhone') or l.get('contactNumber') or l.get('exactAddress') or ((l.get('seller') or {}).get('phone'))))(obj.get('listing') if isinstance(obj, dict) and obj.get('listing') else obj if isinstance(obj, dict) else {})" "anonymous listing detail does not expose phone/address/contact"
+    if python3 - "$BODY_FILE" <<'PY'
+import json, sys
+path = sys.argv[1]
+obj = json.load(open(path, encoding='utf-8'))
+listing = obj.get('listing') or obj.get('data') or obj
+if not isinstance(listing, dict):
+    sys.exit(1)
+fields = {
+    'sellerPhone': listing.get('sellerPhone'),
+    'seller_phone': listing.get('seller_phone'),
+    'contactNumber': listing.get('contactNumber'),
+    'contact_number': listing.get('contact_number'),
+    'exactAddress': listing.get('exactAddress'),
+    'exact_address': listing.get('exact_address'),
+    'phone_number': listing.get('phone_number'),
+    'address': listing.get('address'),
+    'latitude': listing.get('latitude'),
+    'longitude': listing.get('longitude'),
+}
+seller = listing.get('seller') if isinstance(listing.get('seller'), dict) else {}
+fields['seller.phone'] = seller.get('phone')
+fields['sellerPhoneNested'] = seller.get('sellerPhone')
+leaked = {k: v for k, v in fields.items() if v not in (None, '', [], {})}
+if leaked:
+    print('leaked:', leaked)
+    sys.exit(1)
+PY
+    then
+      pass "anonymous listing detail does not expose phone/address/contact"
+    else
+      fail "anonymous listing detail leaked phone/address/contact values"
+    fi
   elif [ "$STATUS" = "403" ]; then
-    json_true "isinstance(obj, dict) and isinstance(obj.get('error'), dict) and obj.get('error').get('code') == 'GEO_FENCE_RESTRICTED'" "GET /api/listings/:id anonymous may be geo-fenced [403]"
-    json_true "not any(k in str(obj).lower() for k in ['sellerphone','seller_phone','contactnumber','contact_number','exactaddress','exact_address','phone_number'])" "geo-fenced listing detail error does not expose phone/address/contact"
+    if python3 - "$BODY_FILE" <<'PY'
+import json, sys
+path = sys.argv[1]
+obj = json.load(open(path, encoding='utf-8'))
+err = obj.get('error') if isinstance(obj, dict) else None
+if not isinstance(err, dict) or err.get('code') != 'GEO_FENCE_RESTRICTED':
+    sys.exit(1)
+text = json.dumps(obj, ensure_ascii=False).lower()
+# For a geo-fence error, there should be no listing object and no contact-field keys.
+blocked_tokens = [
+    'sellerphone', 'seller_phone', 'contactnumber', 'contact_number',
+    'exactaddress', 'exact_address', 'phone_number', 'seller":', 'listing":'
+]
+if any(token in text for token in blocked_tokens):
+    sys.exit(1)
+PY
+    then
+      pass "GET /api/listings/:id anonymous may be geo-fenced [403]"
+      pass "geo-fenced listing detail error does not expose phone/address/contact"
+    else
+      fail "geo-fenced listing detail response is not safe"
+    fi
   else
     fail "GET /api/listings/:id anonymous expected 200 or GEO_FENCE_RESTRICTED 403 got $STATUS"
   fi
