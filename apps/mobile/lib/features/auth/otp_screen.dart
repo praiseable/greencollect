@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/config/app_variant.dart';
+import '../../core/auth/auth_validators.dart';
 import '../../core/models/user.model.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
@@ -20,7 +21,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   bool _isLoading = false;
 
   Future<void> _verifyOtp() async {
-    if (_otpController.text.length != 6) return;
+    if (!AuthValidators.isValidOtp(_otpController.text)) return;
     setState(() => _isLoading = true);
 
     final success = await ref.read(authChangeNotifierProvider).verifyOtp(

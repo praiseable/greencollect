@@ -7,6 +7,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/otp_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/auth/kyc_screen.dart';
+import '../../features/auth/force_update_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/listings/listings_screen.dart';
 import '../../features/listings/listing_detail_screen.dart';
@@ -93,6 +94,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth/kyc',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const KycScreen(),
+      ),
+      GoRoute(
+        path: '/force-update',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ForceUpdateScreen(),
       ),
       // Informational only; the router never redirects here automatically.
       GoRoute(

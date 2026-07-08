@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/app_providers.dart';
 import '../../services/api_service.dart';
 import '../../core/money/money_formatter.dart';
@@ -116,6 +117,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
               ]),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.verified_user_outlined, color: Color(0xFF16A34A)),
+                    title: const Text('Upgrade to Kabariya Pro'),
+                    subtitle: const Text('Apply as dealer, franchise, or wholesale buyer'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go('/auth/kyc'),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.receipt_long_outlined, color: Color(0xFF16A34A)),
+                    title: const Text('Tax / business profile'),
+                    subtitle: const Text('Optional NTN, STRN, and business type for commercial receipts'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go('/edit-profile'),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 

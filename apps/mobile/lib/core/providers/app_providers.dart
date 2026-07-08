@@ -2,8 +2,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth.provider.dart';
 import 'listings.provider.dart';
 import '../models/user.model.dart';
+import '../auth/auth_repository.dart';
+import '../auth/auth_session_controller.dart';
+import '../auth/secure_session_store.dart';
+import '../auth/session_state.dart';
 import 'chat.provider.dart';
 import 'notifications.provider.dart';
+
+
+/// M1-B backend auth repository and secure session state.
+final secureSessionStoreProvider = Provider<SecureSessionStore>((ref) {
+  return SecureSessionStore();
+});
+
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return AuthRepository(store: ref.watch(secureSessionStoreProvider));
+});
+
+final authSessionControllerProvider =
+    StateNotifierProvider<AuthSessionController, SessionState>((ref) {
+  return AuthSessionController(ref.watch(authRepositoryProvider));
+});
 
 /// Auth notifier for router refresh and screen method calls.
 final authChangeNotifierProvider =

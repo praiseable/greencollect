@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/config/app_variant.dart';
+import '../../core/auth/auth_validators.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -43,6 +44,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _sendOtp() async {
     if (_phoneController.text.isEmpty) return;
+    if (!AuthValidators.isValidPakistanPhone(_phoneController.text)) {
+      setState(() => _loginError = 'Enter a valid Pakistan phone number');
+      return;
+    }
     debugPrint('[Login] _sendOtp: phone=${_phoneController.text}');
     setState(() { _isLoading = true; _loginError = null; });
 

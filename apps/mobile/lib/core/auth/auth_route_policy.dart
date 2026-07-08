@@ -16,6 +16,7 @@ class AuthRoutePolicy {
   static const String otp = '/auth/otp';
   static const String kyc = '/auth/kyc';
   static const String home = '/home';
+  static const String forceUpdate = '/force-update';
 
   static bool isAuthRoute(String location) => location.startsWith('/auth');
 
@@ -52,7 +53,9 @@ class AuthRoutePolicy {
     bool isProFlavor = false,
     bool forceUpdateRequired = false,
   }) {
-    if (forceUpdateRequired) return '/force-update';
+    if (forceUpdateRequired) {
+      return location == forceUpdate ? null : forceUpdate;
+    }
 
     if (location == splash || location == onboarding) return null;
 
