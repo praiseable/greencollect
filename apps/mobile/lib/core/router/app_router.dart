@@ -31,6 +31,7 @@ import '../../features/collections/dealer_rating_screen.dart';
 import '../../features/shell/shell_screen.dart';
 import '../../features/paywall/balance_gate_screen.dart';
 import '../providers/app_providers.dart';
+import '../auth/auth_route_policy.dart';
 import '../../services/api_service.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -49,15 +50,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
       final isSplash = state.matchedLocation == '/splash';
       final isOnboarding = state.matchedLocation == '/onboarding';
-      if (isSplash || isOnboarding) return null;
-      if (!isLoggedIn && !isAuthRoute) return '/auth/login';
-      if (isLoggedIn && isAuthRoute) return '/home';
+      final policyRedirect = AuthRoutePolicy.redirectForCurrentVariant(
+        location: state.matchedLocation,
+        isLoggedIn: isLoggedIn,
+        user: auth,
+      );
+      if (policyRedirect != null) return policyRedirect;
 
       // Pro flavor is role/KYC-aware only. Seller access, listing creation,
       // seller analytics, and Pro dashboard viewing are never wallet-gated.
       // Buyer balance checks belong inside buyer actions such as top-up,
       // deposit, contact unlock, offer, and subscription purchase.
-
 
       return null;
     },
