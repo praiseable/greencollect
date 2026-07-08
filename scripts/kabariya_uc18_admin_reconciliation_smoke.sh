@@ -156,14 +156,14 @@ NODE
 then
   pass "direct Prisma reconciliation query executed"
   if [ -s "$TMP_DIR/report.json" ]; then
-    node - <<NODE
+    API_REPORT="$TMP_DIR/report.json" DB_JSON_PATH="$DB_JSON" node <<'NODE'
 const fs = require('fs');
-const api = JSON.parse(fs.readFileSync('$TMP_DIR/report.json','utf8'));
-const db = JSON.parse(fs.readFileSync('$DB_JSON','utf8'));
+const api = JSON.parse(fs.readFileSync(process.env.API_REPORT, 'utf8'));
+const db = JSON.parse(fs.readFileSync(process.env.DB_JSON_PATH, 'utf8'));
 const keys = ['topUpsPaisa','commissionCapturedPaisa','refundsPaisa','withdrawalsPaisa','heldDepositsPaisa','walletAvailablePaisa','walletEscrowedPaisa'];
-const mismatches = keys.filter(k => String(api.totals[k]) !== String(db[k]));
+const mismatches = keys.filter((key) => String(api.totals[key]) !== String(db[key]));
 if (mismatches.length) {
-  console.error('mismatched totals:', mismatches.map(k => `${k}: api=${api.totals[k]} db=${db[k]}`).join('; '));
+  console.error('mismatched totals:', mismatches.map((key) => `${key}: api=${api.totals[key]} db=${db[key]}`).join('; '));
   process.exit(1);
 }
 NODE
@@ -174,15 +174,50 @@ else
   cat "$TMP_DIR/db.err" 2>/dev/null || true
 fi
 
-if docker compose -f "$COMPOSE_FILE" exec -T backend sh -lc "grep -R \"status[[:space:]]*[:=][[:space:]]*['\\\"]FINALIZED['\\\"]\" -n src/routes src/services 2>/dev/null | grep -v verify-handshake | grep -v smoke | head -20" >"$TMP_DIR/finalized_grep.txt" 2>/dev/null; then
+if docker compose -f "$COMPOSE_FILE" exec -T backend node <<'NODE' >"$TMP_DIR/finalized_grep.txt" 2>/dev/null
+const fs = require('fs');
+const path = require('path');
+const roots = ['src/routes', 'src/services'];
+const findings = [];
+function walk(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(p);
+    else if (entry.isFile() && p.endsWith('.js')) inspect(p);
+  }
+}
+function inspect(file) {
+  const src = fs.readFileSync(file, 'utf8');
+  const re = /status\s*[:=]\s*['"]FINALIZED['"]/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const before = src.slice(Math.max(0, m.index - 2500), m.index).toLowerCase();
+    const after = src.slice(m.index, Math.min(src.length, m.index + 2500)).toLowerCase();
+    const context = `${before}${after}`;
+    const allowed = context.includes('verify-handshake') || context.includes('handshakeverifiedat') || context.includes('handshake_verified') || context.includes('handshake verified');
+    if (!allowed) {
+      const line = src.slice(0, m.index).split('\n').length;
+      findings.push(`${file}:${line}: ${m[0]}`);
+    }
+  }
+}
+roots.forEach(walk);
+if (findings.length) {
+  console.log(findings.join('\n'));
+  process.exit(2);
+}
+NODE
+then
   if [ ! -s "$TMP_DIR/finalized_grep.txt" ]; then
     pass "security grep: no obvious non-handshake FINALIZED write path found"
   else
-    warn "security grep found possible FINALIZED write paths; review manually"
+    warn "security grep found possible non-handshake FINALIZED write paths; review manually"
     cat "$TMP_DIR/finalized_grep.txt"
   fi
 else
   warn "security grep could not execute"
+  cat "$TMP_DIR/finalized_grep.txt" 2>/dev/null || true
 fi
 
 line
