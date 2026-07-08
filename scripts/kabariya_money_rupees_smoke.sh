@@ -2,15 +2,15 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:4000}"
-API_BASE="$BASE_URL/api"
+API_BASE="${BASE_URL%/}/api"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 PASS=0
 FAIL=0
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-pass(){ PASS=$((PASS+1)); echo "âœ… PASS  $1"; }
-fail(){ FAIL=$((FAIL+1)); echo "âŒ FAIL  $1"; [ -s "$TMP/body.json" ] && cat "$TMP/body.json" | head -c 1600; echo; }
+pass(){ PASS=$((PASS+1)); printf 'PASS  %s\n' "$1"; }
+fail(){ FAIL=$((FAIL+1)); printf 'FAIL  %s\n' "$1"; if [ -s "$TMP/body.json" ]; then printf '%s\n' '---- body ----'; head -c 1800 "$TMP/body.json"; printf '\n'; fi; }
 
 request(){
   local method="$1" path="$2" body="${3:-}" token="${4:-}"
@@ -20,31 +20,14 @@ request(){
   curl "${args[@]}" "$API_BASE$path" || echo 000
 }
 
-assert_code(){
-  local code="$1" expected="$2" label="$3"
-  if [ "$code" = "$expected" ]; then pass "$label [$expected]"; else fail "$label expected $expected got $code"; fi
-}
+assert_code(){ local code="$1" expected="$2" label="$3"; [ "$code" = "$expected" ] && pass "$label [$expected]" || fail "$label expected $expected got $code"; }
+assert_any(){ local code="$1" expected="$2" label="$3"; for e in $expected; do [ "$code" = "$e" ] && { pass "$label [$code]"; return 0; }; done; fail "$label expected one of [$expected] got $code"; }
+json_assert(){ local label="$1" js="$2"; node -e "const fs=require('fs');const obj=JSON.parse(fs.readFileSync('$TMP/body.json','utf8')); if(!($js)) process.exit(1);" && pass "$label" || fail "$label"; }
+extract(){ node -e "const fs=require('fs');const obj=JSON.parse(fs.readFileSync('$TMP/body.json','utf8')); const v=($1); console.log(v == null ? '' : v);"; }
 
-assert_any(){
-  local code="$1" expected_list="$2" label="$3"
-  for e in $expected_list; do
-    if [ "$code" = "$e" ]; then pass "$label [$code]"; return 0; fi
-  done
-  fail "$label expected one of [$expected_list] got $code"
-}
-
-json_assert(){
-  local label="$1" js="$2"
-  node -e "const fs=require('fs');const obj=JSON.parse(fs.readFileSync('$TMP/body.json','utf8')); if(!($js)) process.exit(1);" && pass "$label" || fail "$label"
-}
-
-extract(){
-  node -e "const fs=require('fs');const obj=JSON.parse(fs.readFileSync('$TMP/body.json','utf8')); const v=($1); console.log(v == null ? '' : v);"
-}
-
-echo "Kabariya rupees-base smoke"
-echo "API_BASE=$API_BASE COMPOSE_FILE=$COMPOSE_FILE"
-echo "----------------------------------------------------------------"
+printf 'Kabariya rupees-base smoke\n'
+printf 'API_BASE=%s COMPOSE_FILE=%s\n' "$API_BASE" "$COMPOSE_FILE"
+printf '%s\n' '----------------------------------------------------------------'
 
 code=$(request GET '/config/app-version')
 assert_code "$code" 200 'config reachable'
@@ -64,7 +47,6 @@ code=$(request GET '/currencies/PKR/format?amountRupees=1500&lang=en')
 assert_code "$code" 200 'currency formatter accepts amountRupees'
 json_assert '1500 rupees formats as PKR 1,500' "String(obj.amountRupees) === '1500' && /1,500/.test(obj.amountFormatted) && obj.moneyBaseUnit === 'rupees'"
 
-# Strict rupees-mode API should reject legacy amountPaisa query input. This prevents future clients from sending paisa-scale values by mistake.
 code=$(request GET '/currencies/PKR/format?amountPaisa=1500&lang=en')
 assert_code "$code" 400 'legacy amountPaisa query input rejected in strict rupees mode'
 json_assert 'legacy rejection explains amountRupees requirement' "obj.error && obj.error.code === 'INVALID_AMOUNT' && obj.moneyBaseUnit === 'rupees'"
@@ -111,7 +93,6 @@ else
   fail 'docker compose not available for wallet credit'
 fi
 
-# Correct backend deposit endpoint is /listings/:id/deposit.
 code=$(request POST "/listings/$LISTING_ID/deposit" '{}' "$BUYER_TOKEN")
 assert_any "$code" '200 201' 'buyer places deposit on rupee listing'
 json_assert 'deposit is 5% of 10,000 rupees = 500 rupees' "String(obj.requiredDepositRupees || obj.deposit?.amountRupees || obj.amountRupees || obj.requiredDepositPaisa || obj.deposit?.amountPaisa || obj.amountPaisa) === '500'"
@@ -120,6 +101,6 @@ code=$(request GET "/listings/$LISTING_ID" '' "$BUYER_TOKEN")
 assert_code "$code" 200 'buyer listing detail after rupee deposit'
 json_assert 'post-deposit buyer can see seller contact/address' "(()=>{const l=obj.listing||obj.data||obj; return !!(l.contactNumber || l.address || l.sellerPhone || l.exactAddress || (l.seller&&l.seller.phone));})()"
 
-echo "----------------------------------------------------------------"
-echo "Rupees-base smoke summary: PASSED=$PASS FAILED=$FAIL"
+printf '%s\n' '----------------------------------------------------------------'
+printf 'Rupees-base smoke summary: PASSED=%s FAILED=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
