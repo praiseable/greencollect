@@ -60,11 +60,7 @@ services:
     build: ./apps/web-client
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - certbot-webroot:/var/www/certbot:ro
-      - certbot-certs:/etc/letsencrypt:ro
+      - "8081:80"
     depends_on:
       - backend
 
