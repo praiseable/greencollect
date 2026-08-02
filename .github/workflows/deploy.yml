@@ -19,9 +19,6 @@ jobs:
           port: 22
           command_timeout: 20m
           script: |
-            DOMAIN="gc.directconnect.services"
-            EMAIL="admin@directconnect.services"
-
             echo "========================================="
             echo " GreenCollect — Auto Deploy"
             echo " Triggered by: ${{ github.actor }}"
@@ -29,48 +26,23 @@ jobs:
             echo "========================================="
 
             APP_DIR=~/gc-app
-
-            # 1. Clone if first time
-            if [ ! -d "$APP_DIR" ]; then
-              echo "First deploy — cloning repo..."
-              git clone git@github.com:praiseable/greencollect.git "$APP_DIR"
-            fi
-
             cd "$APP_DIR"
 
-            # 2. Pull latest code
             echo "Pulling latest code..."
             git fetch origin main
             git reset --hard origin/main
 
-            # 3. Stop conflicting host services
-            sudo systemctl stop nginx 2>/dev/null || true
-            sudo systemctl stop apache2 2>/dev/null || true
-            sudo systemctl stop postgresql 2>/dev/null || true
-
-            # 4. Check if SSL certs already exist
-            CERTS_EXIST=false
-            if docker volume inspect gc-app_certbot-certs &>/dev/null; then
-              if docker run --rm -v gc-app_certbot-certs:/etc/letsencrypt alpine \
-                test -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem 2>/dev/null; then
-                CERTS_EXIST=true
-                echo "SSL certificates already exist for ${DOMAIN}"
-              fi
-            fi
-
-            # 5. Build and deploy (preserve data volumes)
             echo "Building and starting containers..."
-            docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-            if ! docker compose -f docker-compose.prod.yml up -d --build; then
-              echo "Build failed (e.g. cache corruption). Pruning build cache and retrying with --no-cache..."
+            docker compose -f docker-compose.prod.yml up -d --build
+            if [ $? -ne 0 ]; then
+              echo "Build failed. Pruning build cache and retrying with --no-cache..."
               docker builder prune -af 2>/dev/null || true
               docker compose -f docker-compose.prod.yml build --no-cache && docker compose -f docker-compose.prod.yml up -d || exit 1
             fi
 
-            # Verify containers are running
             sleep 10
             RUNNING=$(docker compose -f docker-compose.prod.yml ps --status running -q 2>/dev/null | wc -l)
-            if [ "$RUNNING" -lt 4 ]; then
+            if [ "$RUNNING" -lt 5 ]; then
               echo "WARNING: Only $RUNNING containers running (expected 5)."
               docker compose -f docker-compose.prod.yml ps
               docker compose -f docker-compose.prod.yml logs --tail 30
@@ -78,48 +50,9 @@ jobs:
             fi
             echo "All $RUNNING containers are running."
 
-            # 6. SSL Certificate handling
-            if [ "$CERTS_EXIST" = false ]; then
-              echo "Obtaining SSL certificate from Let's Encrypt..."
-              sleep 5
-              docker run --rm \
-                -v gc-app_certbot-webroot:/var/www/certbot \
-                -v gc-app_certbot-certs:/etc/letsencrypt \
-                certbot/certbot certonly \
-                --webroot --webroot-path=/var/www/certbot \
-                --email ${EMAIL} --agree-tos --no-eff-email \
-                -d ${DOMAIN} && CERTS_EXIST=true || echo "WARNING: SSL cert failed"
-
-              if [ "$CERTS_EXIST" = true ]; then
-                echo "SSL certificate obtained! Restarting web-client..."
-                docker compose -f docker-compose.prod.yml restart web-client
-                sleep 3
-              fi
-            else
-              echo "Checking SSL certificate renewal..."
-              RENEW_OUTPUT=$(docker run --rm \
-                -v gc-app_certbot-webroot:/var/www/certbot \
-                -v gc-app_certbot-certs:/etc/letsencrypt \
-                certbot/certbot renew --webroot --webroot-path=/var/www/certbot \
-                --dry-run 2>&1) || true
-
-              if echo "$RENEW_OUTPUT" | grep -q "would be renewed"; then
-                echo "Renewing SSL certificate..."
-                docker run --rm \
-                  -v gc-app_certbot-webroot:/var/www/certbot \
-                  -v gc-app_certbot-certs:/etc/letsencrypt \
-                  certbot/certbot renew --webroot --webroot-path=/var/www/certbot
-                docker compose -f docker-compose.prod.yml restart web-client
-                sleep 3
-              else
-                echo "Certificate is still valid."
-              fi
-            fi
-
-            # 7. Wait for database
             echo "Waiting for database..."
             RETRIES=40
-            until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U gcadmin -d greencollect 2>/dev/null; do
+            until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U gcadmin -d kabariya 2>/dev/null; do
               RETRIES=$((RETRIES - 1))
               if [ $RETRIES -le 0 ]; then
                 echo "ERROR: Database did not become ready"
@@ -131,7 +64,6 @@ jobs:
             echo "Database ready!"
             sleep 5
 
-            # 8. Sync database schema (preserves existing data)
             echo "Syncing database schema..."
             docker compose -f docker-compose.prod.yml exec -T backend npx prisma db push 2>&1 || {
               echo "prisma db push failed, trying with --accept-data-loss..."
@@ -139,17 +71,15 @@ jobs:
             }
             echo "Schema updated."
 
-            # 9. Seed data (uses upsert — safe for existing data)
             echo "Running seeds..."
             docker compose -f docker-compose.prod.yml exec -T backend node prisma/seed.js || {
               echo "WARNING: Seeding had issues"
             }
             echo "Seeding complete."
 
-            # 10. Health checks
             sleep 3
             BACKEND_HEALTH=$(curl -sf http://localhost:4000/health 2>/dev/null || echo "FAILED")
-            PORTAL_HTTP=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:80 2>/dev/null || echo "000")
+            PORTAL_HTTP=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8081 2>/dev/null || echo "000")
             ADMIN_HTTP=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null || echo "000")
 
             echo ""
@@ -159,12 +89,10 @@ jobs:
             echo " Backend API:   $BACKEND_HEALTH"
             echo " Web Client:    HTTP $PORTAL_HTTP"
             echo " Admin Portal:  HTTP $ADMIN_HTTP"
-            echo " SSL: $( [ "$CERTS_EXIST" = true ] && echo 'Active' || echo 'Not configured' )"
             echo ""
             docker compose -f docker-compose.prod.yml ps
             echo "========================================="
 
-            # 11. Fail if critical services are down
             if echo "$BACKEND_HEALTH" | grep -q "FAILED"; then
               echo "ERROR: Backend health check failed!"
               docker compose -f docker-compose.prod.yml logs backend --tail 30
